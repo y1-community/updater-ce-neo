@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Hluvula khebulu ya USB ivi u tirhisa xikhomela-phepha kumbe pini ku tshikilela buti ya reset, kutani u ringeta ku hlanganisa nakambe.",
  "flash_hint_wall_charger": "• Swi ringanyetiwa ku hlanganisa xichayachayani eka chajara ya le rirhangwini ku ringana timinete ta 30 ku ya eka awara u nga si ringeta ku hlanganisa.",
  "flash_hint_install_drivers": "• Loko u ri eka Windows, tiyisisa leswaku u <a href='https://innioasis.app/guide.html'>U Nghenise Swichayachayani</a>.",
+ "flash_hint_windows_reboot_driver": "• Ti-PC ta Windows ti fanele ku sunguriwa nakambe endzhaku ko nghenisa muchayeri ti nga si tirhisiwa ro sungula.",
  "flash_keep_data_option": "Hlayisa swiyimiso swa mina",
  "flash_keep_settings_option": "Hlayisa swiyimiso swa mina na swihangalasamahungu",
  "keep_data_running_fmt": "Xana {software} se yi nghenisiwile eka {model} ya wena?",

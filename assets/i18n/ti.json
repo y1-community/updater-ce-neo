@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ነቲ ናይ USB ገመድ ኣቋሪጽካ ነቲ ናይ ዳግመ-ምትዕርራይ መጠወቒ ንምጽቃጥ ብመቐመጢ ወረቐት ወይ ፒን ተጠቐም፡ ድሕሪኡ እንደገና ክትራኸብ ፈትን።",
  "flash_hint_wall_charger": "• ቅድሚ ምትእስሳር ምፍታንካ ነቲ መጻወቲ ምስ ናይ መንደቕ ቻርጀር ን30 ደቓይቕ ክሳብ ሓደ ሰዓት ምትእስሳር ይምከር።",
  "flash_hint_install_drivers": "• ኣብ ዊንዶውስ እንተሃሊኻ <a href='https://innioasis.app/guide.html'>እቶም ድራይቨርስ</a> ከም ዝተተኽሉ ኣረጋግጽ።",
+ "flash_hint_windows_reboot_driver": "• ዊንዶውስ ፒሲታት ቅድሚ መጀመርታ ምጥቃም ድራይቨር ድሕሪ ምጽዓን ዳግማይ ክጅምራ ኣለወን።",
  "flash_keep_data_option": "ቅጥዕታተይ ሓልዎ።",
  "flash_keep_settings_option": "ቅጥዕታተይን ሚድያታተይን ሓዝ",
  "keep_data_running_fmt": "{software} ድሮ ኣብ {model} ናትካ ተተኺሉ ድዩ?",

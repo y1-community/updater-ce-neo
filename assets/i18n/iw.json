@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "נתק את כבל ה-USB והשתמש באטב או בסיכה כדי ללחוץ על לחצן האיפוס, ולאחר מכן נסה להתחבר שוב.",
  "flash_hint_wall_charger": "• מומלץ לחבר את הנגן למטען קיר למשך 30 דקות עד שעה לפני ניסיון החיבור.",
  "flash_hint_install_drivers": "• אם אתה משתמש ב-Windows, ודא ש<a href='https://innioasis.app/guide.html'>התקנת את מנהלי ההתקן</a>.",
+ "flash_hint_windows_reboot_driver": "• יש להפעיל מחדש את מחשבי Windows לאחר התקנת מנהל ההתקן לפני השימוש הראשון.",
  "flash_keep_data_option": "שמור על ההגדרות שלי",
  "flash_keep_settings_option": "שמור על ההגדרות והמדיה שלי",
  "keep_data_running_fmt": "האם {software} כבר מותקן ב{model} שלך?",

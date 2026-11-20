@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB кабелы арааран баран, скрепканан эбэтэр штифтынан сброс кнопкатын баттаан баран, эмиэ холбоон көр.",
  "flash_hint_wall_charger": "• Холбуу сатыыр иннинэ оонньооччуну 30 мүнүүтэттэн чаас устата истиэнэ заряднай устройствотыгар холбуур сүбэлэнэр.",
  "flash_hint_install_drivers": "• Windows-ка сылдьар буоллаххына, <a href='https://innioasis.app/guide.html'>Драйвердары туруорбуккун</a> бэрэбиэркэлээ.",
+ "flash_hint_windows_reboot_driver": "• Windows ПК-лары бастакы туттуох иннинэ драйверы туруорбутун кэннэ хаттаан саҕалыахха наада.",
  "flash_keep_data_option": "Настройкаларбын тутун",
  "flash_keep_settings_option": "Настройкаларбын уонна медиабын тутун",
  "keep_data_running_fmt": "{software} {model}-гар туруоруллубут дуо?",

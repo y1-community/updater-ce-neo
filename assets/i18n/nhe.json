@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Xikixti nopa cable USB uan xijtekiui se clip o se pin para tijtsontekontlalis nopa botón tlen ika tijpatlas, teipa sampa xijyejyeko tijtlalis.",
  "flash_hint_wall_charger": "• Moneki tijtlalis nopa tlatsotsonali ipan se cargador tlen eltok ipan tepamitl 30 minutos o se hora achtoui kemaj tijyejyekos tijtlalis.",
  "flash_hint_install_drivers": "• Tlaj ti itstok ipan Windows, xijmati tla tijpixtok nopa Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs moneki sampa ma peua kema ya kitlalijtokej nopa driver kema ayamo achtoui kitekiuiaj.",
  "flash_keep_data_option": "Xijpixto notlayejyekol",
  "flash_keep_settings_option": "Xijpixto notlayejyekol uan notlajtol",
  "keep_data_running_fmt": "¿Ya eltok {software} ipan mo {model}?",

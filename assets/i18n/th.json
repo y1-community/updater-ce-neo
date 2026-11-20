@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ถอดสาย USB ออกแล้วใช้คลิปหนีบกระดาษหรือหมุดกดปุ่มรีเซ็ต จากนั้นลองเชื่อมต่ออีกครั้ง",
  "flash_hint_wall_charger": "• ขอแนะนำให้เชื่อมต่อเครื่องเล่นเข้ากับเครื่องชาร์จติดผนังเป็นเวลา 30 นาทีถึงหนึ่งชั่วโมงก่อนที่จะลองเชื่อมต่อ",
  "flash_hint_install_drivers": "• หากคุณใช้ Windows ตรวจสอบให้แน่ใจว่าคุณได้<a href='https://innioasis.app/guide.html'>ติดตั้งไดรเวอร์</a>แล้ว",
+ "flash_hint_windows_reboot_driver": "• พีซีที่ใช้ Windows ควรรีสตาร์ทหลังจากติดตั้งไดรเวอร์ก่อนใช้งานครั้งแรก",
  "flash_keep_data_option": "เก็บการตั้งค่าของฉันไว้",
  "flash_keep_settings_option": "เก็บการตั้งค่าและสื่อของฉันไว้",
  "keep_data_running_fmt": "{software} ติดตั้งบน {model} ของคุณแล้วหรือยัง?",

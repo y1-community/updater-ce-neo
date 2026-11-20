@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ühendage USB-kaabel lahti ja vajutage lähtestusnupule kirjaklambri või nööpnõelaga, seejärel proovige uuesti ühendada.",
  "flash_hint_wall_charger": "• Soovitatav on ühendada mängija enne ühendamist 30 minutiks kuni tunniks seinalaadijaga.",
  "flash_hint_install_drivers": "• Kui kasutate Windowsi, veenduge, et oleksite <a href='https://innioasis.app/guide.html'>draiverid installinud</a>.",
+ "flash_hint_windows_reboot_driver": "• Windowsi arvutid tuleks pärast draiveri installimist enne esmakordset kasutamist taaskäivitada.",
  "flash_keep_data_option": "Hoidke minu seaded alles",
  "flash_keep_settings_option": "Hoidke minu seaded ja meedia alles",
  "keep_data_running_fmt": "Kas {software} on teie seadmesse {model} juba installitud?",

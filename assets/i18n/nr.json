@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Khupha ikheyibuli ye-USB bese usebenzisa isiqetjhana sephepha nofana ipini ukugandelela ibhathini lokusetha kabutjha, bese uzama ukuxhuma godu.",
  "flash_hint_wall_charger": "• Kunconywa bona umdlali uhlanganise itjhaja ebodeni imizuzu ema-30 ukuya kweli-awa ngaphambi kokulinga ukuyihlanganisa.",
  "flash_hint_install_drivers": "• Nawusebenzisa i-Windows, qiniseka bona ufake ama-Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ama-PC we-Windows kufanele aqaliswe kabutjha ngemva kokufaka umtjhayeli ngaphambi kokusetjenziswa kokuthoma.",
  "flash_keep_data_option": "Gcina amasethingi wami",
  "flash_keep_settings_option": "Gcina amasethingi wami nemidiya",
  "keep_data_running_fmt": "Ingabe i-{software} sele ifakiwe ku-{model} yakho?",

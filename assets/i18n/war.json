@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Pugngi an kable han USB ngan gamita an paperclip o pin ha pagpindot han reset nga buton, katapos sarihi pagkonektar utro.",
  "flash_hint_wall_charger": "• Ginrerekomenda nga igkonektar an player ha wall charger ha sulod hin 30 minutos tubtob usa ka oras antes magsari pagkonektar.",
  "flash_hint_install_drivers": "• Kun aada ka ha Windows, siguraduha nga mayda ka ginbutang nga mga Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• An mga PC nga may Windows kinahanglan ig-start utro katapos ibutang an drayber antes una nga gamiton.",
  "flash_keep_data_option": "Tipigi an akon mga kahimtang .",
  "flash_keep_settings_option": "Tipigi an akon mga kahimtang ngan media .",
  "keep_data_running_fmt": "Nakabutang na ba an {software} ha imo {model}?",

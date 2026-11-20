@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ngắt kết nối cáp USB và dùng kẹp giấy hoặc ghim để nhấn nút đặt lại, sau đó thử kết nối lại.",
  "flash_hint_wall_charger": "• Bạn nên kết nối đầu phát với bộ sạc tường trong vòng 30 phút đến một giờ trước khi thử kết nối.",
  "flash_hint_install_drivers": "• Nếu bạn đang sử dụng Windows, hãy đảm bảo bạn đã <a href='https://innioasis.app/guide.html'>Đã cài đặt Trình điều khiển</a>.",
+ "flash_hint_windows_reboot_driver": "• Máy tính Windows nên được khởi động lại sau khi cài đặt trình điều khiển trước khi sử dụng lần đầu.",
  "flash_keep_data_option": "Giữ cài đặt của tôi",
  "flash_keep_settings_option": "Giữ cài đặt và phương tiện của tôi",
  "keep_data_running_fmt": "{software} đã được cài đặt trên {model} của bạn chưa?",

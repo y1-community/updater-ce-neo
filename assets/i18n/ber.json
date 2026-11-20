@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ⵙⵙⴻⵅⵙⵉ ⴰⵥⴻⴹⴹⴰ USB ⵓ ⵙⵙⴻⵇⴷⴻⵛ ⴰⵥⴻⴹⴹⴰ ⵏ ⵍⴽⴰⵖⴻⴹ ⵏⴻⵖ ⴰⵥⴻⴹⴹⴰ ⵏ lpin ⴰⴽⴽⴻⵏ ⴰⴷ ⵜⴹⴻⴳⴳⵔⴻⴹ ⴰⵇⴻⵔⵔⵓⵢ ⵏ ⵓⵙⵏⴻⴼⵍⵉ, ⵙⵢⴻⵏ ⵄⵔⴻⴹ ⴰⴷ ⵜⵜⴻⵇⵇⵏⴻⴹ ⵜⵉⴽⴽⴻⵍⵜ ⵏⵏⵉⴹⴻⵏ.",
  "flash_hint_wall_charger": "• ⵢⴻⵜⵜⵡⴰⵄⵔⴻⴹ ⴰⴷ ⵜⵛⵓⴷⴷⴻⴹ ⴰⵎⵢⵓⵔⴰⵔ ⵙ ⵜⵎⴻⵥⴷⵉⵜ ⵏ ⵍⵃⵉⴹ 30 ⵏ ⵜⴻⴷⵇⵉⵇⵉⵏ ⴰⵔ ⵢⵉⵡⴻⵜ ⵏ ⵜⵙⴰⵄⴻⵜ ⵓⵇⴱⴻⵍ ⴰⴷ ⵜⵄⴻⵔⴹⴻⴹ ⴰⴷ ⵜⵜⵛⵓⴷⴷⴻⴹ.",
  "flash_hint_install_drivers": "• ⵎⴰ ⵢⴻⵍⵍⴰ ⵜⴻⵍⵍⵉⴹ ⴷⴻⴳ Windows, ⴹⴻⵎⵏⴻⴹ ⴱⴻⵍⵍⵉ ⵜⴻⵙⵄⵉⴹ <ⴰ ⵀⵔⴻⴼ='https://innioasis.app/ⴳⵓⵉⴷⴻ.ⵀⵜⵎⵍ'>Isnulfeyyen</ⴰ>.",
+ "flash_hint_windows_reboot_driver": "• ⵉⵍⴰⵇ ⴰⴷ ⵜⵉⴷⵙⴱⴻⴷⴷⴻⵏ PC ⵏ Windows ⴷⴻⴼⴼⵉⵔ ⵎⴰ ⵜⴻⵙⴱⴻⴷⴷⴻⴹ ⴰⵙⴻⵍⴽⵉⵎ ⵓⵇⴱⴻⵍ ⴰⵙⴻⵇⴷⴻⵛ ⴰⵎⴻⵣⵡⴰⵔⵓ.",
  "flash_keep_data_option": "ⵃⵔⴻⵣ ⵉⵙⴻⵖⵡⴰⵏⵉⵡ",
  "flash_keep_settings_option": "ⵃⵔⴻⵣ ⵉⵙⴻⵖⵡⴰⵏⵉⵡ ⴷ ⵜⵜⴰⵡⵉⵍⴰⵜⵉⵡ",
  "keep_data_running_fmt": "ⵉⵙ {software} ⵢⴻⵜⵜⵡⴰⵙⴱⴻⴷⴷ ⵢⴰⴽⴰⵏ ⴷⴻⴳ {model}ik?",

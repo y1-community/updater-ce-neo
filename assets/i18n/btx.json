@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Putusken kabel USB janah pake penjepit kertas ntah pe pin guna neken tombol reset, kenca si e cubaken sambungen mulihi.",
  "flash_hint_wall_charger": "• Dianjurkan guna menyambungken pemain ku charger dinding selama 30 menit seh ku sada jam ope denga iusahaken menyambungkenca.",
  "flash_hint_install_drivers": "• Adi kam make Windows, pastiken maka enggo ipasangndu Driver</a>na.",
+ "flash_hint_windows_reboot_driver": "• PC Windows arus i-restart kenca enggo ipasang driver ope denga igunaken tangtangna.",
  "flash_keep_data_option": "Jagalah pengaturenku .",
  "flash_keep_settings_option": "Jagalah pengaturen ras mediaku .",
  "keep_data_running_fmt": "Apakah {software} enggo ipasang i bas {model}ndu?",

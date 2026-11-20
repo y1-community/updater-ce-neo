@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Cabut kabel USB dan gunakan penjepit kertas atau pin untuk menekan tombol reset, lalu coba sambungkan kembali.",
  "flash_hint_wall_charger": "• Disarankan untuk menyambungkan pemutar ke pengisi daya dinding selama 30 menit hingga satu jam sebelum mencoba menyambungkannya.",
  "flash_hint_install_drivers": "• Jika Anda menggunakan Windows, pastikan Anda telah <a href='https://innioasis.app/guide.html'>Menginstal Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows harus di-restart setelah menginstal driver sebelum digunakan pertama kali.",
  "flash_keep_data_option": "Simpan pengaturan saya",
  "flash_keep_settings_option": "Simpan pengaturan dan media saya",
  "keep_data_running_fmt": "Apakah {software} sudah terinstal di {model} Anda?",

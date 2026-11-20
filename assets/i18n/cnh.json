@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cable kha thleh law reset hmeh awkah catlap asiloah pin hmang, cun peh ṭhan i zuam.",
  "flash_hint_wall_charger": "• Peh na timh hlanah player cu vampang charger ah minutes 30 in suimilam pakhat tiang peh ding in ruahnak cheuh a si.",
  "flash_hint_install_drivers": "• Windows na hman ahcun, <a href='https://innioasis.app/guide.html'>Drivers</a> kha na install cang ti kha i cinken.",
+ "flash_hint_windows_reboot_driver": "• Windows PC pawl cu hman hmasa hlan ah driver install tuah hnu ah thawk tthan ding a si.",
  "flash_keep_data_option": "Ka chiahmi kha chiah",
  "flash_keep_settings_option": "Ka setting le media kha chiah",
  "keep_data_running_fmt": "Na {software} cu na {model} ah chiah a si cang maw?",

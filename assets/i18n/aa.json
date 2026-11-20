@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB akat garuq kee warkat xakbise hinnay pinit duqaysimak qagitak qemmisiyyi gubat xukkut, lakal qagitak garaytam gabbat.",
  "flash_hint_wall_charger": "• Digir abeeni 30 minitik ilaa saaqatah gidaar charger luk angaaraw abak geytimaanam faxximta.",
  "flash_hint_install_drivers": "• Windowil tan kaa tekkek, Driver</a>il culteh tanim kee tasmiteh.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs qimmoh addah edde yantifiqoonuuk naharal driver bicsaanam faxximta.",
  "flash_keep_data_option": "yi guddaaqa dacris",
  "flash_keep_settings_option": "yi guddaaqa kee ratteema dacris",
  "keep_data_running_fmt": "{software} naharal elle ku {model} amol kibbiimeh yanii?",

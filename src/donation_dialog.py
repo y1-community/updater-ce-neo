@@ -529,6 +529,7 @@ class DonationStatusBar(QStatusBar):
         self._goal_bar = QProgressBar()
         self._goal_bar.setObjectName("softwareUpdateProgress")
         self._goal_bar.setRange(0, 1000)
+        self._goal_bar.setValue(0)
         self._goal_bar.setTextVisible(False)
         self._goal_bar.setFixedHeight(8)
         self._goal_bar.setMinimumWidth(48)
@@ -787,7 +788,7 @@ class DonationStatusBar(QStatusBar):
         line = format_goal_line(stats)
         _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
         self._goal_suppressed = (not line or not g_ok)
-        self._goal_reached = bool(stats.get("reached"))
+        self._goal_reached = bool(stats.get("reached") or stats.get("month_reached"))
         if self._goal_suppressed or self._goal_reached:
             self._showing_goal = False
             self._goal_label.setVisible(False)
@@ -1246,7 +1247,7 @@ class DonationDialog(QDialog):
         line = format_goal_line(stats)
         _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
         self._goal_suppressed = (not line or not g_ok)
-        self._goal_reached = bool(stats.get("reached"))
+        self._goal_reached = bool(stats.get("reached") or stats.get("month_reached"))
         if self._goal_suppressed:
             self._showing_goal = False
             self._goal_target = 0

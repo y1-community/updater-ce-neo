@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dì-cheangail an càball USB agus cleachd criomag pàipeir no prìne gus am putan ath-shuidheachadh a bhrùthadh, agus feuch ri ceangal a-rithist.",
  "flash_hint_wall_charger": "• Thathas a 'moladh an cluicheadair a cheangal ri charger balla airson 30 mionaidean gu uair a thìde mus feuch thu ri ceangal.",
  "flash_hint_install_drivers": "• Ma tha thu air Windows, dèan cinnteach gu bheil <a href='https://innioasis.app/guide.html'>Na draibhearan air an stàladh</a> agad.",
+ "flash_hint_windows_reboot_driver": "• Bu chòir PCan Windows ath-thòiseachadh an dèidh an dràibhear a stàladh mus cleachd iad an toiseach.",
  "flash_keep_data_option": "Cùm mo roghainnean",
  "flash_keep_settings_option": "Cùm mo roghainnean agus na meadhanan",
  "keep_data_running_fmt": "A bheil {software} air a chuir air do {model} mu thràth?",

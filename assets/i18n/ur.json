@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB کیبل کو منقطع کریں اور ری سیٹ بٹن کو دبانے کے لیے پیپر کلپ یا پن کا استعمال کریں، پھر دوبارہ جڑنے کی کوشش کریں۔",
  "flash_hint_wall_charger": "• کنیکٹ کرنے کی کوشش کرنے سے پہلے پلیئر کو وال چارجر سے 30 منٹ سے ایک گھنٹے تک جوڑنے کی سفارش کی جاتی ہے۔",
  "flash_hint_install_drivers": "• اگر آپ ونڈوز پر ہیں، تو یقینی بنائیں کہ آپ نے <a href='https://innioasis.app/guide.html'>ڈرائیور انسٹال کیے ہیں</a>۔",
+ "flash_hint_windows_reboot_driver": "• ونڈوز پی سی کو پہلے استعمال سے پہلے ڈرائیور انسٹال کرنے کے بعد دوبارہ شروع کرنا چاہیے۔",
  "flash_keep_data_option": "میری ترتیبات رکھیں",
  "flash_keep_settings_option": "میری ترتیبات اور میڈیا رکھیں",
  "keep_data_running_fmt": "کیا {software} پہلے سے ہی آپ کے {model} پر انسٹال ہے؟",

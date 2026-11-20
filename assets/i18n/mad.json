@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Cabut kabel USB bân ghunaaghi penjepit kertas otabâ pin kaangghuy mencet tombol reset, terros coba' sambung polè.",
  "flash_hint_wall_charger": "• Èsaranaghi kaangghuy nyambung pemain ka pengisi daya ghèddhung 30 menit kantos sèttong jhâm sabellunna nyoba' nyambung.",
  "flash_hint_install_drivers": "• Manabi panjennengan aghâdhui Windows, pastèaghi panjennengan ampon <a href='https://innioasis.app/guide.html'>masang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows kodhu èmolaè polè saamponna èpasang driver sabellunna èghunaaghi pertama kalè.",
  "flash_keep_data_option": "Jaga pangaturan kaulâh",
  "flash_keep_settings_option": "Jaga pangaturan bân media kaulâh",
  "keep_data_running_fmt": "Apa {software} la èpasang è {model} be'na?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB කේබලය විසන්ධි කර යළි පිහිටුවීමේ බොත්තම එබීම සඳහා කඩදාසි හෝ පින් එකක් භාවිතා කරන්න, ඉන්පසු නැවත සම්බන්ධ වීමට උත්සාහ කරන්න.",
  "flash_hint_wall_charger": "• සම්බන්ධ වීමට උත්සාහ කිරීමට පෙර ප්ලේයරය විනාඩි 30 සිට පැයක් දක්වා බිත්ති චාජරයකට සම්බන්ධ කිරීම නිර්දේශ කෙරේ.",
  "flash_hint_install_drivers": "• ඔබ Windows මත සිටින්නේ නම්, ඔබ <a href='https://innioasis.app/guide.html'>ධාවක ස්ථාපනය කර ඇති බව</a> සහතික කර ගන්න.",
+ "flash_hint_windows_reboot_driver": "• වින්ඩෝස් පරිගණක පළමු භාවිතයට පෙර ධාවකය ස්ථාපනය කිරීමෙන් පසු නැවත ආරම්භ කළ යුතුය.",
  "flash_keep_data_option": "මගේ සැකසුම් තබා ගන්න",
  "flash_keep_settings_option": "මගේ සැකසීම් සහ මාධ්‍ය තබා ගන්න",
  "keep_data_running_fmt": "{software} දැනටමත් ඔබගේ {model} හි ස්ථාපනය කර තිබේද?",

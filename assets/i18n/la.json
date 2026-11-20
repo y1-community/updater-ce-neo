@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Funem USB disiunge et paperclip vel clavum utere ut puga pyga utatur, deinde iterum connectens conaris.",
  "flash_hint_wall_charger": "• Commendatur disco coniungere parieti patinam per 30 minuta ad horam antequam coniungere conatur.",
  "flash_hint_install_drivers": "• Si in Fenestra es, <a href='https://innioasis.app/guide.html'> Installa Coegi</a> habes.",
+ "flash_hint_windows_reboot_driver": "• Fenestra PCs debet sileo post institutionem exactoris ante primum usum.",
  "flash_keep_data_option": "Serva mea occasus",
  "flash_keep_settings_option": "Serva mea occasus et media",
  "keep_data_running_fmt": "Is {software} already installed on your {model}?",

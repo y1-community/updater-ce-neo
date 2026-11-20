@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Cabuik kabel USB dan gunoan penjepit karateh atau pin untuak manakan tombol reset, lalu cubo sambuang baliak.",
  "flash_hint_wall_charger": "• Dianjurkan untuak manyambuang pamain ka pangisi daya dindiang salamo 30 minik sampai sajam sabalun mancubo manyambuang.",
  "flash_hint_install_drivers": "• Jikok Sanak mamakai Windows, pastikan Sanak alah mamasang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows harus dimulai baliak sasudah mamasang driver sabalun dipakai partamo kali.",
  "flash_keep_data_option": "Jago pangaturan ambo",
  "flash_keep_settings_option": "Jago pangaturan jo media ambo",
  "keep_data_running_fmt": "Apokah {software} alah dipasang di {model} sanak?",

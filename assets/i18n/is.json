@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Aftengdu USB snúruna og notaðu bréfaklemmu eða pinna til að ýta á endurstillingarhnappinn og reyndu svo að tengjast aftur.",
  "flash_hint_wall_charger": "• Mælt er með því að tengja spilarann ​​við vegghleðslutæki í 30 mínútur til klukkutíma áður en reynt er að tengja hann.",
  "flash_hint_install_drivers": "• Ef þú ert á Windows skaltu ganga úr skugga um að þú hafir <a href='https://innioasis.app/guide.html'>sett upp reklana</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC-tölvur ættu að vera endurræstar eftir að rekillinn hefur verið settur upp fyrir fyrstu notkun.",
  "flash_keep_data_option": "Haltu stillingunum mínum",
  "flash_keep_settings_option": "Haltu stillingum mínum og miðlum",
  "keep_data_running_fmt": "Er {software} þegar uppsett á {model}?",

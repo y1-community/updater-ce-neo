@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kha vha bvise thambo ya USB vha shumise paperclip kana pini u itela u tsitsa butoni ya reset, vha kone u lingedza u dovha vha ṱanganya.",
  "flash_hint_wall_charger": "• Hu themendelwa u ṱumanya mutambi na charger ya luvhondo lwa miniti ya 30 u swika kha awara phanḓa ha musi u tshi lingedza u ṱumanya.",
  "flash_hint_install_drivers": "• Arali ni kha Windows, khwaṱhisedzani uri no dzhenisa DziDriver</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC dzi fanela u thomiwa hafhu nga murahu ha musi dzo no panga driver dzi sa athu shumiswa lwa u thoma.",
  "flash_keep_data_option": "Vhulungani zwishumiswa zwanga",
  "flash_keep_settings_option": "Vhulungani zwishumiswa zwanga na nyanḓadzamafhungo .",
  "keep_data_running_fmt": "Naa {software} yo no dzheniswa kha {model} yaṋu?",

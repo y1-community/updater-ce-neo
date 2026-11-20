@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kokata câble USB mpe salelá pince ya papier to broche mpo na kofina bouton ya réinitialisation, na nsima meká lisusu ko connecter.",
  "flash_hint_wall_charger": "• Ezali malamu kokangisa lecteur na chargeur ya mur na boumeli ya miniti 30 kino ngonga moko liboso ya komeka kokangisa.",
  "flash_hint_install_drivers": "• Soki ozali na Windows, sala que ozala na <a href='https://innioasis.app/guide.html'>Otia ba pilotes</a>.",
+ "flash_hint_windows_reboot_driver": "• Esengeli kobanda lisusu ba PC Windows nsima ya kotya pilote liboso ya kosalela yango mpo na mbala ya liboso.",
  "flash_keep_data_option": "Bomba ba paramètres na ngai",
  "flash_keep_settings_option": "Bomba ba paramètres na ngai na ba médias",
  "keep_data_running_fmt": "Est-ce que {software} esi installé na {model} na yo?",

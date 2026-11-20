@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Idiskonekta an USB cable asin gumamit nin paperclip o pin tanganing pinduton an reset button, dangan probaran na magkonektar giraray.",
  "flash_hint_wall_charger": "• Irinerekomendar na ikonektar an player sa sarong wall charger sa laog nin 30 minutos sagkod sarong oras bago magprobar na magkonektar.",
  "flash_hint_install_drivers": "• Kun ika nasa Windows, siguraduhon na ika naka-install kan mga Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• An mga Windows PC dapat na i-restart pagkatapos na i-install an driver bago an enot na paggamit.",
  "flash_keep_data_option": "Papagdanayon an sakong mga setting",
  "flash_keep_settings_option": "Itago an sakong mga setting asin media",
  "keep_data_running_fmt": "Naka-install na daw an {software} sa saimong {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Na'suha i USB cable ya usa un paperclip pat pin para un pega i reset button, pues prutehi ta'lo.",
  "flash_hint_wall_charger": "• Ma rekomenda na un konnekta i atmas gi un charger gi i paret gi duranten 30 minutos asta un ora antes di un prutehi.",
  "flash_hint_install_drivers": "• Yanggen gaige hao gi Windows, siguru na guaha <a href='https://innioasis.app/guide.html'>install i Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• I Windows PCs debi di u ma'a'atan ta'lo despues di ma'instala i driver antes di u ma'usa.",
  "flash_keep_data_option": "Na'siguru i setbisio-ku siha",
  "flash_keep_settings_option": "Na'siguru na i setbisio-ku yan i media-ku",
  "keep_data_running_fmt": "Esta ma'instala i {software} gi i {model}-mu?",

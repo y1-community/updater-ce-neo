@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB কেবুল বিচ্ছিন্ন কৰক আৰু ৰিছেট বুটাম টিপিবলৈ এটা পেপাৰক্লিপ বা পিন ব্যৱহাৰ কৰক, তাৰ পিছত পুনৰ সংযোগ কৰিবলৈ চেষ্টা কৰক।",
  "flash_hint_wall_charger": "• সংযোগ কৰিবলৈ চেষ্টা কৰাৰ আগতে ৩০ মিনিটৰ পৰা এঘণ্টাৰ বাবে প্লেয়াৰটো ৱাল চাৰ্জাৰৰ সৈতে সংযোগ কৰাটো বাঞ্ছনীয়।",
  "flash_hint_install_drivers": "যদি আপুনি Windows ত আছে, নিশ্চিত কৰক যে আপুনি <a href='https://innioasis.app/guide.html'>ড্ৰাইভাৰসমূহ সংস্থাপন কৰিছে</a>।",
+ "flash_hint_windows_reboot_driver": "• প্ৰথম ব্যৱহাৰৰ আগতে ড্ৰাইভাৰ ইনষ্টল কৰাৰ পিছত উইণ্ড’জ পিচিসমূহ পুনৰাৰম্ভ কৰিব লাগে।",
  "flash_keep_data_option": "মোৰ ছেটিংছ ৰাখক",
  "flash_keep_settings_option": "মোৰ ছেটিংছ আৰু মিডিয়া ৰাখক",
  "keep_data_running_fmt": "আপোনাৰ {model} ত ইতিমধ্যে {software} ইনষ্টল কৰা হৈছে নেকি?",

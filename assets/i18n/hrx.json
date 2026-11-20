@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Tuu te USB-kabel raus hoole un penuts een papier klaytung orer een pin fer ti reset knoop se xmayse, tan fersuuch noch mool se ferklayche.",
  "flash_hint_wall_charger": "• Es is kuut tas te xpiiler 30 minute pis een xtun in een mauer laate tuut, eepst tuu fersuuchst se xpiile.",
  "flash_hint_install_drivers": "• Wëns tuu uf Windows pist, phast uf tas tuu ti Drivers</a> instaliirt host.",
+ "flash_hint_windows_reboot_driver": "• Ti Windows PCs sole noch mool aan kefang wëre noo tëm se te xrayper instaliirt hon, eep se tas eyerste mool penutse.",
  "flash_keep_data_option": "Hal mayn instellunge",
  "flash_keep_settings_option": "Hal mayn instellunge un mëdia .",
  "keep_data_running_fmt": "Is {software} xon uf tayn {model} instaliirt?",

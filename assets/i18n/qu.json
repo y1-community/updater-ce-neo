@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cableta t’aqay hinaspa huk clipp otaq pin nisqawan reset nisqa botonta ñit’iy, chaymantataq hukmanta t’inkiyta kallpachakuy.",
  "flash_hint_wall_charger": "• Allinmi kanman pukllaqta pirqapi cargadorman 30 minutomanta huk horakama manaraq tinkiyta munachkaspa.",
  "flash_hint_install_drivers": "• Windows kaqpi kanki, qhaway <a href='https://innioasis.app/guide.html'>Conductores</a> churasqa kasqaykita.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs kaqmanta qallarina tiyan controladorta churasqamanta qhipaman manaraq ñawpaq llamk'achkaspa.",
  "flash_keep_data_option": "Ajustesniykunata waqaychay",
  "flash_keep_settings_option": "Ajustesniykunata, mediosniykunata ima waqaychay",
  "keep_data_running_fmt": "¿{software} {model} nisqaykipi churasqañachu?",

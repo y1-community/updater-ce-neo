@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ggyako waya ya USB okozese ekikwaso ky’empapula oba ppini okunyiga bbaatuuni ya reset, olwo ogezeeko okuddamu okuyunga.",
  "flash_hint_wall_charger": "• Kirungi okuyunga omuzannyi ku chajingi ya bbugwe okumala eddakiika 30 okutuuka ku ssaawa nga tonnagezaako kugiyunga.",
  "flash_hint_install_drivers": "• Bw’oba ​​oli ku Windows, kakasa nti olina <a href='https://innioasis.app/guide.html'>Okuteeka Ddereeva</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs zirina okuddamu okutandika oluvannyuma lw’okussaamu ddereeva nga tonnasooka kuzikozesa.",
  "flash_keep_data_option": "Kuuma ensengeka zange",
  "flash_keep_settings_option": "Kuuma settings zange ne media zange",
  "keep_data_running_fmt": "{software} yateekebwa dda ku {model} yo?",

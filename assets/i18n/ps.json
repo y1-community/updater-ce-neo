@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "د USB کیبل منحل کړئ او د ری سیٹ تڼۍ فشارولو لپاره د کاغذ کلپ یا پن وکاروئ، بیا د بیا نښلولو هڅه وکړئ.",
  "flash_hint_wall_charger": "• دا سپارښتنه کیږي چې پلیر د دیوال چارجر سره د 30 دقیقو څخه تر یو ساعت پورې د نښلولو هڅه کولو دمخه وصل کړئ.",
  "flash_hint_install_drivers": "• که تاسو په وینډوز کې یاست، ډاډ ترلاسه کړئ چې تاسو <a href='https://innioasis.app/guide.html'>ډرایورونه نصب کړي</a>.",
+ "flash_hint_windows_reboot_driver": "• د وینډوز کمپیوټرونه باید د لومړي کارولو دمخه د ډرایور نصبولو وروسته بیا پیل شي.",
  "flash_keep_data_option": "زما ترتیبات وساتئ",
  "flash_keep_settings_option": "زما ترتیبات او رسنۍ وساتئ",
  "keep_data_running_fmt": "آیا {software} لا دمخه ستاسو په {model} نصب شوی؟",

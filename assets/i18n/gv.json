@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dy row y cable USB ry-cheilley as ry-cheilley rish paperclip ny pin dy brynnagh y botoon reset, as ry-cheilley rish y botoon reset.",
  "flash_hint_wall_charger": "• T'eh ry-hoiaghey dy row y player ry-cheilley rish charger wall son 30 minnid gys oor roish as dy row eh ry-cheilley.",
  "flash_hint_install_drivers": "• Mannagh vel oo er Windows, jean shickyr dy vel oo er n'install ny Driveryn</a>.",
+ "flash_hint_windows_reboot_driver": "• Shegin da PCyn Windows ve ry-reayll erreish da'n driver y s'installaghey roish y chiad ymmyd.",
  "flash_keep_data_option": "Keep my rheynn",
  "flash_keep_settings_option": "Keep my rheynn as my media",
  "keep_data_running_fmt": "Ta {software} er ny s'installaghey er dty {model}?",

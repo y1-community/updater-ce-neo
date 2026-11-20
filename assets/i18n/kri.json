@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Diskonɛkt di USB kebul ɛn yuz pepa klip ɔ pin fɔ pres di riset bɔtin, dɔn tray fɔ kɔnɛkt bak.",
  "flash_hint_wall_charger": "• I fayn fɔ kɔnɛkt di pleya to chaja na di wɔl fɔ 30 minit to wan awa bifo yu tray fɔ kɔnɛkt.",
  "flash_hint_install_drivers": "• If yu de na Windows, mek shɔ se yu dɔn <a href='https://innioasis.app/guide.html'>Instɔl di Drayva dɛn</a>.",
+ "flash_hint_windows_reboot_driver": "• Dɛn fɔ stat di Windows PC dɛn bak afta dɛn dɔn instɔl di drayva bifo dɛn yuz dɛn fɔs.",
  "flash_keep_data_option": "Kip mi sɛtin dɛn",
  "flash_keep_settings_option": "Kip mi sɛtin ɛn mi midia",
  "keep_data_running_fmt": "{software} dɔn ɔlrɛdi instɔl na yu {model}?",

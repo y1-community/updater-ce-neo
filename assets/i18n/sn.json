@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Bvisa tambo ye USB uye shandisa paperclip kana pini kudzvanya bhatani reset, woedza kubatanidza zvakare.",
  "flash_hint_wall_charger": "• Zvinokurudzirwa kubatanidza mutambi kumadziro emadziro kwemaminetsi makumi matatu kusvika awa asati aedza kubatanidza.",
  "flash_hint_install_drivers": "• Kana uri paWindows, iva nechokwadi chokuti <a href='https://innioasis.app/guide.html'>Makaisa maDriver</a>.",
+ "flash_hint_windows_reboot_driver": "• MaPC eWindows anofanira kutangwa patsva mushure mekuisa mutyairi asati atanga kushandisa.",
  "flash_keep_data_option": "Chengetedza marongero angu",
  "flash_keep_settings_option": "Chengetedza marongero angu uye midhiya",
  "keep_data_running_fmt": "{software} yakatoiswa pane yako {model}?",

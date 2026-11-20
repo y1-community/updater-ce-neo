@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Disconeti il ​​câf USB e doprâ une grampe o un pin par premi il tast di reset, daspò provâ a conetisi di gnûf.",
  "flash_hint_wall_charger": "• Si consiile di colegâ il letôr a un cjarcadôr di mûr par 30 minûts a une ore prime di provâ a conetisi.",
  "flash_hint_install_drivers": "• Se tu sês su Windows, sigurâsi di vê instalât i Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• I PC Windows a dovaressin jessi tornâts a scomençâ dopo vê instalât il driver prin dal prin ûs.",
  "flash_keep_data_option": "Mantignî lis gnovis impostazions",
  "flash_keep_settings_option": "Mantignî lis gnovis impostazions e i media",
  "keep_data_running_fmt": "{software} al è za instalât sul to {model}?",

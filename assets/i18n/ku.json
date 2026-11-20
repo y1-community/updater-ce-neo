@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kabloya USB-ê qut bikin û kaxezek an pinek bikar bînin da ku bişkoja vesazkirinê bikirtînin, dûv re careke din biceribînin.",
  "flash_hint_wall_charger": "• Tê pêşnîyar kirin ku berî hewldana girêdanê 30 hûrdeman heta saetekê lîstikvan bi şarjkerek dîwêr ve girêdin.",
  "flash_hint_install_drivers": "• Heke hûn li ser Windows-ê ne, pê ewle bin ku we <a href='https://innioasis.app/guide.html'>Ajoker saz kirine</a>.",
+ "flash_hint_windows_reboot_driver": "• Divê PC-yên Windows-ê piştî sazkirina ajokerê berî karanîna yekem ji nû ve werin destpêkirin.",
  "flash_keep_data_option": "Mîhengên min biparêze",
  "flash_keep_settings_option": "Mîheng û medyaya min biparêze",
  "keep_data_running_fmt": "Ma {software} jixwe li ser {model}-ya we hatiye saz kirin?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Odłącz kabel USB i za pomocą spinacza lub szpilki naciśnij przycisk resetowania, a następnie spróbuj podłączyć ponownie.",
  "flash_hint_wall_charger": "• Zaleca się podłączenie odtwarzacza do ładowarki ściennej na 30 minut do godziny przed próbą podłączenia.",
  "flash_hint_install_drivers": "• Jeśli korzystasz z systemu Windows, upewnij się, że <a href='https://innioasis.app/guide.html'>zainstalowano sterowniki</a>.",
+ "flash_hint_windows_reboot_driver": "• Komputery z systemem Windows należy uruchomić ponownie po zainstalowaniu sterownika przed pierwszym użyciem.",
  "flash_keep_data_option": "Zachowaj moje ustawienia",
  "flash_keep_settings_option": "Zachowaj moje ustawienia i multimedia",
  "keep_data_running_fmt": "Czy {software} jest już zainstalowane na Twoim {model}?",

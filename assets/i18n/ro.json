@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Deconectați cablul USB și folosiți o agrafă sau un știft pentru a apăsa butonul de resetare, apoi încercați să vă conectați din nou.",
  "flash_hint_wall_charger": "• Este recomandat să conectați playerul la un încărcător de perete timp de 30 de minute până la o oră înainte de a încerca conectarea.",
  "flash_hint_install_drivers": "• Dacă utilizați Windows, asigurați-vă că ați <a href='https://innioasis.app/guide.html'>instalat driverele</a>.",
+ "flash_hint_windows_reboot_driver": "• PC-urile Windows trebuie repornite după instalarea driverului înainte de prima utilizare.",
  "flash_keep_data_option": "Păstrează-mi setările",
  "flash_keep_settings_option": "Păstrează-mi setările și media",
  "keep_data_running_fmt": "Este {software} deja instalat pe {model}?",

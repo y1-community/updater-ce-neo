@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB केबल काडून उडोवचें आनी रीसेट बटण दामपाक पेपरक्लिप वा पिन वापरात, मागीर परतून जोडपाचो यत्न करात.",
  "flash_hint_wall_charger": "• जोडपाचो यत्न करचे पयलीं प्लेयराक 30 मिनटां ते एक वर वण्टीच्या चार्जराक जोडपाची शिफारस करतात.",
  "flash_hint_install_drivers": "• तुमी Windows चेर आसल्यार, तुमी <a href='https://innioasis.app/guide.html'>ड्रायव्हर्स स्थापीत केल्यात</a> हाची खात्री करात.",
+ "flash_hint_windows_reboot_driver": "• पयलेच खेपे वापरचे पयलीं ड्रायव्हर स्थापीत केल्या उपरांत Windows PC परतून सुरू करचे.",
  "flash_keep_data_option": "म्हजीं सेटिंग्ज दवरात",
  "flash_keep_settings_option": "म्हजीं सेटिंग्ज आनी माध्यमां दवरात",
  "keep_data_running_fmt": "तुमच्या {model} चेर {software} पयलींच स्थापीत आसा?",

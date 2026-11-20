@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Distagit ar c'habel USB ha implijit ur c'hlip paper pe ur spilhenn evit pouezañ war ar bouton adderaouekaat, ha klaskit kennaskañ en-dro.",
  "flash_hint_wall_charger": "• Aliet e vez da gevreañ al lenner ouzh ur c'harger-moger e-pad 30 munutenn betek un eurvezh a-raok klask kevreañ.",
  "flash_hint_install_drivers": "• Ma'z oc'h war Windows, gwiriit hoc'h eus staliet ar sturierien</a>.",
+ "flash_hint_windows_reboot_driver": "• Ret eo adloc'hañ an urzhiataerioù Windows goude bezañ staliet ar sturier a-raok o implij evit ar wech kentañ.",
  "flash_keep_data_option": "Mirout ma arventennoù",
  "flash_keep_settings_option": "Mirout ma arventennoù ha mediaoù",
  "keep_data_running_fmt": "Ha staliet eo {software} war ho {model} dija ?",

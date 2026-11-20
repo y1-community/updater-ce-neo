@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Atvīnoj USB kabeli i izmontoj papeira saspraudi voi pīnu, kab nūspīstu reseta pogu, tod raugi pīvīnuot vēļreiz.",
  "flash_hint_wall_charger": "• Īteicams atskaņuotuoju pīvīnuot sīnys lādeituojam iz 30 minotu leidz stuņdei pyrma raudzeišonys pīvīnuot.",
  "flash_hint_install_drivers": "• Ka esi Windows, puorbaudi, voi tev ir instalāti Draiveri</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows datori pyrma pyrmuos lītuošonys ir juopuorstartej piec draivera instaliešonys.",
  "flash_keep_data_option": "Saglobuot sovus īstatejumus .",
  "flash_keep_settings_option": "100 doc#1159 Tur sovus īstatejumus i medejus .",
  "keep_data_running_fmt": "Voi {software} jau ir uzstuodeits iz jūs {model}?",

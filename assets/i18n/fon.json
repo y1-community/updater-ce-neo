@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dɔn kàn USB ɔ bo zán wema-xwlémɛtɔ́ alǒ pin dó zín butɔn reset ɔ, enɛ gudo hǔn, tɛ́n kpɔ́n bo lɛ́vɔ cá.",
  "flash_hint_wall_charger": "• È byɔ ɖɔ è ni cá nǔxixo ɔ dó chargeur e è nɔ sɔ́ ɖó dǒ jí é ɖé jí nú cɛju 30 jɛ ganxixo ɖokpo cobo tɛ́n kpɔ́n bo cá.",
  "flash_hint_install_drivers": "• Nú a ɖò Windows jí hǔn, hɛn dó ayi mɛ ɖɔ a ɖó <a href='https://innioasis.app/guide.html'>Driver lɛ</a>.",
+ "flash_hint_windows_reboot_driver": "• È ɖó na vɔ́ PC Windows tɔn lɛ bɛ́ hwenu e è sɔ́ mɔ̌tokuntɔ́ ɔ ɖó mɔ̌to ɔ mɛ gudo é cobo na zán ye azɔn nukɔntɔn ɔ.",
  "flash_keep_data_option": "Hɛn nǔ e un sɔ́ ɖ’ayǐ lɛ é .",
  "flash_keep_settings_option": "Hɛn nǔ e un sɔ́ ɖ’ayǐ lɛ é kpo nǔ e un nɔ zán lɛ é kpo ɖó te .",
  "keep_data_running_fmt": "{software} ko ɖò {model} towe jí à ?",

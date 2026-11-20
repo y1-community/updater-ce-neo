@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cable kha titawp la, paperclip emaw pin emaw hmangin reset button kha hmet la, connect leh rawh.",
  "flash_hint_wall_charger": "• Player hi connect tum hmain minute 30 atanga darkar khat chhung wall charger-ah connect hmasak phawt a tha.",
  "flash_hint_install_drivers": "• Windows i hman chuan <a href='https://innioasis.app/guide.html'>Drivers</a> i install tawh tih enfiah rawh.",
+ "flash_hint_windows_reboot_driver": "• Windows PC te hi hman hmasak hmain driver install zawhah restart tur a ni.",
  "flash_keep_data_option": "Ka settings te chu vawng reng rawh",
  "flash_keep_settings_option": "Ka settings leh media te chu vawng reng rawh",
  "keep_data_running_fmt": "I {model} ah hian {software} a install tawh em?",

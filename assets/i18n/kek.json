@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Xch’e’b’al li cable USB ut oksi jun li clip malaj jun li pin re xpitz’b’al li boton re xyiib’ankil wi’chik, toja’ naq taayal wi’chik xramb’al.",
  "flash_hint_wall_charger": "• Na’uxmank naq li b’atz’unel t-oksimanq rik’in jun li cargador re li tz’ak chiru 30 k’asal toj sa’ jun k’asal rub’elaj naq t-uxmanq xyalb’al xramb’al.",
  "flash_hint_install_drivers": "• Wi wankat sa’ li Windows, k’e reetal naq wankeb’ <a href=’https://innioasis.app/guide.html’>Xk’eeb’aleb’ li Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Eb’ li PC Windows tento naq te’ok wi’chik chi k’anjelak naq ak xe’xk’e li b’eresinel rub’elaj naq te’oksimanq xb’een wa.",
  "flash_keep_data_option": "K’uula lin k’uub’anb’il na’leb’ .",
  "flash_keep_settings_option": "K’uula lin k’uub’anb’il na’leb’ ut li media .",
  "keep_data_running_fmt": "Ma ak k’eeb’il li {software} sa’ laa {model}?",

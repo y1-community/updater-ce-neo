@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Deskonektá e kabel USB i usa un klip di papel òf pin pa primi e boton di reset, despues purba konektá atrobe.",
  "flash_hint_wall_charger": "• Ta rekomendabel pa konektá e player na un kargadó di muraya pa 30 minüt pa un ora promé ku purba konektá.",
  "flash_hint_install_drivers": "• Si bo ta riba Windows, sòru pa bo tin <a href='https://innioasis.app/guide.html'>Instalá e Drivernan</a>.",
+ "flash_hint_windows_reboot_driver": "• PCnan di Windows mester wòrdu restart despues di instalá e driver promé ku uso pa promé biaha.",
  "flash_keep_data_option": "Mantené mi settingnan",
  "flash_keep_settings_option": "Mantené mi settingnan i medionan",
  "keep_data_running_fmt": "{software} ta instalá kaba riba bo {model}?",

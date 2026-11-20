@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Atvienojiet USB kabeli un izmantojiet saspraudi vai tapu, lai nospiestu atiestatīšanas pogu, pēc tam mēģiniet vēlreiz izveidot savienojumu.",
  "flash_hint_wall_charger": "• Pirms pieslēgšanas mēģinājuma atskaņotāju ieteicams savienot ar sienas lādētāju uz 30 minūtēm līdz stundai.",
  "flash_hint_install_drivers": "• Ja izmantojat operētājsistēmu Windows, pārliecinieties, vai esat <a href='https://innioasis.app/guide.html'>instalējis draiverus</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows datori ir jārestartē pēc draivera instalēšanas pirms pirmās lietošanas.",
  "flash_keep_data_option": "Saglabāt manus iestatījumus",
  "flash_keep_settings_option": "Saglabāt manus iestatījumus un multividi",
  "keep_data_running_fmt": "Vai {software} jau ir instalēts jūsu ierīcē {model}?",

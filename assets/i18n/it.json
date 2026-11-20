@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Scollegare il cavo USB e utilizzare una graffetta o uno spillo per premere il pulsante di ripristino, quindi riprovare a connettersi.",
  "flash_hint_wall_charger": "• Si consiglia di collegare il lettore a un caricatore a muro per un periodo compreso tra 30 minuti e un'ora prima di tentare la connessione.",
  "flash_hint_install_drivers": "• Se utilizzi Windows, assicurati di aver <a href='https://innioasis.app/guide.html'>installato i driver</a>.",
+ "flash_hint_windows_reboot_driver": "• I PC Windows devono essere riavviati dopo l'installazione del driver prima del primo utilizzo.",
  "flash_keep_data_option": "Mantieni le mie impostazioni",
  "flash_keep_settings_option": "Mantieni le mie impostazioni e i miei contenuti multimediali",
  "keep_data_running_fmt": "{software} è già installato sul tuo {model}?",

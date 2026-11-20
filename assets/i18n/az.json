@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kabelini ayırın və sıfırlama düyməsini sıxmaq üçün kağız klipindən və ya sancaqdan istifadə edin, sonra yenidən qoşulmağa cəhd edin.",
  "flash_hint_wall_charger": "• Qoşulmağa cəhd etməzdən əvvəl pleyeri 30 dəqiqədən bir saata qədər divar şarj cihazına qoşmaq tövsiyə olunur.",
  "flash_hint_install_drivers": "• Əgər Windows-dasınızsa, <a href='https://innioasis.app/guide.html'>Sürücüləri quraşdırdığınızdan</a> əmin olun.",
+ "flash_hint_windows_reboot_driver": "• Windows kompüterləri ilk istifadədən əvvəl drayveri quraşdırdıqdan sonra yenidən işə salınmalıdır.",
  "flash_keep_data_option": "Parametrlərimi saxla",
  "flash_keep_settings_option": "Parametrlərimi və mediamı saxlayın",
  "keep_data_running_fmt": "{software} artıq {model}-də quraşdırılıb?",

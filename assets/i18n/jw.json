@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Copot kabel USB lan gunakake klip kertas utawa pin kanggo mencet tombol reset, banjur coba sambungake maneh.",
  "flash_hint_wall_charger": "• Disaranake kanggo nyambungake pamuter kanggo pangisi daya tembok kanggo 30 menit kanggo jam sadurunge nyoba kanggo nyambung.",
  "flash_hint_install_drivers": "• Yen sampeyan nggunakake Windows, priksa manawa sampeyan wis <a href='https://innioasis.app/guide.html'>Pasang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC kudu diwiwiti maneh sawise nginstal driver sadurunge nggunakake pisanan.",
  "flash_keep_data_option": "Tansah setelan sandi",
  "flash_keep_settings_option": "Tansah setelan lan media",
  "keep_data_running_fmt": "Apa {software} wis diinstal ing {model} sampeyan?",

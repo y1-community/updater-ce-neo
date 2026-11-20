@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dekonekte kab USB-la ek servi enn trombonn ouswa enn pin pou pez bouton reset, apre esey konekte ankor.",
  "flash_hint_wall_charger": "• Li rekomande pou konekte zwer-la ar enn sarz miray pandan 30 minit ziska enn-erd-tan avan sey konekte.",
  "flash_hint_install_drivers": "• Si ou lor Windows, fer sir ki ou finn instal bann Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Bizin re-demar bann PC Windows apre ki finn instal driver-la avan premie itilizasion.",
  "flash_keep_data_option": "Gard mo bann konfigirasion",
  "flash_keep_settings_option": "Gard mo bann konfigirasion ek media",
  "keep_data_running_fmt": "Eski {software} deza instale lor ou {model}?",

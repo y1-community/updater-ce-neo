@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Вӧчны USB кабель да скрепкаӧн либӧ пинӧн ӧшӧдны сброс кнопка, сэсся мӧдысь зіля йитны.",
  "flash_hint_wall_charger": "• Вöзйöны йитны плеерсö стенвывса зарядкаö 30 минутсянь часöдз, öтувтны зільöм бöрын.",
  "flash_hint_install_drivers": "• Ті кӧ уджаланныд Windows вылын, гӧгӧрвоӧдӧй, мый тіян эмӧсь <a href='https://innioasis.app/guide.html'>Драйверъяс</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows ПК-яс колӧ выльысь заводитны драйвер пуктӧм бӧрын медводдзаысь вӧдитчӧм бӧрын.",
  "flash_keep_data_option": "Керӧй менсьым настройкаясӧс .",
  "flash_keep_settings_option": "Керӧй менам настройкаяс да медиа .",
  "keep_data_running_fmt": "{software} нин пуктӧма тэнад {model} вылӧ?",

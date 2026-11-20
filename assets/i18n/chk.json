@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kopwe angei ewe USB me aea ew taropwe ika pin ne suki ewe reset, iwe sotun apacha sefan.",
  "flash_hint_wall_charger": "• A murino kopwe fiti ewe chon fiti ew charger won wall ren 30 minich ngeni ew awa me mwen kopwe achocho ne fiti.",
  "flash_hint_install_drivers": "• Ika pwe ka nomw won Windows, kopwe tumunu pwe ka fen isoni ekkewe Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ekkewe PC mi wor Windows repwe poputa sefan mwirin ar repwe install ewe chon uwei me mwen ar repwe akkomw aea.",
  "flash_keep_data_option": "Kopwe tumunu ai kewe setin .",
  "flash_keep_settings_option": "Kopwe tumunu om kewe setin me media .",
  "keep_data_running_fmt": "{software} a fen nomw won noumw we {model}?",

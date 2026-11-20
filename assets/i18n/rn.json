@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kura umugozi wa USB maze ukoreshe igikoresho co gufata urupapuro canke igikoresho co gufatako urupapuro kugira ngo ukande buto yo gusubiramwo, hanyuma wongere ugerageze gufatanya.",
  "flash_hint_wall_charger": "• Ni vyiza gufatanya umukinyi n’igikoresho co gushaja ku ruhome mu minota 30 gushika kw’isaha imwe imbere y’uko ugerageza gufatanya.",
  "flash_hint_install_drivers": "• Niba uri kuri Windows, urabe ko ufise <a href='Igikoresho co gutwara</a>.",
+ "flash_hint_windows_reboot_driver": "• Ama PC ya Windows akwiye gusubira gutangura amaze gushiramwo umushoferi imbere y’uko akoreshwa ubwa mbere.",
  "flash_keep_data_option": "Gumana amagenamiterere yanje",
  "flash_keep_settings_option": "Gumana amagenamiterere yanje n'ivy'amakuru",
  "keep_data_running_fmt": "Mbega {software} iramaze gushirwa kuri {model} yawe?",

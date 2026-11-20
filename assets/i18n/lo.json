@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ຖອດສາຍ USB ແລະໃຊ້ແຜ່ນເຈ້ຍ ຫຼືເຂັມປັກໝຸດເພື່ອກົດປຸ່ມຣີເຊັດ, ຈາກນັ້ນລອງເຊື່ອມຕໍ່ອີກຄັ້ງ.",
  "flash_hint_wall_charger": "• ແນະນຳໃຫ້ເຊື່ອມຕໍ່ເຄື່ອງຫຼິ້ນກັບເຄື່ອງສາກຕິດຝາເປັນເວລາ 30 ນາທີຫາໜຶ່ງຊົ່ວໂມງກ່ອນທີ່ຈະພະຍາຍາມເຊື່ອມຕໍ່.",
  "flash_hint_install_drivers": "• ຖ້າທ່ານຢູ່ໃນ Windows, ໃຫ້ແນ່ໃຈວ່າທ່ານໄດ້ <a href='https://innioasis.app/guide.html'>ຕິດຕັ້ງໄດເວີ</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs ຄວນໄດ້ຮັບການເລີ່ມຕົ້ນໃຫມ່ຫຼັງຈາກການຕິດຕັ້ງໄດເວີກ່ອນທີ່ຈະນໍາໃຊ້ຄັ້ງທໍາອິດ.",
  "flash_keep_data_option": "ຮັກສາການຕັ້ງຄ່າຂອງຂ້ອຍ",
  "flash_keep_settings_option": "ຮັກສາການຕັ້ງຄ່າ ແລະສື່ຂອງຂ້ອຍ",
  "keep_data_running_fmt": "{software}ໄດ້ຕິດຕັ້ງໃສ່{model}ຂອງເຈົ້າແລ້ວບໍ?",

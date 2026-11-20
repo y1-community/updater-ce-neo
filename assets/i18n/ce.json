@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB кабель дӀа а яьккхина, скрепкаца я шпилькаца сброс кнопка тӀе а таӀийна, юха а зӀене вала хьажа.",
  "flash_hint_wall_charger": "• Плеер стенан зарядникца 30 минотера цхьана сахьте кхаччалц дӀатоха гӀортале дика ду.",
  "flash_hint_install_drivers": "• Нагахь санна хьо Windows-ехь велахь, хьайна <a href='https://innioasis.app/guide.html'>Драйверш</a> дӀахӀиттийна хиларх тешна хила.",
+ "flash_hint_windows_reboot_driver": "• Windows ПК-ш дуьххьара лелоле хьалха драйвер дӀа а хӀоттийна, юха дӀайоло еза.",
  "flash_keep_data_option": "Сан настройкаш ларъе",
  "flash_keep_settings_option": "Сан настройкаш а, медиа а ларъе .",
  "keep_data_running_fmt": "{software} хьан {model} тӀехь хӀинцале а дӀахӀоттийна юй?",

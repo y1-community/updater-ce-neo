@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconecte le cable USB yéetel meyaj juntúul clip ju'un wa pin utia'al u pulsar le botón restablecimiento, ts'o'okole' k'aax u conectar tu ka'atéen.",
  "flash_hint_wall_charger": "• Ku ya'ala'al ka conectar le reproductor ti' jump'éel cargador pak'o' ichil 30 minutos tak jump'éel p'isib bey ma' intentar conectar.",
  "flash_hint_install_drivers": "• Wa yaanech ti' Windows, asegurar ku u yaantal <a href='https://innioasis.app/guide.html'>Instalado le controladores</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs k'a'abéet u reiniciados ka' instalar le controlador bey ma' yáax búukinta'al.",
  "flash_keep_data_option": "Mantenga in configuración",
  "flash_keep_settings_option": "Mantenga in configuración yéetel medios comunicación",
  "keep_data_running_fmt": "¿Ts'o'ok wa u ts'a'abal {software} ti' a {model}?",

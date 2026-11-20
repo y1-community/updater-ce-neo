@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Peuhah kabel USB dan pakek penjepit kertas atawa pin untuk neutekan tombol reset, lheuh nyan neucuba sambungkan lom.",
  "flash_hint_wall_charger": "• Geusarankan untuk tapeusambong peumaen ngon charger binteh seulama 30 minet sampoe sijeum sigohlom ta cuba peusambong.",
  "flash_hint_install_drivers": "• Meunyo droeneuh na bak Windows, pastikan droeneuh ka neupasang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows beu ta restart lheuh ta pasang driver sigohlom ta pakek phon.",
  "flash_keep_data_option": "Jaga setting lon",
  "flash_keep_settings_option": "Jaga setting dan media lon .",
  "keep_data_running_fmt": "Peuë {software} ka neupasang bak {model} droëneuh?",

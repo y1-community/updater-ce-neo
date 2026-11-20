@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Frakobl USB-kablet, og brug en papirclips eller en pin til at trykke på nulstillingsknappen, og prøv derefter at tilslutte igen.",
  "flash_hint_wall_charger": "• Det anbefales at tilslutte afspilleren til en vægoplader i 30 minutter til en time, før du forsøger at tilslutte.",
  "flash_hint_install_drivers": "• Hvis du er på Windows, skal du sikre dig, at du har <a href='https://innioasis.app/guide.html'>installeret driverne</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-pc'er skal genstartes efter installation af driveren før første brug.",
  "flash_keep_data_option": "Behold mine indstillinger",
  "flash_keep_settings_option": "Behold mine indstillinger og medier",
  "keep_data_running_fmt": "Er {software} allerede installeret på din {model}?",

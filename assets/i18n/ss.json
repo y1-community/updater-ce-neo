@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Khupha intsambo ye-USB bese usebentisa i-paperclip nobe i-pin kute ucindetele inkinobho yekusetha kabusha, bese uzama kuphindze uxhume.",
  "flash_hint_wall_charger": "• Kunconywa kutsi uxhume umdlali kushaja yelubondza imizuzu lengu-30 kuya elihoreni ngaphambi kwekutsi uzame kuxhuma.",
  "flash_hint_install_drivers": "• Uma ngabe use-Windows, ciniseka kutsi ufake Bashayeli</a>.",
+ "flash_hint_windows_reboot_driver": "• Ema-PC e-Windows kufanele acalwe kabusha ngemuva kwekufaka umshayeli ngaphambi kwekutsi asetjentiswe kwekucala.",
  "flash_keep_data_option": "Gcina emasethingi ami",
  "flash_keep_settings_option": "Gcina emasethingi ami kanye nemidiya",
  "keep_data_running_fmt": "Ingabe {software} seyivele ifakwe ku {model} yakho?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Woth waya pa USB man iti ku paperclip nyo pin mi dii bute mi dwoko piny, man tem medu kendu.",
  "flash_hint_wall_charger": "• Jubekwayu nia iket jam tuko i charger mi ot pi dakika 30 nicidho i sawa acel mapodi itemo ketho.",
  "flash_hint_install_drivers": "• Ka itiye iwi Windows, nen nia iketo Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs umaku jucak kendu ingey ketho driver ma podi jutiyo kudu ungo.",
  "flash_keep_data_option": "Gwok lembe para",
  "flash_keep_settings_option": "Gwok lembe para man jam tic para",
  "keep_data_running_fmt": "Nyo {software} dong ju ketho iwi {model} peri?",

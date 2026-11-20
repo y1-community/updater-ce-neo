@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB-кабельым ойырен налза да скрепка але пин дене сброс кнопкым темдалза, вара уэш ушен ончо.",
  "flash_hint_wall_charger": "• Ушаш тӧчымӧ деч ончыч 30 минут гыч ик шагат марте плеерым пырдыжыш зарядкым ушаш темлалтеш.",
  "flash_hint_install_drivers": "• Windows-ыште улыда гын, <a href='https://innioasis.app/guide.html'>Драйвер-влакым шындыме</a> улмым тергыза.",
+ "flash_hint_windows_reboot_driver": "• Windows ПК-влакым икымше гана кучылтмо деч ончыч драйверым вераҥдымеке, угыч тӱҥалаш кӱлеш.",
  "flash_keep_data_option": "Настройкым арален кодаш",
  "flash_keep_settings_option": "Настройкым да медиа-влакым арален кодыза",
  "keep_data_running_fmt": "{software} тендан {model}-лан уже шындалтын мо?",

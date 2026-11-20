@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "I-disconnect so USB cable tan mangusar na paperclip o pin pian pindoten so reset button, insan salien ya ikonekta lamet.",
  "flash_hint_wall_charger": "• Mas maabig no ikonekta so player ed wall charger ed loob na 30 minutos anggad sakey oras antis ya salien ya ikonekta.",
  "flash_hint_install_drivers": "• No wala ka ed Windows, seguroen ya aka-install ka na saray Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Saray Windows PC et nepeg ya i-restart kayari na pangi-install na driver antis ya unonan usaren.",
  "flash_keep_data_option": "Pansiansiaen iray setting ko",
  "flash_keep_settings_option": "Pansiansiaen iray setting tan media ko",
  "keep_data_running_fmt": "Wala la kasi so {software} ed {model} mo?",

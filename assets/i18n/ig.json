@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kwupu eriri USB wee jiri mpempe akwụkwọ ma ọ bụ pin ka ịpị bọtịnụ nrụpụta, wee gbalịa jikọọ ọzọ.",
  "flash_hint_wall_charger": "• A na-atụ aro ka ijikọ ihe ọkpụkpọ na chaja mgbidi maka nkeji 30 ruo otu elekere tupu ịgbalị jikọọ.",
  "flash_hint_install_drivers": "• Ọ bụrụ na ị nọ na Windows, hụ na ị nwere <a href='https://innioasis.app/guide.html'>Wụnye ndị ọkwọ ụgbọala</a>.",
+ "flash_hint_windows_reboot_driver": "• Ekwesịrị ịmalitegharị PC Windows mgbe ị wụnyechara onye ọkwọ ụgbọ ala tupu ojiji mbụ.",
  "flash_keep_data_option": "Debe ntọala m",
  "flash_keep_settings_option": "Debe ntọala m na mgbasa ozi",
  "keep_data_running_fmt": "Awụnyela {software} na {model} gị?",

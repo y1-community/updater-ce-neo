@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Keebilii USB addaan kutuu fi paperclip ykn pin fayyadamuun button reset dhiibuu, sana booda irra deebi'ii walqabsiisuuf yaali.",
  "flash_hint_wall_charger": "• Taphataan wal qunnamsiisuuf yaaluun dura daqiiqaa 30 hanga sa’aatii tokkoof chaarjii dallaa waliin wal qunnamsiisuun ni gorfama.",
  "flash_hint_install_drivers": "• Yoo Windows irratti jirta ta'e, <a href='https://innioasis.app/guide.html'>Draayivaroota</a> Fe'uu kee mirkaneessi.",
+ "flash_hint_windows_reboot_driver": "• Windows PCn jalqaba fayyadamuu dura erga driver install godhanii booda deebi’anii jalqabuu qabu.",
  "flash_keep_data_option": "Sajoo koo eeggadhu",
  "flash_keep_settings_option": "Setting fi miidiyaa koo eegaa",
  "keep_data_running_fmt": "{software} {model} keessan irratti duraan fe'amee jiraa?",

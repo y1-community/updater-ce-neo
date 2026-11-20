@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Piijarlugu USB savirajak ammalu aturlugu paippaaq naqittagaq uvvaluunniit naqittagaq naqillugu aaqqiksikkannirniq naqittagaq, taimali kasukkannirasuarlutit.",
  "flash_hint_wall_charger": "• atuqujauvuq kasuqtauluni pinnguaruti akinnarmiutarmut uummaqqutimut 30 minitsinut ikarramut kasuqtaunasulaunnginnirni.",
  "flash_hint_install_drivers": "• Windows-miikkuvit, qaujimagiarlutit aaqqiksisimagaluarmangaaqpit aqutinik</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows qaritaujait pigiakkanniriaqaqput aaqqiksilauqtillugit aqutimik sivulliqpaami atuqtaulaunnginninginni.",
  "flash_keep_data_option": "Aaqqiksimanirijakka pisimainnarlugit",
  "flash_keep_settings_option": "Aaqqiksimanirijakka tusagaksalirijjutikkalu pisimalugit",
  "keep_data_running_fmt": "{software} aaqqiktausimaliriiqpaa {model}-mi?",

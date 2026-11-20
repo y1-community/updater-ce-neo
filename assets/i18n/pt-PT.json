@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desligue o cabo USB e utilize um clipe de papel ou um alfinete para premir o botão de reset e tente ligar novamente.",
  "flash_hint_wall_charger": "• Recomenda-se ligar o leitor a um carregador de parede durante 30 minutos a uma hora antes de tentar ligar.",
  "flash_hint_install_drivers": "• Se estiver no Windows, certifique-se de que tem <a href='https://innioasis.app/guide.html'>instalado os controladores</a>.",
+ "flash_hint_windows_reboot_driver": "• Os PCs com Windows devem ser reiniciados após a instalação do controlador antes da primeira utilização.",
  "flash_keep_data_option": "Manter as minhas configurações",
  "flash_keep_settings_option": "Manter as minhas definições e mídia",
  "keep_data_running_fmt": "O {software} já está instalado no seu {model}?",

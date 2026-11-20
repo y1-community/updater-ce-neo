@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Staca el cavo USB e dopara un grameto o un pin pa premer el boton de reset, dopo prova a cołigarte da novo.",
  "flash_hint_wall_charger": "• Se conseja de cołegar el letore a un caricator da parete pa 30 minuti a n’ora prima de sercar de cołigarlo.",
  "flash_hint_install_drivers": "• Se te si su Windows, asicurate de vér <a href='https://innioasis.app/guide.html'>instałai i Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• I PC Windows i ga da esar riaviai dopo vér instałà el driver prima de l’uxo.",
  "flash_keep_data_option": "Tigni łe me inpostasion",
  "flash_keep_settings_option": "Tigni łe me inpostasion e i media",
  "keep_data_running_fmt": "{software} è già installato sul tuo {model}?",

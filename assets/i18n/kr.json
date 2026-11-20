@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cable dəga təmtəgə kuru paperclip au pin faidatə button reset dəga təmtəgə, daji waltə kəltə jarabne.",
  "flash_hint_wall_charger": "• Player dəga charger garuye lan minti 30 səta awa falro kəltəro shawari tina kawu kəltə baditinno.",
  "flash_hint_install_drivers": "• Windows lan cidajin ma, tawatkəgəne Drivers</a> dəga yita gattəyin.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs də waltə baditin ngawo driver dəga yita gattəyin kawu buro salakkin faidatinno.",
  "flash_keep_data_option": "Settingsnyi gǝnane",
  "flash_keep_settings_option": "Settings-a media-a gǝnane",
  "keep_data_running_fmt": "Shi {software} də suro {model} yen təkkəna wa?",

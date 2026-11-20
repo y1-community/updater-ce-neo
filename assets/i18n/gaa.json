@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Gbalamɔ USB kpã lɛ ni okɛ wolo loo pin atsu nii ni okɛnyɛ reset button lɛ nɔ, no sɛɛ lɛ kaa ni okɛwo mli ekoŋŋ.",
  "flash_hint_wall_charger": "• Akɛ ŋaawoo haa akɛ okɛ tsɔne ni akɛtswaa lala lɛ atsa tsɔne ko ni akɛwoɔ gbogbo he lɛ nɔ minitii 30 kɛyashi ŋmɛlɛtswaa kome dani oka akɛ okɛtswa.",
  "flash_hint_install_drivers": "• Kɛji oyɛ Windows nɔ lɛ, kwɛmɔ ni okɛ Drivers</a> lɛ awo mli.",
+ "flash_hint_windows_reboot_driver": "• Esa akɛ abɔi Windows PC lɛ ekoŋŋ beni akɛ draiva lɛ awo mli dani akɛtsu nii klɛŋklɛŋ kwraa.",
  "flash_keep_data_option": "Kɛ mi gbɛjianɔtoo lɛ ahi shi",
  "flash_keep_settings_option": "Kɛ mi gbɛjianɔtoo kɛ media lɛ ato",
  "keep_data_running_fmt": "Ani {software} lɛ ewo o{model} lɛ nɔ momo?",

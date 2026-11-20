@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Koppel de USB-kabel los en gebruik een paperclip of pin om de resetknop in te drukken. Probeer vervolgens opnieuw verbinding te maken.",
  "flash_hint_wall_charger": "• Het wordt aanbevolen om de speler gedurende 30 minuten tot een uur aan te sluiten op een wandlader voordat u probeert verbinding te maken.",
  "flash_hint_install_drivers": "• Als u Windows gebruikt, zorg er dan voor dat u <a href='https://innioasis.app/guide.html'>de stuurprogramma's heeft geïnstalleerd</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-pc's moeten vóór het eerste gebruik opnieuw worden opgestart nadat het stuurprogramma is geïnstalleerd.",
  "flash_keep_data_option": "Behoud mijn instellingen",
  "flash_keep_settings_option": "Behoud mijn instellingen en media",
  "keep_data_running_fmt": "Is {software} al geïnstalleerd op uw {model}?",

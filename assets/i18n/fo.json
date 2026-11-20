@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kopla USB-kaðalin úr og brúka pappírsklemmu ella pinn til at trýsta á reset-knappinum, og royn síðani at seta samband aftur.",
  "flash_hint_wall_charger": "• Mælt verður til at seta spælaran í veggløðara í 30 minuttir til ein tíma, áðrenn roynt verður at seta í.",
  "flash_hint_install_drivers": "• Um tú ert á Windows, skalt tú tryggja tær, at tú hevur innstillað Bilførararnar</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows teldur skulu endurbyrjast eftir at hava sett bilføraran upp áðrenn fyrstu nýtslu.",
  "flash_keep_data_option": "Halt mínar innstillingar",
  "flash_keep_settings_option": "Halt mínar innstillingar og miðlar",
  "keep_data_running_fmt": "Er {software} longu sett upp á tín {model}?",

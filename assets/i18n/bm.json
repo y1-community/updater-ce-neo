@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kabɔri tigɛ ani ka baara kɛ ni papiye sirilan walima pinɛ ye walasa ka butɔni reset digi, o kɔ, a ɲini ka a don kokura.",
  "flash_hint_wall_charger": "• A ka ɲi ka fɔlikɛlan siri kogo chargeur la miniti 30 fo lɛri kelen sani aw k’a ɲini ka a don.",
  "flash_hint_install_drivers": "• N’i bɛ Windows kan, i k’a lajɛ ko i ye <a href='https://innioasis.app/guide.html'>Sofɛrɛw sigi sen kan</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCw ka kan ka daminɛ kokura sofɛrɛ bilalen kɔfɛ sani u ka baara kɛ fɔlɔ.",
  "flash_keep_data_option": "Aw ye ne ka sigidakow mara",
  "flash_keep_settings_option": "Ne ka sigidakow ni ne ka kunnafonidilanw mara",
  "keep_data_running_fmt": "Yala {software} bɛ i ka {model} kan kaban wa?",

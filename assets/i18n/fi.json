@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Irrota USB-kaapeli ja paina nollauspainiketta paperiliittimellä tai neulalla ja yritä sitten yhdistää uudelleen.",
  "flash_hint_wall_charger": "• On suositeltavaa kytkeä soitin seinälaturiin 30 minuutista tuntiin ennen yhdistämistä.",
  "flash_hint_install_drivers": "• Jos käytät Windowsia, varmista, että olet <a href='https://innioasis.app/guide.html'>asentanut ohjaimet</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-tietokoneet on käynnistettävä uudelleen ohjaimen asennuksen jälkeen ennen ensimmäistä käyttöä.",
  "flash_keep_data_option": "Säilytä asetukset",
  "flash_keep_settings_option": "Säilytä asetukset ja media",
  "keep_data_running_fmt": "Onko {software} jo asennettu laitteellesi {model}?",

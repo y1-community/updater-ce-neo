@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Débranchez le câble USB et utilisez un trombone ou une épingle pour appuyer sur le bouton de réinitialisation, puis essayez à nouveau de vous connecter.",
  "flash_hint_wall_charger": "• Il est recommandé de brancher le lecteur à un chargeur mural pendant 30 minutes à une heure avant d'essayer de le connecter.",
  "flash_hint_install_drivers": "• Si vous utilisez Windows, assurez-vous d'avoir <a href='https://innioasis.app/guide.html'>installé les pilotes</a>.",
+ "flash_hint_windows_reboot_driver": "• Les PC Windows doivent être redémarrés après l'installation du pilote avant la première utilisation.",
  "flash_keep_data_option": "Conserver mes paramètres",
  "flash_keep_settings_option": "Conserver mes paramètres et mes médias",
  "keep_data_running_fmt": "Est-ce que {software} est déjà installé sur votre {model} ?",

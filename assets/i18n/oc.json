@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconnectatz lo cable USB e utilizatz un clip de papièr o un pin per quichar lo boton de reïnicializar, puèi ensajatz de vos connectar tornarmai.",
  "flash_hint_wall_charger": "• Es recomandat de connectar lo lector a un cargaire de paret pendent 30 minutas a una ora abans d'ensajar de se connectar.",
  "flash_hint_install_drivers": "• Se sètz sus Windows, asseguratz-vos d'aver <a href='https://innioasis.app/guide.html'>installat los pilòts</a>.",
+ "flash_hint_windows_reboot_driver": "• Los PC Windows deurián èsser reaviats après l'installacion del pilòt abans la primièra utilizacion.",
  "flash_keep_data_option": "Gardar mos paramètres",
  "flash_keep_settings_option": "Gardatz mos paramètres e mèdias",
  "keep_data_running_fmt": "{software} es ja installat sus vòstre {model} ?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Idiskonekta ang USB cable ug gamita ang paperclip o pin aron i-press ang reset button, unya sulayi pagkonektar pag-usab.",
  "flash_hint_wall_charger": "• Girekomenda nga ikonektar ang magdudula sa usa ka charger sa dingding sulod sa 30 minuto hangtod usa ka oras sa dili pa mosulay sa pagkonektar.",
  "flash_hint_install_drivers": "• Kung naa ka sa Windows, siguroha nga ikaw adunay <a href='https://innioasis.app/guide.html'>Na-install ang mga Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ang mga Windows PC kinahanglang i-restart human ma-install ang driver sa dili pa gamiton.",
  "flash_keep_data_option": "Ipadayon ang akong mga setting",
  "flash_keep_settings_option": "Ipadayon ang akong mga setting ug media",
  "keep_data_running_fmt": "Na-install na ba ang {software} sa imong {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconnette o cavo USB e deuviâ unna clip ò un pin pe appissâ o tasto de reset, dapeu provâ à connettise torna.",
  "flash_hint_wall_charger": "• Se conscidera de collegâ o lettô à un carregatô de miagia pe 30 menuti à unn'oa avanti de provâ à collegâlo.",
  "flash_hint_install_drivers": "• Se l’é in sce Windows, assicurâse d’avei installou i Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• I PC con Windows dovieivan ëse avviæ torna dòppo avei installou o driver primma da primma utilizzaçion.",
  "flash_keep_data_option": "Mantegnî e mæ impostaçioin",
  "flash_keep_settings_option": "Mantegnî e mæ impostaçioin e i mæ media .",
  "keep_data_running_fmt": "{software} o l'é za installou in sciô seu {model}?",

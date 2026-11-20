@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Tzaj ttzaqpi´na aju´ cable USB extzen tz´ajb´en jun clip te u´j moqa jun pin tun t-xi ttzyu´na aju´ botón te reset, exttzen tz´okx t-xo´na juntl majl.",
  "flash_hint_wall_charger": "• B´a´n tu´n t-xi q´et aju´ reproductor tuk´e jun cargador te t-xaq ja toj 30 minutos extzun jun or na´mxtoq t-xi q´et.",
  "flash_hint_install_drivers": "• Qa at toj Windows, b´a´n tu´n t-xi t-ximana qa at <a href='https://innioasis.app/guide.html'>Installed the Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Aye Windows PCs il ti´j tu´n t-xi tzyet juntl majl aj t-xi q´et aju´ controlador na´mxtoq t-xi tzyet tu´n tajb´en.",
  "flash_keep_data_option": "Qʼonka twitza tiʼj nximbʼetze",
  "flash_keep_settings_option": "Qʼonka twitza kyiʼj nximbʼetze ex kyiʼj nmedioye",
  "keep_data_running_fmt": "¿Ya otaq tz´ok q´o´n {software} toj t-{model}?",

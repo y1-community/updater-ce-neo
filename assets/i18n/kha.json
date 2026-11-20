@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Pynduh noh ia u USB cable bad pyndonkam da u paperclip lane u pin ban nion ia u button reset, nangta pyrshang ban pyniasoh biang.",
  "flash_hint_wall_charger": "• La ai jingmut ban pyniasoh ia u player bad ka charger ba la buh ha ka jingkhang haduh 30 minit haduh shi kynta shwa ban pyrshang ban pyniasoh.",
  "flash_hint_install_drivers": "• Lada phi don ha ka Windows, pynthikna ba phi la buh ia ki Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ia ki Windows PC dei ban sdang biang hadien ba la dep install ia u driver shwa ban pyndonkam nyngkong.",
  "flash_keep_data_option": "Pynsah ia ki jingpynbeit jong nga",
  "flash_keep_settings_option": "Ka jingpynbeit bad ki media jong nga .",
  "keep_data_running_fmt": "Hato ka {software} ka la dep buh ha ka {model} jong phi?",

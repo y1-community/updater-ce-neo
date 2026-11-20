@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Zia câble USB ni na sara kua na mbeni clip wala mbeni broche ti zia bouton ti reset ni, na pekoni tara ti kiri ti zia ni.",
  "flash_hint_wall_charger": "• A yeke nzoni ti zia lecteur ni na ndo ti mbeni chargeur ti mur teti penze-ngbonga 30 ti si na ngbonga oko kozoni si mo tara ti zia ni.",
  "flash_hint_install_drivers": "• Tongana mo yeke na Windows, sara si mo zia na yâ ti ordinateur ti mo a-Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• A lingbi a kiri a zi a-ordinateur so ayeke na Windows na peko ti so a zia pilote ni dä kozoni si a sara kua na ni.",
  "flash_keep_data_option": "Bata paramètre ti mo .",
  "flash_keep_settings_option": "Bata a-paramètre ti mo na a-média .",
  "keep_data_running_fmt": "{software} ayeke na ndo ti {model} ti mo awe?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Hakolla thapo ea USB 'me u sebelise paperclip kapa pin ho tobetsa konopo ea reset, ebe u leka ho hokela hape.",
  "flash_hint_wall_charger": "• Ho kgothaletswa ho hokela sebapali ho charger ea lebota metsotso e 30 ho isa ho hora pele o leka ho hokela.",
  "flash_hint_install_drivers": "• Haeba o sebedisa Windows, etsa bonnete ba hore <a href='https://innioasis.app/guide.html'>E kentse Bakganni</a>.",
+ "flash_hint_windows_reboot_driver": "• Li-PC tsa Windows li lokela ho qalisoa bocha ka mor'a ho kenya mokhanni pele li sebelisoa.",
  "flash_keep_data_option": "Boloka litlhophiso tsa ka",
  "flash_keep_settings_option": "Boloka li-setting tsa ka le media",
  "keep_data_running_fmt": "Na {software} e se e kentsoe ho {model} ea hau?",

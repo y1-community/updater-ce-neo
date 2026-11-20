@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Hagarika umugozi wa USB hanyuma ukoreshe paperclip cyangwa pin kugirango ukande buto yo gusubiramo, hanyuma ugerageze kongera guhuza.",
  "flash_hint_wall_charger": "• Birasabwa guhuza umukinnyi na charger yurukuta muminota 30 kugeza kumasaha mbere yo kugerageza guhuza.",
  "flash_hint_install_drivers": "• Niba uri kuri Windows, menya ko ufite <a href = 'https: //innioasis.app/guide.html'> Yashizeho Abashoferi </a>.",
+ "flash_hint_windows_reboot_driver": "• PC PC ya Windows igomba gutangira nyuma yo gushiraho shoferi mbere yo kuyikoresha bwa mbere.",
  "flash_keep_data_option": "Komeza igenamiterere ryanjye",
  "flash_keep_settings_option": "Komeza igenamiterere ryanjye nibitangazamakuru",
  "keep_data_running_fmt": "Ese {software} yamaze gushyirwaho kuri {model}?",

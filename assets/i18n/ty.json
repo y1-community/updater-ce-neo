@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Tata'i i te taura USB, a faaohipa i te hoê reni parau aore ra te hoê pine no te pato'i i te taviri faaho'i-faahou-raa, e i muri iho a tamata i te taa ê faahou.",
  "flash_hint_wall_charger": "• E mea maitai a'e ia taati i te taata hauti i ni'a i te hoê patu e 30 minuti e tae atu i te hoê hora hou a tamata ai i te taati.",
  "flash_hint_install_drivers": "• Mai te mea e, te vai ra outou i ni'a i te Windows, a haapapû e, ua faaûruhia te mau rave'a faahoro pereoo</a>.",
+ "flash_hint_windows_reboot_driver": "• E mea ti'a ia haamata faahou i te mau PC Windows i muri a'e i to'na faautaraa i te rave'a faahoro hou a faaohipa matamua ai.",
  "flash_keep_data_option": "A tape'a i ta'u mau faanahoraa",
  "flash_keep_settings_option": "A tapea i ta ' u mau faanahoraa e ta ' u mau ravea haapurororaa",
  "keep_data_running_fmt": "Ua tuu a'ena anei te {software} i ni'a i to outou {model}?",

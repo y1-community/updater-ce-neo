@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ontkoppel de USB-kabel en brûk in paperclip of pin om op de resetknop te drukken, besykje dan opnij te ferbinen.",
  "flash_hint_wall_charger": "• It is oan te rieden om de spiler te ferbinen mei in muorrelader foar 30 minuten oant in oere foardat jo besykje te ferbinen.",
  "flash_hint_install_drivers": "• As jo ​​op Windows binne, soargje derfoar dat jo <a href='https://innioasis.app/guide.html'>De stjoerprogramma's ynstallearre hawwe</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC's moatte opnij starte wurde nei it ynstallearjen fan de stjoerprogramma foar it earste gebrûk.",
  "flash_keep_data_option": "Hâld myn ynstellings",
  "flash_keep_settings_option": "Hâld myn ynstellings en media",
  "keep_data_running_fmt": "Is {software} al ynstallearre op jo {model}?",

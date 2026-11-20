@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Deskonektatu USB kablea eta erabili klipa edo pin bat berrezartzeko botoia sakatzeko, eta saiatu berriro konektatzen.",
  "flash_hint_wall_charger": "• Gomendagarria da erreproduzitzailea hormako kargagailu batera konektatzea 30 minutu edo ordubetez konektatzen saiatu baino lehen.",
  "flash_hint_install_drivers": "• Windows-en bazaude, ziurtatu <a href='https://innioasis.app/guide.html'>Gitatzaileak instalatuta dituzula</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-eko ordenagailuak kontrolatzailea instalatu ondoren berrabiarazi behar dira lehen erabili aurretik.",
  "flash_keep_data_option": "Mantendu nire ezarpenak",
  "flash_keep_settings_option": "Mantendu nire ezarpenak eta multimedia",
  "keep_data_running_fmt": "{software} instalatuta al dago dagoeneko zure {model}?",

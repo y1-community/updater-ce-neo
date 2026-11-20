@@ -7033,23 +7033,22 @@ class MainWindow(QMainWindow):
         model = self._package_model or ""
         software = self._package_name or software_word()
         rel_info = getattr(self._select_page, "current_installed_release_info", lambda: None)()
-        # Online catalogue installs only. A local file has no release tag, so
-        # it is not tracked and cannot drive an update prompt.
-        if not (rel_info and (rel_info.get("tag_name") or "").strip()):
-            return
+        tag_name = (rel_info.get("tag_name") if rel_info else "") or ""
+        if not tag_name.strip():
+            tag_name = "Unknown"
         latest_tag = ""
         if hasattr(self._select_page, "catalogue_latest_tag"):
             latest_tag = self._select_page.catalogue_latest_tag()
         device_tracking.record_device_install(
-            model=rel_info.get("model") or model,
-            software_name=rel_info.get("software_name") or software,
-            tag_name=rel_info.get("tag_name") or "",
-            release_label=rel_info.get("release_label") or "",
-            package_slug=rel_info.get("package_slug") or "",
-            published_at=rel_info.get("published_at") or "",
+            model=(rel_info.get("model") if rel_info else "") or model,
+            software_name=(rel_info.get("software_name") if rel_info else "") or software,
+            tag_name=tag_name,
+            release_label=(rel_info.get("release_label") if rel_info else "") or "",
+            package_slug=(rel_info.get("package_slug") if rel_info else "") or "",
+            published_at=(rel_info.get("published_at") if rel_info else "") or "",
             settings=self.settings,
             catalogue_latest=latest_tag,
-            hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
+            hardware_type=(rel_info.get("hardware_type") or rel_info.get("type_variant") if rel_info else "") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
             manual=False,
         )
         if hasattr(self, "_select_page") and hasattr(self._select_page, "refresh_software_list"):
@@ -8829,25 +8828,20 @@ class MainWindow(QMainWindow):
         answer is what lets the next run ask "is it still running X?" instead
         of the full menu, while a finished install is what records the build.
         """
-        from .. import install_first, keep_data
+        from .. import device_tracking, install_first, keep_data
 
         model = self._install_first_model()
         hardware = self._install_first_hardware_type()
+        software_name = ""
         if answer == install_first.ANSWER_PREREQUISITE:
-            keep_data.note_running_software(
-                model, journey.requirement.software_name, self.settings, hardware
-            )
+            software_name = journey.requirement.software_name
         elif answer == install_first.ANSWER_TARGET:
-            keep_data.note_running_software(
-                model, journey.target_name, self.settings, hardware
-            )
+            software_name = journey.target_name
         elif answer in (
             install_first.ANSWER_FIRMWARE,
             install_first.ANSWER_FAMILY,
         ) and journey.running_name:
-            keep_data.note_running_software(
-                model, journey.running_name, self.settings, hardware
-            )
+            software_name = journey.running_name
         else:
             # Another system (or "Other") is not the target and not the base,
             # so the answer is not carried forward: accepting the base would
@@ -8856,6 +8850,26 @@ class MainWindow(QMainWindow):
             # the welcome journey, and its software name is what the install
             # copy names.
             keep_data.forget_running_answer(model, self.settings, hardware)
+            return
+
+        if software_name:
+            keep_data.note_running_software(
+                model, software_name, self.settings, hardware
+            )
+            if not device_tracking.is_track_multiple_software_enabled(self.settings):
+                tracked = device_tracking.get_tracked_installs(
+                    model, hardware_type=hardware, settings=self.settings
+                )
+                if not tracked:
+                    device_tracking.record_device_install(
+                        model=model,
+                        software_name=software_name,
+                        tag_name="Unknown",
+                        release_label="",
+                        settings=self.settings,
+                        hardware_type=hardware,
+                        manual=True,
+                    )
 
     def _on_install_first_continue(self) -> None:
         """The card's Continue/tick: answer the stage that is on screen."""
@@ -9529,7 +9543,7 @@ class MainWindow(QMainWindow):
 
     def _remember_keep_data_answer(self, choice: str) -> None:
         """Store the software the user just confirmed as running, no version."""
-        from .. import keep_data
+        from .. import device_tracking, keep_data
 
         picked = str(choice or "").strip()
         name = str(getattr(self, "_keep_data_confirm_known_name", "") or "").strip()
@@ -9541,6 +9555,20 @@ class MainWindow(QMainWindow):
         model, hw = self._keep_data_tracking_context()
         try:
             keep_data.note_running_software(model, name, self.settings, hw)
+            if not device_tracking.is_track_multiple_software_enabled(self.settings):
+                tracked = device_tracking.get_tracked_installs(
+                    model, hardware_type=hw, settings=self.settings
+                )
+                if not tracked:
+                    device_tracking.record_device_install(
+                        model=model,
+                        software_name=name,
+                        tag_name="Unknown",
+                        release_label="",
+                        settings=self.settings,
+                        hardware_type=hw,
+                        manual=True,
+                    )
         except Exception:
             logger.debug("Could not record the confirmed software", exc_info=True)
 

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kabelini aýryň we täzeden düzmek düwmesine basmak üçin kagyzdan ýa-da gysgyçdan peýdalanyň, soňra täzeden birikmäge synanyşyň.",
  "flash_hint_wall_charger": "• Pleýeri birikdirmäge synanyşmazdan ozal 30 minutdan bir sagatlap diwar zarýad berijisine birikdirmek maslahat berilýär.",
  "flash_hint_install_drivers": "• Windows-da bolsaňyz, <a href = 'https: //innioasis.app/guide.html'> Sürüjileri gurduňyz </a> bar.",
+ "flash_hint_windows_reboot_driver": "• Windows kompýuterleri ilkinji gezek ulanmazdan ozal sürüjini guranyňyzdan soň täzeden başlamaly.",
  "flash_keep_data_option": "Sazlamalarymy saklaň",
  "flash_keep_settings_option": "Sazlamalarymy we mediany saklaň",
  "keep_data_running_fmt": "{software} eýýäm {model} gurnalanmy?",

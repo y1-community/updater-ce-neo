@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Haol de USB-kabel los en gebruuk un paperclip of pin um op de resetknop te drukke, en probeer vervolgens weer te verbinde.",
  "flash_hint_wall_charger": "• ‘t Weurt aongeraoje um de speuler 30 minute tot ‘n oor op ‘n wandlader te verbinde veurtot ge perbeert te verbinde.",
  "flash_hint_install_drivers": "• Es ge Windows bent, zörg d’r dan veur dat ge <a href='https://innioasis.app/guide.html'>de Drivers</a> heet geïnstalleerd.",
+ "flash_hint_windows_reboot_driver": "• Windows-PC’s motte herstart were nao ‘t installere vaan de driver veur ‘t ierste gebruuk.",
  "flash_keep_data_option": "Houd mien insjtellinge",
  "flash_keep_settings_option": "Houw mien insjtellinge en media",
  "keep_data_running_fmt": "Is {software} al geïnstalleerd op eur {model}?",

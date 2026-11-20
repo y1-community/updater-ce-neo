@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Esory ny tariby USB ary ampiasao tsorakazo na pin mba hanindry ny bokotra famerenana, dia andramo mampifandray indray.",
  "flash_hint_wall_charger": "• Aroso ny mampifandray ny mpilalao amin'ny charger rindrina mandritra ny 30 minitra ka hatramin'ny adiny iray alohan'ny hanandramana mifandray.",
  "flash_hint_install_drivers": "• Raha mampiasa Windows ianao dia ataovy izay hahazoanao <a href='https://innioasis.app/guide.html'>Nametraka ny Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Ny Windows PCs dia tokony averina averina aorian'ny fametrahana ny mpamily alohan'ny fampiasana voalohany.",
  "flash_keep_data_option": "Tazony ny fandrindrako",
  "flash_keep_settings_option": "Tazony ny fandrindrako sy ny mediako",
  "keep_data_running_fmt": "Efa napetraka ao amin'ny {model}-nao ve ny {software}?",

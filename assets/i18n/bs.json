@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Isključite USB kabl i pomoću spajalice ili igle pritisnite dugme za resetovanje, a zatim pokušajte ponovo da se povežete.",
  "flash_hint_wall_charger": "• Preporučuje se povezivanje plejera sa zidnim punjačem na 30 minuta do sat vremena pre pokušaja povezivanja.",
  "flash_hint_install_drivers": "• Ako koristite Windows, uvjerite se da ste <a href='https://innioasis.app/guide.html'>Instalirali drajvere</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows računare treba ponovo pokrenuti nakon instaliranja drajvera pre prve upotrebe.",
  "flash_keep_data_option": "Zadrži moja podešavanja",
  "flash_keep_settings_option": "Zadrži moja podešavanja i medije",
  "keep_data_running_fmt": "Da li je {software} već instaliran na vašem {model}?",

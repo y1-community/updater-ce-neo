@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB سىمىنى ئۈزۈۋېتىڭ ھەمدە قايتا بېسىش كۇنۇپكىسىنى بېسىش ئۈچۈن قەغەز ياكى پىننى ئىشلىتىڭ ، ئاندىن قايتا ئۇلاڭ.",
  "flash_hint_wall_charger": "• ئۇلىنىشنى سىناپ بېقىشتىن بۇرۇن قويغۇچنى 30 مىنۇتتىن بىر سائەتكىچە تام توك قاچىلىغۇچقا ئۇلاش تەۋسىيە قىلىنىدۇ.",
  "flash_hint_install_drivers": "• ئەگەر سىز Windows دا بولسىڭىز ، <href = 'https: //innioasis.app/guide.html'> قوزغاتقۇچنى ئورناتقانلىقىڭىزغا كاپالەتلىك قىلىڭ.",
+ "flash_hint_windows_reboot_driver": "• Windows PC نى قوزغاتقۇچنى قاچىلاپ بولغاندىن كېيىن قايتا قوزغىتىش كېرەك.",
  "flash_keep_data_option": "تەڭشەكلىرىمنى ساقلاڭ",
  "flash_keep_settings_option": "تەڭشەكلىرىمنى ۋە مېدىيانى ساقلاڭ",
  "keep_data_running_fmt": "{software} ئاللىقاچان {model} غا قاچىلانغانمۇ؟",

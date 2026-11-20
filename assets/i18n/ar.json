@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "افصل كابل USB واستخدم مشبك ورق أو دبوسًا للضغط على زر إعادة الضبط، ثم حاول الاتصال مرة أخرى.",
  "flash_hint_wall_charger": "• يوصى بتوصيل المشغل بشاحن الحائط لمدة 30 دقيقة إلى ساعة قبل محاولة التوصيل.",
  "flash_hint_install_drivers": "• إذا كنت تستخدم نظام التشغيل Windows، فتأكد من <a href='https://innioasis.app/guide.html'>تثبيت برامج التشغيل</a>.",
+ "flash_hint_windows_reboot_driver": "• يجب إعادة تشغيل أجهزة الكمبيوتر التي تعمل بنظام Windows بعد تثبيت برنامج التشغيل قبل الاستخدام لأول مرة.",
  "flash_keep_data_option": "احتفظ بإعداداتي",
  "flash_keep_settings_option": "احتفظ بالإعدادات والوسائط الخاصة بي",
  "keep_data_running_fmt": "هل {software} مثبت بالفعل على {model} الخاص بك؟",

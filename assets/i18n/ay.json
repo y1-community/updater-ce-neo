@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Cable USB ukxa apsuñawa ukatxa mä clipap jan ukaxa pin ukampiwa botón de reset ukxa ch’iqt’añama, ukatxa mayampi conectar yant’añamawa.",
  "flash_hint_wall_charger": "• Ukaxa aski wakisiwa anataña mä cargador de pared ukaru 30 minutos ukharu mä horaru janïra conectar yant’kasa.",
  "flash_hint_install_drivers": "• Windows ukanxa, <a href='https://innioasis.app/guide.html'>Conductores</a> ukan utt’ayata.",
+ "flash_hint_windows_reboot_driver": "• Windows PC ukaxa mayampi qalltañawa conductor uñstayaña tukuyatatxa janïra nayrïri apnaqañkama.",
  "flash_keep_data_option": "Nayan configuración ukanakax utjañapawa",
  "flash_keep_settings_option": "Nayan configuración ukat medios de comunicación ukanakax utjañapawa",
  "keep_data_running_fmt": "¿{software} ukax {model} ukanx utjiti?",

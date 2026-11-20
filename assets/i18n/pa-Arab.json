@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "یو ایس بی کیبل نوں منقطع کرو تے ری سیٹ بٹن دباون لئی پیپر کلپ یا پن دا استعمال کرو، فیر دوبارہ جڑن دی کوشش کرو۔",
  "flash_hint_wall_charger": "• جوڑن دی کوشش کرن توں پہلے پلیئر نو 30 منٹ توں اک گھنٹے تک وال چارجر نال جوڑن دی سفارش کیتی جاندی اے۔",
  "flash_hint_install_drivers": "• جے تسی ونڈوز تے او، تے یقینی بناؤ کہ تہاڈے کول <a href='https://innioasis.app/guide.html'>ڈرائیورز انسٹال ہن۔",
+ "flash_hint_windows_reboot_driver": "• پہلی وار ورتن توں پہلاں ڈرائیور انسٹال کرن دے بعد ونڈوز پی سی نو دوبارہ شروع کیتا جانا چاہیدا اے۔",
  "flash_keep_data_option": "میری ترتیبات رکھو",
  "flash_keep_settings_option": "میری سیٹنگ تے میڈیا رکھو",
  "keep_data_running_fmt": "کی تہاڈے {model} تے {software} پہلے ای انسٹال اے؟",

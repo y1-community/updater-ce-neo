@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ikkaten ti USB cable ken agusar iti paperclip wenno pin tapno i-press ti reset button, sa padasen manen ti agkonekta.",
  "flash_hint_wall_charger": "• Mairekomendar nga ikonekta ti player iti wall charger iti 30 a minuto agingga iti maysa nga oras sakbay a padasen ti agkonekta.",
  "flash_hint_install_drivers": "• No addaka iti Windows, siguraduem nga addaanka iti <a href='https://innioasis.app/guide.html'>Nai-install dagiti Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Rumbeng a mairugi manen dagiti Windows PC kalpasan ti panangi-install iti driver sakbay nga umuna nga usaren.",
  "flash_keep_data_option": "Idulinmo dagiti setting-ko",
  "flash_keep_settings_option": "Idulinmo dagiti setting ken media-ko",
  "keep_data_running_fmt": "Nai-install kadi ti {software} iti {model}-yo?",

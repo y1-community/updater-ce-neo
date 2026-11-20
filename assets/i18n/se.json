@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Váldde eret USB-johtolaga ja geavat báberčuohppama dahje čuoggá deaddit nuppástuhttinčuoggá, ja de geahččal fas čatnat.",
  "flash_hint_wall_charger": "• Ávžžuhit čatnat čuojaheaddji seinniid láddejeaddjii 30 minuhta gitta diimmu ovdal go geahččalat čatnat.",
  "flash_hint_install_drivers": "• Jus leat Windowsas, de fertet sihkkarastit ahte leat installeren stivrejeaddjiid</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-PC:at galget álggahuvvot ođđasit maŋŋel go leat installeren stivrejeaddji ovdal vuosttaš geavaheami.",
  "flash_keep_data_option": "Doala mu njuolggadusaid",
  "flash_keep_settings_option": "Doala mu njuolggadusaid ja mediaid",
  "keep_data_running_fmt": "Lea go {software} juo installerejuvvon du {model}:ii?",

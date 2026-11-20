@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dusa tambo ye USB woshandisa paperclip kana pini kuti udzvanye bhatani rekugadzirisa, wozoedza kubatanidzazve.",
  "flash_hint_wall_charger": "• Zvinokurukurwa kuti ubatanidze mutambi kune charger yemadziro kwemaminitsi makumi matatu kusvika paawa usati waedza kubatanidza.",
  "flash_hint_install_drivers": "• Kana uri paWindows, ita kuti uve nechokwadi chekuti wakaisa Vatyairi</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs dzinofanira kutangazve mushure mokuisa mutyairi asati atanga kushandiswa.",
  "flash_keep_data_option": "Chengetedza zvirongwa zvangu .",
  "flash_keep_settings_option": "Chengetedza marongero angu uye vezvenhau .",
  "keep_data_running_fmt": "{software} yakatoiswa pa {model} yako ere?",

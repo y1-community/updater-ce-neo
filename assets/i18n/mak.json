@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Pa'le'baki kabel USB siagang pakei penjepit kertas iareka pin untu' anseroi tombol reset, nampa cobai a'sambung pole.",
  "flash_hint_wall_charger": "• Ni sarankangi untu ansikkoki pemain mange ri charger tembo 30 menit sanggenna si jammu riolo ancobai ansikkoki.",
  "flash_hint_install_drivers": "• Punna rie'ko ri windows, pastikangi angkanaya <a href='https://innioasis.app/guide.html'>nupasangi Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC parallui ni mulai poleang punna lebaki ni install driver riolo ri tenanapa nipake.",
  "flash_keep_data_option": "Jagai pangatorangku",
  "flash_keep_settings_option": "Jagai pangaturanna siagang mediaku",
  "keep_data_running_fmt": "Maka {software} lebaki nipasang ri {model}nu?",

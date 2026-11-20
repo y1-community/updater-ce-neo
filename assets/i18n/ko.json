@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB 케이블을 분리하고 클립이나 핀을 사용하여 재설정 버튼을 누른 후 다시 연결해 보세요.",
  "flash_hint_wall_charger": "• 연결을 시도하기 전에 플레이어를 벽면 충전기에 30분~1시간 동안 연결하는 것이 좋습니다.",
  "flash_hint_install_drivers": "• Windows를 사용하는 경우 <a href='https://innioasis.app/guide.html'>드라이버를 설치</a>했는지 확인하세요.",
+ "flash_hint_windows_reboot_driver": "• Windows PC를 처음 사용하기 전에 드라이버를 설치한 후 다시 시작해야 합니다.",
  "flash_keep_data_option": "내 설정 유지",
  "flash_keep_settings_option": "내 설정 및 미디어 유지",
  "keep_data_running_fmt": "{software}이(가) {model}에 이미 설치되어 있습니까?",

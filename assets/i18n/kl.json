@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB-kabeli ikkukkit aammalu pappiaqqamik pin-illuunniit atorlugu reset-knappi toqqarlugu, taava attaveqaqqinnissaq misilikkit.",
  "flash_hint_wall_charger": "• Innersuussisoqarpoq, atortoq 30 minutsit tikillugit nalunaaquttap akunnerata ataatsip ingerlanerani væg-imik lade-mut attaveqartinneqartassasoq, attaveqarnissaq misilinnginnerani.",
  "flash_hint_install_drivers": "• Windows-imiikkuit qulakkeerlugu <a href='Driver-it</a>-it installereqarsimasut.",
+ "flash_hint_windows_reboot_driver": "• Windows PC-t siullerpaamik atorneqarnissaat sioqqullugu driver-imik ikkussisoqareerpat aallarteqqinneqartassapput.",
  "flash_keep_data_option": "Inniminniinerit pigiinnaruk",
  "flash_keep_settings_option": "Inniminniinerit aamma mediat pigiinnarlugit",
  "keep_data_running_fmt": "{software} {model}-mi inissinneqareerpa?",

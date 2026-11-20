@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Sokkit kaɓirgal USB ngal, kuutoro-ɗaa jokkorgal walla pin ngam toɓɓude butoŋ reset, caggal ɗuum ƴeew jokkondirde kadi.",
  "flash_hint_wall_charger": "• Ina moƴƴi jokkondirde e joloowo oo e chargeur wall fotde hojomaaji 30 haa waktu gooto hade mum etaade jokkondirde.",
  "flash_hint_install_drivers": "• So aɗa woni e Windows, ƴeewto so aɗa jogii <a href='https://innioasis.app/guide.html'>Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• PC-ji Windows ina poti fuɗɗoraade caggal nde njooɗii e diisnondirteeɗo oo hade mum huutoreede.",
  "flash_keep_data_option": "Mbaɗtu dottaaɗe am",
  "flash_keep_settings_option": "Accu dottaaɗe am e media am",
  "keep_data_running_fmt": "Mbele {software} ina joɗɗinaa e {model} maa?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Nqamula ikhebula le-USB futhi usebenzise i-paperclip noma iphinikhodi ukuze ucindezele inkinobho yokusetha kabusha, bese uzama ukuxhuma futhi.",
  "flash_hint_wall_charger": "• Kutuswa ukuxhuma isidlali kushaja yasodongeni imizuzu engama-30 kuya ehoreni ngaphambi kokuzama ukuxhuma.",
  "flash_hint_install_drivers": "• Uma uku-Windows, qiniseka ukuthi <a href='https://innioasis.app/guide.html'>Ufake Abashayeli</a>.",
+ "flash_hint_windows_reboot_driver": "• Ama-Windows PC kufanele aqalwe kabusha ngemva kokufaka umshayeli ngaphambi kokusetshenziswa kokuqala.",
  "flash_keep_data_option": "Gcina izilungiselelo zami",
  "flash_keep_settings_option": "Gcina izilungiselelo zami nemidiya",
  "keep_data_running_fmt": "Ingabe i-{software} isivele ifakiwe ku-{model} yakho?",

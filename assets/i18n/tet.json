@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Hasai kabel USB no uza klip ka pin hodi hanehan butaun reset, hafoin koko atu liga fali.",
  "flash_hint_wall_charger": "• Rekomenda atu liga jogador ba karregador parede nian durante minutu 30 to'o oras ida molok koko atu liga.",
  "flash_hint_install_drivers": "• Se ita-boot uza Windows, asegura katak ita-boot iha <a href='https://innioasis.app/guide.html'>Instala ona Driver sira</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC sira tenke hahú fali hafoin instala driver molok uza ba dala uluk.",
  "flash_keep_data_option": "Mantein ha'u nia konfigurasaun sira",
  "flash_keep_settings_option": "Mantein ha'u nia konfigurasaun sira no media",
  "keep_data_running_fmt": "{software} instala ona iha ita-boot nia {model}?",

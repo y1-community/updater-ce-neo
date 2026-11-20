@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Malkonektu la USB-kablon kaj uzu paperklipon aŭ pinglon por premi la restarigi butonon, tiam provu konekti denove.",
  "flash_hint_wall_charger": "• Oni rekomendas konekti la ludanton al murŝargilo dum 30 minutoj ĝis unu horo antaŭ ol provi konekti.",
  "flash_hint_install_drivers": "• Se vi estas en Vindozo, certigu, ke vi <a href='https://innioasis.app/guide.html'>Instalis la Ŝoforojn</a>.",
+ "flash_hint_windows_reboot_driver": "• Vindozaj komputiloj devus esti rekomencitaj post instalo de la pelilo antaŭ la unua uzo.",
  "flash_keep_data_option": "Konservu miajn agordojn",
  "flash_keep_settings_option": "Konservu miajn agordojn kaj amaskomunikilaron",
  "keep_data_running_fmt": "Ĉu {software} jam estas instalita sur via {model}?",

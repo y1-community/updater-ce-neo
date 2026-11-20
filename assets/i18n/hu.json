@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Húzza ki az USB-kábelt, és egy gemkapoccsal vagy tűvel nyomja meg a reset gombot, majd próbálja meg újra csatlakozni.",
  "flash_hint_wall_charger": "• Javasoljuk, hogy a lejátszót 30 perctől egy óráig csatlakoztassa a fali töltőhöz, mielőtt megpróbálná csatlakoztatni.",
  "flash_hint_install_drivers": "• Ha Windows rendszert használ, győződjön meg arról, hogy <a href='https://innioasis.app/guide.html'>telepítette az illesztőprogramokat</a>.",
+ "flash_hint_windows_reboot_driver": "• A Windows PC-ket az illesztőprogram telepítése után, az első használat előtt újra kell indítani.",
  "flash_keep_data_option": "Tartsa meg a beállításaimat",
  "flash_keep_settings_option": "Tartsa meg a beállításaimat és a médiát",
  "keep_data_running_fmt": "A {software} már telepítve van az {model}-re?",

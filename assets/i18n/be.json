@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Адключыце USB-кабель і з дапамогай сашчэпкі або шпількі націсніце кнопку скіду, затым паспрабуйце падключыцца яшчэ раз.",
  "flash_hint_wall_charger": "• Рэкамендуецца падключыць плэер да насценнай зараднай прылады на працягу ад 30 хвілін да гадзіны перад спробай падлучэння.",
  "flash_hint_install_drivers": "• Калі вы карыстаецеся Windows, пераканайцеся, што вы <a href='https://innioasis.app/guide.html'>усталявалі драйверы</a>.",
+ "flash_hint_windows_reboot_driver": "• Перад першым выкарыстаннем пасля ўстаноўкі драйвера трэба перазагрузіць ПК з Windows.",
  "flash_keep_data_option": "Захаваць мае налады",
  "flash_keep_settings_option": "Захаваць мае налады і носьбіты",
  "keep_data_running_fmt": "{software} ужо ўсталяваны на вашым {model}?",

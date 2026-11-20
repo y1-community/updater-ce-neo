@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Katim USB kebol na yusim wanpela 'peperclip' o 'pin' long presim 'reset' baten, na bihain traim long konektim gen.",
  "flash_hint_wall_charger": "• Em i gutpela long konektim pilaia long wanpela 'wall charger' inap 30 minit i go inap wanpela aua pastaim long yu traim long konektim.",
  "flash_hint_install_drivers": "• Sapos yu yusim Windows, yu mas putim <a href='https://innioasis.app/guide.html'>ol draiva</a>.",
+ "flash_hint_windows_reboot_driver": "• Ol Windows PC i mas stat gen bihain long yu putim draiva pastaim long yu yusim namba wan taim.",
  "flash_keep_data_option": "Holim ol seting bilong mi",
  "flash_keep_settings_option": "Holim ol seting na midia bilong mi",
  "keep_data_running_fmt": "{software} i stap pinis long {model} bilong yu?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB кабелийг салгаад цаасны хавчаар эсвэл зүү ашиглан дахин тохируулах товчийг дараад дахин холбож үзнэ үү.",
  "flash_hint_wall_charger": "• Холбохоос өмнө тоглуулагчийг ханын цэнэглэгчтэй 30 минутаас нэг цагийн турш холбохыг зөвлөж байна.",
  "flash_hint_install_drivers": "• Хэрэв та Windows дээр байгаа бол <a href='https://innioasis.app/guide.html'>Драйверуудыг суулгасан</a> эсэхээ шалгаарай.",
+ "flash_hint_windows_reboot_driver": "• Windows үйлдлийн системтэй компьютеруудыг анх ашиглахын өмнө драйверийг суулгасны дараа дахин асаах хэрэгтэй.",
  "flash_keep_data_option": "Миний тохиргоог хадгал",
  "flash_keep_settings_option": "Миний тохиргоо болон медиаг хадгал",
  "keep_data_running_fmt": "Таны {model} дээр {software} суулгасан уу?",

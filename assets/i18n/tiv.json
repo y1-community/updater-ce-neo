@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dugh ikyagh ki USB la kera, nahan er tom a paperclip shin pin u kighir ikyagh ki reset la, maa hide nôngo u eren tom a mi.",
  "flash_hint_wall_charger": "• I kaa ér u cir kwagh u kuhwan ityogholough la sha kwagh u i yer ér wall charger la miniti 30 zan zan ihwa i môm cii ve u mase nôngon wer u cir ye.",
  "flash_hint_install_drivers": "• Aluer u ngu sha Windows yô, nenge wer u wa akaa a eren tom a mi la ker.",
+ "flash_hint_windows_reboot_driver": "• Doo u a hide a hii PC mba ve lu a Windows la cii ve a hii u eren tom a mi ye.",
  "flash_keep_data_option": "Kura akaa a m ver la .",
  "flash_keep_settings_option": "Ka m ver akaa a m ver la man akaa a m eren la .",
  "keep_data_running_fmt": "{software} ngu a vande lun sha {model} wou kpa?",

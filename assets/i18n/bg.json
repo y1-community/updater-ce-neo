@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Изключете USB кабела и използвайте кламер или карфица, за да натиснете бутона за нулиране, след което опитайте да свържете отново.",
  "flash_hint_wall_charger": "• Препоръчително е да свържете плейъра към зарядно за стена за 30 минути до един час, преди да опитате да се свържете.",
  "flash_hint_install_drivers": "• Ако използвате Windows, уверете се, че сте <a href='https://innioasis.app/guide.html'>инсталирали драйверите</a>.",
+ "flash_hint_windows_reboot_driver": "• Компютрите с Windows трябва да се рестартират след инсталиране на драйвера преди първа употреба.",
  "flash_keep_data_option": "Запази настройките ми",
  "flash_keep_settings_option": "Запази моите настройки и медии",
  "keep_data_running_fmt": "{software} вече инсталиран ли е на вашия {model}?",

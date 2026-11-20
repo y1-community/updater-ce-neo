@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Disconnect tus USB cable thiab siv ib daim ntawv clip los yog tus pin los nias lub pob pib dua, ces sim txuas dua.",
  "flash_hint_wall_charger": "• Nws raug pom zoo kom txuas tus neeg uas ua ntawv mus rau phab ntsa charger rau 30 feeb mus rau ib teev ua ntej sim txuas.",
  "flash_hint_install_drivers": "• Yog tias koj nyob rau Windows, xyuas kom meej tias koj muaj <a href='https://innioasis.app/guide.html'>Nruab Cov Tsav Tsheb</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs yuav tsum rov pib dua tom qab txhim kho tus tsav tsheb ua ntej siv.",
  "flash_keep_data_option": "Khaws kuv qhov chaw",
  "flash_keep_settings_option": "Khaws kuv qhov chaw thiab xov xwm",
  "keep_data_running_fmt": "Puas yog {software} twb tau nruab rau ntawm koj lub {model}?",

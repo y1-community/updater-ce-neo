@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "I-disconnect ang USB cable kag gamita ang paperclip ukon pin sa pagpindot sang reset button, dayon tinguhai nga magkonektar liwat.",
  "flash_hint_wall_charger": "• Ginarekomendar nga ikonekta ang player sa wall charger sa sulod sang 30 minutos tubtob isa ka oras antes tinguhaan nga ikonekta.",
  "flash_hint_install_drivers": "• Kon yara ka sa Windows, siguraduhon nga na-install mo ang mga Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ang mga Windows PC dapat i-restart pagkatapos ma-install ang driver antes una nga gamiton.",
  "flash_keep_data_option": "Hupti ang akon mga setting",
  "flash_keep_settings_option": "Hupti ang akon mga setting kag media",
  "keep_data_running_fmt": "Na-install na bala ang {software} sa imo {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ssexsi aẓeḍḍa USB u sseqdec aẓeḍḍa n lkaɣeḍ neɣ aẓeḍḍa n lpin akken ad tḍeggreḍ aqerruy n uɛiwed, syen ɛreḍ ad t-teqqneḍ tikkelt nniḍen.",
  "flash_hint_wall_charger": "• Yettwaɛreḍ ad t-id-teqqneḍ s tmeẓdit n lḥiḍ 30 n tedqiqin arma d yiwet n tsaɛet uqbel ad tɛerḍeḍ ad t-teqqneḍ.",
  "flash_hint_install_drivers": "• Ma yella telliḍ deg Windows, ḍemneḍ belli tesɛiḍ <a href='https://innioasis.app/guide.html'>Tesbeddeḍ Imesnallunen</a>.",
+ "flash_hint_windows_reboot_driver": "• Ilaq ad ttwaɛerḍen PC n Windows deffir ma tesbeddeḍ aselkim uqbel aseqdec amezwaru.",
  "flash_keep_data_option": "Ḥrez isefka-inu",
  "flash_keep_settings_option": "Ḥrez islugnan-iw d ttawilat-iw",
  "keep_data_running_fmt": "Is {software} yettwasbedd yakan deg {model}-ik?",

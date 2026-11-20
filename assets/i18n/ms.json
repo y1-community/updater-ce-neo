@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Putuskan sambungan kabel USB dan gunakan klip kertas atau pin untuk menekan butang set semula, kemudian cuba sambungkan semula.",
  "flash_hint_wall_charger": "• Adalah disyorkan untuk menyambungkan pemain ke pengecas dinding selama 30 minit hingga satu jam sebelum cuba menyambung.",
  "flash_hint_install_drivers": "• Jika anda menggunakan Windows, pastikan anda telah <a href='https://innioasis.app/guide.html'>Memasang Pemacu</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows hendaklah dimulakan semula selepas memasang pemacu sebelum penggunaan pertama.",
  "flash_keep_data_option": "Simpan tetapan saya",
  "flash_keep_settings_option": "Simpan tetapan dan media saya",
  "keep_data_running_fmt": "Adakah {software} sudah dipasang pada {model} anda?",

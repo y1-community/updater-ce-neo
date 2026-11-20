@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Putuskon ma kabel USB ai anjaha pakei ma penjepit kertas atap pin laho manekan tombol reset, dob ai coba ma use sambungkon.",
  "flash_hint_wall_charger": "• Isaranhon do ase isambungkon pemain ai hubani pengisi daya dinding sadokah 30 menit ronsi sajom paima iusahahon isambungkon.",
  "flash_hint_install_drivers": "• Anggo nassiam mamakei Windows, pastihon ma domma ipasang nassiam Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows maningon i-restart dobkonsi ipasang driver paima parlobei sahali ipakei.",
  "flash_keep_data_option": "Simpan ma pangaturanku",
  "flash_keep_settings_option": "Simpan ma pengaturan pakon mediahu",
  "keep_data_running_fmt": "Ai domma ipasang {software} bani {model} nassiam?",

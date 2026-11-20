@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ka saar fiilada USB-ga oo isticmaal warqad-clip ama biin si aad u riixdo badhanka dib-u-dejinta, ka dib isku day mar kale inaad isku xidho.",
  "flash_hint_wall_charger": "• Waxaa lagu talinayaa in lagu xidho cayaaryahanka daariyaha gidaarka 30 daqiiqo ilaa saacad ka hor inta aadan isku dayin in aad isku xirto.",
  "flash_hint_install_drivers": "• Haddii aad ku jirto Windows, hubi inaad haysatid <a href='https://innioasis.app/guide.html'>Dareewallada ku rakibay</a>.",
+ "flash_hint_windows_reboot_driver": "PC-yada Windows waa in dib loo bilaabo ka dib marka la rakibo darawalka kahor isticmaalka ugu horreeya.",
  "flash_keep_data_option": "Xafid dejintayda",
  "flash_keep_settings_option": "Ilaali goobahayga iyo warbaahinta",
  "keep_data_running_fmt": "{software} horay ma loogu rakibay {model}kaaga?",

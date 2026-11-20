@@ -639,11 +639,8 @@ class SettingsPage(QWidget):
         self._add_device_panel = self._build_add_device_panel()
         self._add_device_panel.setVisible(False)
         rem_layout.addWidget(self._add_device_panel)
-        # One-time Windows step before the form: the MediaTek drivers and the
-        # restart they need. Shown in place of the form until confirmed.
         self._drivers_gate = self._build_drivers_gate()
         self._drivers_gate.setVisible(False)
-        rem_layout.addWidget(self._drivers_gate)
 
         # The journey's own row: Done once a player is logged, and one more
         # round. The way out is the quiet word beside Save in the form above.
@@ -1960,23 +1957,6 @@ class SettingsPage(QWidget):
             else:
                 form.addWidget(label)
             form.addWidget(combo)
-            if combo is self._add_device_type:
-                # A line of plain words under the selector, not only the
-                # button beside its label: the question is what a first-time
-                # owner is missing, so it reads before the answer is chosen.
-                # Hovering or clicking it opens the same explanation as (i).
-                link = QLabel(self._type_hint_link_html())
-                link.setTextFormat(Qt.TextFormat.RichText)
-                link.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
-                link.setCursor(Qt.PointingHandCursor)
-                link.setToolTip(device_type_help_tip())
-                link.linkActivated.connect(
-                    lambda _href="": self._show_add_device_type_tip()
-                )
-                link.setProperty("cssClass", "dimmed")
-                link.setVisible(False)
-                self._add_device_type_hint_link = link
-                form.addWidget(link)
 
         # The version is printed by the player itself, which is the one thing
         # someone recording a stock device cannot guess.
@@ -2030,19 +2010,8 @@ class SettingsPage(QWidget):
     DRIVERS_CONFIRMED_KEY = "windows_drivers_confirmed"
 
     def _drivers_gate_needed(self) -> bool:
-        """True on x86 Windows until the driver install and restart is confirmed.
-
-        ARM64 Windows has no MediaTek USB driver to install (MTKClient is the
-        engine there), so the ask does not apply. Once confirmed, the card goes
-        straight to the form on every later visit.
-        """
-        if not paths.IS_WINDOWS:
-            return False
-        if windows_only_method() == METHOD_MTK:
-            return False
-        return not QSettings("innioasis", "updater").value(
-            self.DRIVERS_CONFIRMED_KEY, False, type=bool
-        )
+        """The driver gate is not shown on the Add your players card."""
+        return False
 
     def _build_drivers_gate(self) -> QWidget:
         """The one-time Windows question asked before player details."""
@@ -2183,10 +2152,6 @@ class SettingsPage(QWidget):
         self._add_device_type.setVisible(has_types)
         if hasattr(self, "_add_device_type_label"):
             self._add_device_type_label.setVisible(has_types)
-        if hasattr(self, "_add_device_type_hint_link"):
-            self._add_device_type_hint_link.setText(
-                self._type_hint_link_html(model)
-            )
         # Whether Type is asked depends on the Software chosen below, so the
         # row is synced once the Software list has been refilled.
         self._add_device_software.blockSignals(True)
@@ -2236,8 +2201,6 @@ class SettingsPage(QWidget):
         if row is not None:
             row.setVisible(show)
         self._add_device_type.setVisible(show)
-        if hasattr(self, "_add_device_type_hint_link"):
-            self._add_device_type_hint_link.setVisible(show)
         # The row appears and disappears with the software chosen, which changes
         # how tall the form is: the window measures it again rather than
         # leaving the next row just below the edge.
@@ -3391,9 +3354,6 @@ class SettingsPage(QWidget):
                 tr("settings_add_device_type_hint_btn")
             )
             self._add_device_type_hint_btn.setToolTip(device_type_help_tip())
-            if hasattr(self, "_add_device_type_hint_link"):
-                self._add_device_type_hint_link.setText(self._type_hint_link_html())
-                self._add_device_type_hint_link.setToolTip(device_type_help_tip())
         if hasattr(self, "_drivers_gate_get"):
             self._drivers_gate_title.setText(tr("settings_drivers_gate_title"))
             self._drivers_gate_body.setText(tr("settings_drivers_gate_body"))

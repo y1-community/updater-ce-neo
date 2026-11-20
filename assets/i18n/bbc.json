@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Putus ma kabel USB jala pangke ma penjepit kertas manang pin laho maneken tombol reset, dung i coba ma muse sambung.",
  "flash_hint_wall_charger": "• Disaranhon do asa dihubungkon pemain i tu pengisi daya dinding saleleng 30 menit sahat tu sajom andorang so dicoba dihubungkon.",
  "flash_hint_install_drivers": "• Molo mamangke Windows, pastihon ma nunga dipasang hamu angka Driver</a> i.",
+ "flash_hint_windows_reboot_driver": "• PC Windows ingkon dimulai do muse dung dipasang supir andorang so parjolo dipangke.",
  "flash_keep_data_option": "Jaga ma pengaturanku .",
  "flash_keep_settings_option": "Jaga ma pengaturan dohot media .",
  "keep_data_running_fmt": "Nunga dipasang {software} di {model} muna?",

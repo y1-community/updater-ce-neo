@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kōjepel USB cable eo im kōjerbal juon paperclip ak pin ñan jibwe reset button eo, innem kajeoñ in bar kōjepel.",
  "flash_hint_wall_charger": "• Ej juon menin aikuj bwe kwon kobaik player eo ñan juon charger ilo wall eo iumin 30 minute ñan juon awa mokta jen am kajeoñ in connect.",
  "flash_hint_install_drivers": "• Elañe kwoj bed ilo Windows, lale bwe emoj am <a href='https://innioasis.app/guide.html'>Install Driver ko</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC ko rej aikuj in bar jinoe elikin aer install driver eo mokta jen air kajerbali.",
  "flash_keep_data_option": "Kōjparok aō kōmmane",
  "flash_keep_settings_option": "Kōjparok setting ko aō im media ko",
  "keep_data_running_fmt": "Emoj ke an {software} bed ilo {model} eo am?",

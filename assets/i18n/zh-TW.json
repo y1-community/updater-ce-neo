@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "斷開 USB 連接線並使用迴紋針或大頭針按下重設按鈕，然後再次嘗試連接。",
  "flash_hint_wall_charger": "• 建議在嘗試連接之前將播放器連接到壁式充電器 30 分鐘到一個小時。",
  "flash_hint_install_drivers": "• 如果您使用的是Windows，請確保您已<a href='https://innioasis.app/guide.html'>安裝驅動程式</a>。",
+ "flash_hint_windows_reboot_driver": "• Windows PC 在首次使用前應在安裝驅動程式後重新啟動。",
  "flash_keep_data_option": "保留我的設置",
  "flash_keep_settings_option": "保留我的設定和媒體",
  "keep_data_running_fmt": "您的{model}上是否已安裝{software}？",

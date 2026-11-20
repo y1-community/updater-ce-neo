@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cable hpe gang je kau nna, paperclip (sh) pin lang nna reset button hpe dip dat jang, bai matut na matu shakut yu u.",
  "flash_hint_wall_charger": "• Player hpe wall charger hte minit 30 kaw nna hkying hkum mi daram matut nna matut na matu shakut na matu hpaji jaw da ai.",
  "flash_hint_install_drivers": "• Windows lang ai rai yang, Driver</a> ni hpe Install galaw da sai hpe sadi u.",
+ "flash_hint_windows_reboot_driver": "• Windows PC ni hpe shawng lang na matu driver hpe install galaw ngut ai hpang bai hpaw ra ai.",
  "flash_keep_data_option": "Ngai a setting ni hpe tawn da u",
  "flash_keep_settings_option": "Ngai a setting hte media hpe tawn da u",
  "keep_data_running_fmt": "Na a {model} kaw {software} hpe bang da sai kun?",

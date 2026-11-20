@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ilako me ing USB cable at gamitan me ing paperclip o pin para pindutan me ing reset button, kaybat subukan meng ikonekta pasibayu.",
  "flash_hint_wall_charger": "• Mas masanting ing ikonekta me ing player keng wall charger kilub ning 30 minutu anggang metung oras bayu me subukan ikonekta.",
  "flash_hint_install_drivers": "• nung atyu ka keng windows, siguraduan mung atin kang <a href='https://innioasis.app/guide.html'>maka-install kareng Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Deng Windows PC dapat lang i-restart kaybat dang i-install ing driver bayu la gamitan.",
  "flash_keep_data_option": "Panatilihan mu ing settings ku",
  "flash_keep_settings_option": "Ingatan mu la reng settings ampo media ku",
  "keep_data_running_fmt": "Maka-install ne ba ing {software} keng {model} mu?",

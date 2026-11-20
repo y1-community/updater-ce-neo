@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Wo xa USB kable ba a nun wo xa paper clip yusi xa na mu pin wo xa reset butOn din, na xanbi wo man xa gbilen a ra.",
  "flash_hint_wall_charger": "• A lan ma wo xa player sa chargeur ma naxan na banxi fari miniti tongo saxan han waxati keren beenun wo xa a sa.",
  "flash_hint_install_drivers": "• Xa wo na windows ma, wo xa a kolon wo bara <a href='https://innioasis.app/guide.html'>Drivers</a> dOxO.",
+ "flash_hint_windows_reboot_driver": "• Windows PC lan ma a xa gbilen a fOlOde a to gbata a xa driver sa xanbi a singe ra.",
  "flash_keep_data_option": "N ma paramEtrE ragata",
  "flash_keep_settings_option": "N ma paramEtre nun n ma media ragata",
  "keep_data_running_fmt": "{software} bara sa wo xa {model} ma?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dekonekte kab USB a epi sèvi ak yon clip oswa yon broch pou peze bouton reset la, epi eseye konekte ankò.",
  "flash_hint_wall_charger": "• Li rekòmande pou konekte jwè a nan yon plato miray pou 30 minit a inèdtan anvan ou eseye konekte.",
  "flash_hint_install_drivers": "• Si w sou Windows, asire w ou gen <a href='https://innioasis.app/guide.html'>Enstale Chofè yo</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC yo ta dwe rekòmanse apre enstale chofè a anvan premye itilize.",
  "flash_keep_data_option": "Kenbe paramèt mwen yo",
  "flash_keep_settings_option": "Kenbe paramèt mwen yo ak medya yo",
  "keep_data_running_fmt": "Èske {software} deja enstale sou {model} ou a?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Odpojte kabel USB a pomocí kancelářské sponky nebo špendlíku stiskněte tlačítko reset a zkuste se připojit znovu.",
  "flash_hint_wall_charger": "• Před pokusem o připojení se doporučuje připojit přehrávač k nástěnné nabíječce na 30 minut až hodinu.",
  "flash_hint_install_drivers": "• Pokud používáte Windows, ujistěte se, že máte <a href='https://innioasis.app/guide.html'>nainstalované ovladače</a>.",
+ "flash_hint_windows_reboot_driver": "• Počítače se systémem Windows by měly být po instalaci ovladače před prvním použitím restartovány.",
  "flash_keep_data_option": "Ponechat moje nastavení",
  "flash_keep_settings_option": "Ponechat moje nastavení a média",
  "keep_data_running_fmt": "Je již na vašem {model} nainstalováno {software}?",

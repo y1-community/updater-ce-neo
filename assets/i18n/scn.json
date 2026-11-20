@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Scunnèttiri lu cavu USB e usari na clip o nu pin pi primari lu tastu di riinizziu, poi pruvari a cunnèttiri n'autra vota.",
  "flash_hint_wall_charger": "• Si cunsiglia di cunnèttiri lu letturi a nu caricaturi a muru pi 30 minuti a n'ura prima di pruvari a cunnèttiri.",
  "flash_hint_install_drivers": "• Si stai supra Windows, assicùrati di aviri stallatu li Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Li PC Windows s'avìssiru a riavviari doppu l'istallazzioni dû driver prima dû primu usu.",
  "flash_keep_data_option": "Manteni li me paràmitri",
  "flash_keep_settings_option": "Manteni li me paràmitri e li me media",
  "keep_data_running_fmt": "{software} è già stallatu nnô vostru {model}?",

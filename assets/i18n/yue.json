@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "斷開 USB 連接線，然後用回形針或者插針撳重設掣，然後再試一次連接。",
  "flash_hint_wall_charger": "• 建議喺嘗試連接之前，將播放器連接到牆上充電器30分鐘至一個鐘。",
  "flash_hint_install_drivers": "• 如果你用緊 Windows ，確保你已經安裝咗驅動程式。",
+ "flash_hint_windows_reboot_driver": "• Windows 電腦喺首次使用之前，應該喺安裝驅動程式之後重新啟動。",
  "flash_keep_data_option": "保留我嘅設定",
  "flash_keep_settings_option": "保留我嘅設定同媒體",
  "keep_data_running_fmt": "Is {software} already installed on your {model}?",

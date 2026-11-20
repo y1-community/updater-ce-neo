@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Dekonektisaren o USB kablo thaj utilizin jekh klip vaj pin te ćhiven o butono reset, palal kodoja zumaven te phanden les pale.",
  "flash_hint_wall_charger": "• Si rekomenduime te phandel pes o khelutno e ćarźeresa pe zido 30 minutură źi k-o jekh ćàso anglal te zumavel pes te phandel pes.",
  "flash_hint_install_drivers": "• Te san pe Windows, sigurisav tut kaj si tut <a href='https://innioasis.app/guide.html'>Instalirime le Driverura</a>.",
+ "flash_hint_windows_reboot_driver": "• E Windows PC-a trubun te aven restartime palal o instaliribe e driveresqo anglal o angluno labăripen.",
  "flash_keep_data_option": "Te arakhes mire paramètrură",
  "flash_keep_settings_option": "Te arakhes mire paramètrură thaj media",
  "keep_data_running_fmt": "Si {software} aba instalirime pe tumaro {model}?",

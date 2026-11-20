@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kablosunu çıkarın ve sıfırlama düğmesine basmak için bir ataş veya iğne kullanın, ardından tekrar bağlanmayı deneyin.",
  "flash_hint_wall_charger": "• Bağlanmayı denemeden önce oynatıcıyı 30 dakika ila bir saat boyunca duvardaki bir şarj cihazına bağlamanız önerilir.",
  "flash_hint_install_drivers": "• Windows kullanıyorsanız <a href='https://innioasis.app/guide.html'>Sürücüleri yüklediğinizden</a> emin olun.",
+ "flash_hint_windows_reboot_driver": "• Windows PC'ler ilk kullanımdan önce sürücü yüklendikten sonra yeniden başlatılmalıdır.",
  "flash_keep_data_option": "Ayarlarımı sakla",
  "flash_keep_settings_option": "Ayarlarımı ve medyamı sakla",
  "keep_data_running_fmt": "{software} zaten {model} cihazınızda yüklü mü?",

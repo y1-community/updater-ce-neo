@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ontkoppel die USB-kabel en gebruik 'n skuifspeld of pen om die terugstelknoppie te druk, en probeer dan weer koppel.",
  "flash_hint_wall_charger": "• Dit word aanbeveel om die speler vir 30 minute tot 'n uur aan 'n muurlaaier te koppel voordat jy probeer koppel.",
  "flash_hint_install_drivers": "• As jy op Windows is, maak seker dat jy <a href='https://innioasis.app/guide.html'>die drywers geïnstalleer het</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-rekenaars moet herbegin word nadat die drywer geïnstalleer is voor die eerste gebruik.",
  "flash_keep_data_option": "Hou my instellings",
  "flash_keep_settings_option": "Hou my instellings en media",
  "keep_data_running_fmt": "Is {software} reeds op jou {model} geïnstalleer?",

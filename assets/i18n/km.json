@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ផ្តាច់ខ្សែ USB ហើយប្រើខ្ទាស់ក្រដាស ឬម្ជុលដើម្បីចុចប៊ូតុងកំណត់ឡើងវិញ បន្ទាប់មកព្យាយាមភ្ជាប់ម្តងទៀត។",
  "flash_hint_wall_charger": "• វាត្រូវបានណែនាំឱ្យភ្ជាប់អ្នកលេងទៅនឹងឆ្នាំងសាកជញ្ជាំងរយៈពេល 30 នាទីទៅមួយម៉ោងមុនពេលព្យាយាមភ្ជាប់។",
  "flash_hint_install_drivers": "• ប្រសិនបើអ្នកប្រើ Windows សូមប្រាកដថាអ្នកមាន <a href='https://innioasis.app/guide.html'>បានដំឡើង Drivers</a>។",
+ "flash_hint_windows_reboot_driver": "• កុំព្យូទ័រវីនដូគួរតែត្រូវបានចាប់ផ្តើមឡើងវិញបន្ទាប់ពីដំឡើងកម្មវិធីបញ្ជាមុនពេលប្រើលើកដំបូង។",
  "flash_keep_data_option": "រក្សាការកំណត់របស់ខ្ញុំ",
  "flash_keep_settings_option": "រក្សាការកំណត់ និងមេឌៀរបស់ខ្ញុំ",
  "keep_data_running_fmt": "តើ {software} បានដំឡើងរួចហើយនៅលើ {model} របស់អ្នកហើយឬនៅ?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Embogue cable USB ha eipuru peteĩ clip térã pin eity hag̃ua pe botón reset, upéi eñeha’ã jey embojoaju.",
  "flash_hint_wall_charger": "• Iporã oñembojoaju pe reproductor peteĩ cargador de pared rehe 30 minuto guive peteĩ aravo peve oñeha’ã mboyve oñembojoaju.",
  "flash_hint_install_drivers": "• Oiméramo reime Windows-pe, eñangareko eguerekoha <a href='https://innioasis.app/guide.html'>Emoĩva’ekue umi Controlador</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC-kuéra oñepyrũ jeyva’erã oñemboguapy rire mboguatahára ojepuru mboyve.",
  "flash_keep_data_option": "Eñongatu che ñemboheko",
  "flash_keep_settings_option": "Eñongatu che ñemboheko ha che medio",
  "keep_data_running_fmt": "¿Oñemoĩmapa {software} nde {model}-pe?",

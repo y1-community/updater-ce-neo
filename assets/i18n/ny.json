@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Lumikizani chingwe cha USB ndikugwiritsira ntchito paperclip kapena pini kukanikiza batani lokhazikitsiranso, kenako yesani kulumikizanso.",
  "flash_hint_wall_charger": "• Ndikoyenera kulumikiza wosewera mpira ku charger pakhoma kwa mphindi 30 mpaka ola musanayese kulumikiza.",
  "flash_hint_install_drivers": "• Ngati muli pa Windows, onetsetsani kuti <a href='https://innioasis.app/guide.html'>Mwaika Ma Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Makompyuta a Windows akuyenera kuyambikanso mukayika dalaivala musanagwiritse ntchito koyamba.",
  "flash_keep_data_option": "Sungani zokonda zanga",
  "flash_keep_settings_option": "Sungani zokonda zanga ndi media",
  "keep_data_running_fmt": "Kodi {software} yayikidwa kale pa {model} yanu?",

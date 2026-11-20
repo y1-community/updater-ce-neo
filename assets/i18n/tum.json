@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Lekani nthambo ya USB na kugwiliskira nchito paperclip panji pini kuti mudinizge batani la reset, ndipo pamanyuma yezgani kulumikizgaso.",
  "flash_hint_wall_charger": "• Ntchiwemi kuti munthu walumikizge player ku chaja ya pa mtenje kwa maminiti 30 m’paka ora limoza pambere wandayezge kulumikizga.",
  "flash_hint_install_drivers": "• Usange muli pa Windows, wonani kuti muli na <a href='https.",
+ "flash_hint_windows_reboot_driver": "• Ma PC gha Windows ghakwenera kuyambaso para ghaŵika dalaivala pambere ghandaseŵezeskeke kakwamba.",
  "flash_keep_data_option": "Sungani vyakunozga vyane",
  "flash_keep_settings_option": "Sungani vyakunozga vyane na vyakusanguluska",
  "keep_data_running_fmt": "Kasi {software} yaŵikika kale pa {model} yinu?",

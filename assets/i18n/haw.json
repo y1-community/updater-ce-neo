@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "E hoʻokaʻawale i ke kaula USB a hoʻohana i ka ʻili pepa a i ʻole ka pine e kaomi i ke pihi hoʻihoʻi, a laila e hoʻāʻo hou e hoʻopili.",
  "flash_hint_wall_charger": "• Manaʻo ʻia e hoʻopili i ka mea pāʻani i ka pā pā no 30 mau minuke a i hoʻokahi hola ma mua o ka hoʻāʻo ʻana e hoʻopili.",
  "flash_hint_install_drivers": "• Inā aia ʻoe ma Windows, e hōʻoia ua <a href='https://innioasis.app/guide.html'>Hoʻokomo i nā Keaukaha</a>.",
+ "flash_hint_windows_reboot_driver": "• Pono e hoʻomaka hou nā PC Windows ma hope o ke kau ʻana i ka mea hoʻokele ma mua o ka hoʻohana mua ʻana.",
  "flash_keep_data_option": "E mālama i kaʻu mau hoʻonohonoho",
  "flash_keep_settings_option": "E mālama i kaʻu mau hoʻonohonoho a me ka media",
  "keep_data_running_fmt": "Ua kau ʻia ʻo {software} ma kāu {model}?",

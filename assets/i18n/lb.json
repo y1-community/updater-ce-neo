@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Trennt den USB Kabel a benotzt e Pabeierclip oder Pin fir de Reset Knäppchen ze drécken, probéiert dann erëm ze verbannen.",
  "flash_hint_wall_charger": "• Et ass recommandéiert de Spiller mat engem Wandladeger fir 30 Minutten bis eng Stonn ze verbannen ier Dir probéiert ze verbannen.",
  "flash_hint_install_drivers": "• Wann Dir op Windows sidd, gitt sécher datt Dir <a href='https://innioasis.app/guide.html'>D'Treiber installéiert hutt</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs sollen no der Installatioun vum Chauffer virum éischte Gebrauch nei gestart ginn.",
  "flash_keep_data_option": "Halt meng Astellungen",
  "flash_keep_settings_option": "Halt meng Astellungen a Medien",
  "keep_data_running_fmt": "Ass {software} schonn op Ärem {model} installéiert?",

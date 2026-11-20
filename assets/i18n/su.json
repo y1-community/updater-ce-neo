@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Pegatkeun sambungan kabel USB jeung pake klip kertas atawa pin pikeun mencet tombol reset, teras cobian sambungkeun deui.",
  "flash_hint_wall_charger": "• Disarankeun pikeun nyambungkeun pamuter ka carjer témbok pikeun 30 menit nepi ka sajam saméméh nyoba nyambung.",
  "flash_hint_install_drivers": "• Upami anjeun nganggo Windows, pastikeun anjeun parantos <a href='https://innioasis.app/guide.html'>Pasang Supir</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs kudu restarted sanggeus masang supir saméméh pamakéan munggaran.",
  "flash_keep_data_option": "Tetep setélan abdi",
  "flash_keep_settings_option": "Tetep setélan jeung média kuring",
  "keep_data_running_fmt": "Naha {software} parantos dipasang dina {model} anjeun?",

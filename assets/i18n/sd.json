@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB ڪيبل کي ڌار ڪريو ۽ ري سيٽ بٽڻ کي دٻائڻ لاءِ پيپر ڪلپ يا پن استعمال ڪريو، پوءِ ٻيهر ڳنڍڻ جي ڪوشش ڪريو.",
  "flash_hint_wall_charger": "• اها صلاح ڏني وئي آهي ته پليئر کي وال چارجر سان ڳنڍڻ جي ڪوشش ڪرڻ کان پهريان 30 منٽ کان هڪ ڪلاڪ تائين.",
  "flash_hint_install_drivers": "• جيڪڏهن توهان ونڊوز تي آهيو، پڪ ڪريو ته توهان <a href='https://innioasis.app/guide.html'>ڊرائيور انسٽال ڪيو آهي</a>.",
+ "flash_hint_windows_reboot_driver": "• ونڊوز پي سيز کي پهريان استعمال ڪرڻ کان پهريان ڊرائيور کي انسٽال ڪرڻ کان پوءِ ٻيهر شروع ڪيو وڃي.",
  "flash_keep_data_option": "منهنجي سيٽنگون رکو",
  "flash_keep_settings_option": "منهنجي سيٽنگون ۽ ميڊيا رکو",
  "keep_data_running_fmt": "ڇا توهان جي {model} تي {software} اڳ ۾ ئي انسٽال ٿيل آهي؟",

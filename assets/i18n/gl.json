@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconecta o cable USB e usa un clip ou un alfinete para premer o botón de reinicio e, a continuación, tenta conectar de novo.",
  "flash_hint_wall_charger": "• Recoméndase conectar o reprodutor a un cargador de parede durante 30 minutos a unha hora antes de tentalo conectar.",
  "flash_hint_install_drivers": "• Se estás en Windows, asegúrate de ter <a href='https://innioasis.app/guide.html'>instalados os controladores</a>.",
+ "flash_hint_windows_reboot_driver": "• Os ordenadores con Windows deben reiniciarse despois de instalar o controlador antes do primeiro uso.",
  "flash_keep_data_option": "Manter a miña configuración",
  "flash_keep_settings_option": "Mantén a miña configuración e contido multimedia",
  "keep_data_running_fmt": "{software} xa está instalado no teu {model}?",

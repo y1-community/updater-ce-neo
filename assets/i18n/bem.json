@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ukufumyapo intambo ya USB no kubomfya icikope ca pepala nelyo ipin pa kutinika batani lya kubweshapo, lyena esheniko ukubweseshamo na kabili.",
  "flash_hint_wall_charger": "• Cisuma ukubika umutambishi ku ca kucingililamo pa cibumba pa maminiti 30 ukufika ku ora limo ilyo tamulaesha ukubika.",
  "flash_hint_install_drivers": "• Nga muli pa Windows, shininkisheni ukuti mwabika Ama Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ama PC ya Windows yalingile ukutendeka cipya cipya pa numa ya kubikamo umubomfi ilyo tamulabomfya.",
  "flash_keep_data_option": "Sunga imitantikile yandi",
  "flash_keep_settings_option": "Sunga imitantikile yandi ne fyakushimikila",
  "keep_data_running_fmt": "Bushe {software} naibikwa kale pali {model} yenu?",

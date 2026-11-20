@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "ᐲᔭᕐᓗᒍ USB ᓴᕕᕋᔭᒃ ᐊᒻᒪᓗ ᐊᑐᕐᓗᒍ ᐸᐃᑉᐹᖅ ᓇᕿᑦᑕᒐᖅ ᐅᕝᕙᓘᓐᓃᑦ ᓇᕿᑦᑕᒐᖅ ᓇᕿᓪᓗᒍ ᐋᖅᑭᒃᓯᒃᑲᓐᓂᕐᓂᖅ ᓇᕿᑦᑕᒐᖅ, ᑕᐃᒪᓕ ᑲᓱᒃᑲᓐᓂᕋᓱᐊᕐᓗᑎᑦ.",
  "flash_hint_wall_charger": "• ᐊᑐᖁᔭᐅᕗᖅ ᑲᓱᖅᑕᐅᓗᓂ ᐱᙳᐊᕈᑎ ᐊᑭᓐᓇᕐᒥᐅᑕᒧᑦ ᐆᒻᒪᖅᑯᑎᒧᑦ 30 ᒥᓂᑦᓯᓄᑦ ᐃᑲᕐᕋᒧᑦ ᑲᓱᖅᑕᐅᓇᓱᓚᐅᙱᓐᓂᕐᓂ.",
  "flash_hint_install_drivers": "• Windows-ᒦᒃᑯᕕᑦ, ᖃᐅᔨᒪᑦᑎᐊᕆᑦ ᐋᖅᑭᒃᓯᓯᒪᒐᓗᐊᕐᒪᖔᖅᐱᑦ ᐊᖁᑎᓂᒃ</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC-ᖑᔪᑦ ᐱᒋᐊᒃᑲᓐᓂᕆᐊᖃᖅᐳᑦ ᐋᖅᑭᒃᓯᓚᐅᖅᑎᓪᓗᒋᑦ ᐊᖁᑎᒥᒃ ᓯᕗᓪᓕᖅᐹᒥ ᐊᑐᖅᑕᐅᓚᐅᙱᓐᓂᖏᓐᓂ.",
  "flash_keep_data_option": "ᐋᖅᑭᒃᓯᒪᓂᕆᔭᒃᑲ ᐱᓯᒪᐃᓐᓇᕐᓗᒋᑦ",
  "flash_keep_settings_option": "ᐋᖅᑭᒃᓯᒪᓂᕆᔭᒃᑲ ᑐᓴᒐᒃᓴᓕᕆᔾᔪᑎᒃᑲᓗ ᐱᓯᒪᐃᓐᓇᕐᓗᒋᑦ",
  "keep_data_running_fmt": "{software} ᐋᖅᑭᒃᑕᐅᓯᒪᓕᕇᖅᐹ {model}-ᒥ?",

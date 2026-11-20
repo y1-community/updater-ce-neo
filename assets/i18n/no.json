@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Koble fra USB-kabelen og bruk en binders eller nål for å trykke på tilbakestillingsknappen, og prøv deretter å koble til på nytt.",
  "flash_hint_wall_charger": "• Det anbefales å koble spilleren til en vegglader i 30 minutter til en time før du prøver å koble til.",
  "flash_hint_install_drivers": "• Hvis du bruker Windows, sørg for at du har <a href='https://innioasis.app/guide.html'>installert driverne</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-PCer bør startes på nytt etter installering av driveren før første gangs bruk.",
  "flash_keep_data_option": "Behold innstillingene mine",
  "flash_keep_settings_option": "Behold innstillingene og media",
  "keep_data_running_fmt": "Er {software} allerede installert på {model}?",

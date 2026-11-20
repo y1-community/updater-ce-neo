@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Koppla bort USB-kabeln och använd ett gem eller nål för att trycka på återställningsknappen, försök sedan ansluta igen.",
  "flash_hint_wall_charger": "• Det rekommenderas att ansluta spelaren till en väggladdare i 30 minuter till en timme innan du försöker ansluta.",
  "flash_hint_install_drivers": "• Om du använder Windows, se till att du har <a href='https://innioasis.app/guide.html'>installerat drivrutinerna</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows-datorer bör startas om efter installation av drivrutinen före första användningen.",
  "flash_keep_data_option": "Behåll mina inställningar",
  "flash_keep_settings_option": "Behåll mina inställningar och media",
  "keep_data_running_fmt": "Är {software} redan installerat på din {model}?",

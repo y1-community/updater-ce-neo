@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Atjunkite USB kabelį ir sąvaržėlę arba smeigtuką paspauskite nustatymo iš naujo mygtuką, tada bandykite prisijungti dar kartą.",
  "flash_hint_wall_charger": "• Prieš bandant prijungti, rekomenduojama grotuvą prijungti prie sieninio įkroviklio nuo 30 minučių iki valandos.",
  "flash_hint_install_drivers": "• Jei naudojate „Windows“, įsitikinkite, kad <a href='https://innioasis.app/guide.html'>įdiegėte tvarkykles</a>.",
+ "flash_hint_windows_reboot_driver": "• Prieš pirmąjį naudojimą, Windows kompiuteriai turi būti paleisti iš naujo įdiegus tvarkyklę.",
  "flash_keep_data_option": "Išsaugoti mano nustatymus",
  "flash_keep_settings_option": "Išsaugoti mano nustatymus ir laikmeną",
  "keep_data_running_fmt": "Ar {software} jau įdiegta jūsų {model}?",

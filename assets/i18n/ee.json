@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ðe USB-ka la ɖa eye nàzã pepa alo pin atsɔ azi reset ƒe dzesi dzi, emegbe nàgadze agbagba ake.",
  "flash_hint_wall_charger": "• Wokafui be nàtsɔ fefewɔla la aƒo ka na glidzi charger aɖabaƒoƒo 30 va ɖo gaƒoƒo ɖeka hafi adze agbagba aƒoe.",
  "flash_hint_install_drivers": "• Ne èle Windows dzi la, kpɔ egbɔ be ye <a href='https://innioasis.app/guide.html'>De Ʋukulawo</a>.",
+ "flash_hint_windows_reboot_driver": "• Ele be woagbugbɔ adze Windows PC-wo gɔme ne woda ʋukulaa ɖe kɔmpiuta dzi hafi woazã wo zi gbãtɔ.",
  "flash_keep_data_option": "Lé nye ɖoɖowo me ɖe asi",
  "flash_keep_settings_option": "Na nye ɖoɖowo kple nyadzɔdzɔgblɔmɔnuwo nanɔ anyi",
  "keep_data_running_fmt": "Ðe woda {software} ɖe wò {model} dzi xoxoa?",

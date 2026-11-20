@@ -350,6 +350,31 @@ def _windows_ce_installed() -> bool:
     return False
 
 
+def windows_sp_drivers_installed() -> bool:
+    """True when MediaTek SP Driver uninstaller exists on Windows.
+
+    Checks %ProgramFiles%\\MediaTek\\SP Driver\\unins000.exe (and x86/W6432 variants).
+    """
+    if not IS_WINDOWS:
+        return False
+    candidates: list[Path] = []
+    for var in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+        val = os.environ.get(var)
+        if val:
+            candidates.append(Path(val) / "MediaTek" / "SP Driver" / "unins000.exe")
+    candidates.extend([
+        Path(r"C:\Program Files\MediaTek\SP Driver\unins000.exe"),
+        Path(r"C:\Program Files (x86)\MediaTek\SP Driver\unins000.exe"),
+    ])
+    for p in candidates:
+        try:
+            if p.is_file():
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _mac_ce_installed() -> bool:
     """True when an Innioasis Updater CE bundle sits in an Applications folder."""
     for folder in (Path("/Applications"), Path.home() / "Applications"):

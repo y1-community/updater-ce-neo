@@ -2302,6 +2302,14 @@ _STRINGS: dict = {
     "flash_hint_install_drivers": {
         "en": "• If you are on Windows, ensure you have <a href='https://innioasis.app/guide.html'>Installed the Drivers</a>.",
     },
+    "flash_hint_windows_reboot_driver": {
+        "en": "• Windows PCs should be restarted after installing the driver before first use.",
+        "zh-CN": "• Windows 电脑在安装驱动程序后应先重启再首次使用。",
+        "fr": "• Les PC Windows doivent être redémarrés après l'installation du pilote avant la première utilisation.",
+        "es": "• Los PC con Windows deben reiniciarse después de instalar el controlador antes del primer uso.",
+        "de": "• Windows-PCs sollten nach der Treiberinstallation vor der ersten Verwendung neu gestartet werden.",
+        "ja": "• Windows PCはドライバのインストール後、最初に使用する前に再起動する必要があります。",
+    },
     "flash_keep_data_option": {
         "en": "Keep my settings",
         "zh-CN": "保留我的设置和媒体",

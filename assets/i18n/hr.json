@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Odspojite USB kabel i pomoću spajalice ili pribadače pritisnite tipku za resetiranje, zatim pokušajte spojiti ponovno.",
  "flash_hint_wall_charger": "• Preporuča se spojiti uređaj na zidni punjač 30 minuta do sat vremena prije pokušaja spajanja.",
  "flash_hint_install_drivers": "• Ako koristite Windows, provjerite jeste li <a href='https://innioasis.app/guide.html'>instalirali upravljačke programe</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows računala treba ponovno pokrenuti nakon instaliranja upravljačkog programa prije prve uporabe.",
  "flash_keep_data_option": "Zadrži moje postavke",
  "flash_keep_settings_option": "Zadrži moje postavke i medije",
  "keep_data_running_fmt": "Je li {software} već instaliran na vašem {model}?",

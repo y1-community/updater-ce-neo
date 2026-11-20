@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Putuska kabel USB lalu ngena paperclip tauka pin nekan butang reset, udah nya nguji sambung baru.",
  "flash_hint_wall_charger": "• Dikemendarka nyambung pemain ngagai pengecas dinding pengelama 30 minit ngagai sejam sebedau nguji nyambung.",
  "flash_hint_install_drivers": "• Enti nuan ngena Windows, tentuka nuan udah masang Pemandu</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows patut di-start baru pengudah masang driver sebedau dikena keterubah iya.",
  "flash_keep_data_option": "Jaga pengatur aku",
  "flash_keep_settings_option": "Simpan pengatur enggau media aku .",
  "keep_data_running_fmt": "Kati {software} udah dipasang ba {model} nuan?",

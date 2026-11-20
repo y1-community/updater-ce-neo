@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB cable no swkakdi tei paperclip eba pin bai reset khaiwi rwdi, aboni ulo tei kaisa chapdi.",
  "flash_hint_wall_charger": "• Player no 30 minit ni simi 1 hour jora wall charger bai chapnani chaitokmani swkang chapnani chaitoknani nangnai.",
  "flash_hint_install_drivers": "• Nwng Windows o tongkhe, nwng Driver</a>rokno Install khlaijak hwnwi naidi.",
+ "flash_hint_windows_reboot_driver": "• Windows PC rok no puila use khaimani swkang driver install khaimani ulo restart khainani nangnai.",
  "flash_keep_data_option": "Ani settings no narwk di",
  "flash_keep_settings_option": "Ani setting tei media no narwk di",
  "keep_data_running_fmt": "Nini {model} o {software} wngkha de?",

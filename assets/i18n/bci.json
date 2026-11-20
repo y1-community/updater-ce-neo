@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kplɛ USB’n i nun naan fa clip annzɛ pin tin reset su, kpɛkun yo naan w’a fa w’a wlɛ i nun ekun.",
  "flash_hint_wall_charger": "• Ɔ fata kɛ be fa jue tofuɛ’n be sie i chargeur kun m’ɔ o talɛ’n su’n i su miniti 30 lele dɔ kun ka naan b’a kunndɛ kɛ bé fá kɔ́.",
  "flash_hint_install_drivers": "• Sɛ a o Windows su’n, nian naan w’a fa Driver</a> w’a sie i ɔ ɔrdinatɛli’n su.",
+ "flash_hint_windows_reboot_driver": "• Kɛ be ko fa ordinatɛri nga be flɛ i kɛ Windows’n be sie i lɔ’n, ɔ fata kɛ be bo i bo ekun ka naan b’a fa di junman kpɛ klikli.",
  "flash_keep_data_option": "Fa min paramɛtri mun .",
  "flash_keep_settings_option": "Sie min paramɛtri nin min media’m be su .",
  "keep_data_running_fmt": "?{software} w’a dun mmua w’a sie ɔ {model} su?",

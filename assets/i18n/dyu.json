@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB juru bɔ ani i ka papiye wala pɛnɛ dɔ ta ka reset butɔn digi, o kɔ, i k’a ɲini k’a don tugun.",
  "flash_hint_wall_charger": "• A ɲinina ko i ka tulonkɛlan nɔrɔ kogo la miniti 30 ka taga se lɛri kelen ma sanni i k’a ɲini k’a nɔrɔ.",
  "flash_hint_install_drivers": "• N’i be Windows kan, i b’a filɛ n’i ye <a href=’https://innioasis.app/guide.html’>Driver</a>w don i ka ɔridinatɛri kɔnɔ.",
+ "flash_hint_windows_reboot_driver": "• Windows PCw ka kan ka lawuli tugun n’u ye sofɛri don u kɔnɔ sanni u ka baara kɛ n’u ye fɔlɔ.",
  "flash_keep_data_option": "N’ ka paramɛtiriw mara",
  "flash_keep_settings_option": "N’ ka paramɛtiriw n’n ka kunnafoniw mara .",
  "keep_data_running_fmt": "Yala {software} be i ka {model} kan ka ban wa?",

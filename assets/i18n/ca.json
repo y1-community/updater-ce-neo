@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconnecteu el cable USB i utilitzeu un clip o un clip per prémer el botó de restabliment i, a continuació, proveu de connectar-vos de nou.",
  "flash_hint_wall_charger": "• Es recomana connectar el reproductor a un carregador de paret durant 30 minuts a una hora abans d'intentar-ho.",
  "flash_hint_install_drivers": "• Si esteu a Windows, assegureu-vos d'haver <a href='https://innioasis.app/guide.html'>instal·lat els controladors</a>.",
+ "flash_hint_windows_reboot_driver": "• Els ordinadors Windows s'han de reiniciar després d'instal·lar el controlador abans del primer ús.",
  "flash_keep_data_option": "Conserva la meva configuració",
  "flash_keep_settings_option": "Conserva la meva configuració i els meus mitjans",
  "keep_data_running_fmt": "El {software} ja està instal·lat al vostre {model}?",

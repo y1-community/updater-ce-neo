@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Disconnect di USB cable an use a paperclip or pin fi press di reset button, den try connect again.",
  "flash_hint_wall_charger": "• It is recommended fi connect di player to a wall charger fi 30 minutes to an hour before yuh try fi connect.",
  "flash_hint_install_drivers": "• If yuh deh pan Windows, mek sure yuh have <a href='https://innioasis.app/guide.html'>Installed di Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs shuda be restart afta yuh install di driver before yuh use it fos.",
  "flash_keep_data_option": "Keep mi settings",
  "flash_keep_settings_option": "Keep mi settings an media",
  "keep_data_running_fmt": "{software} already install pan yuh {model}?",

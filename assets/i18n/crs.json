@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "dekonekte kab USB e servi en klip oubyen pin pou pez bouton reset, apre esey konekte ankor.",
  "flash_hint_wall_charger": "• I rekomande pou konekte sa zwer avek en sarz miray pou 30 minit a enn erdtan avan esey konekte.",
  "flash_hint_install_drivers": "• Si ou lo Windows, fer sir ou'n <a href='https://innioasis.app/guide.html'>enstal bann drayver</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC i devret ganny relanse apre ki in enstal drayver avan premye litilizasyon.",
  "flash_keep_data_option": "gard mon bann laranzman",
  "flash_keep_settings_option": "gard mon bann laranzman ek medya",
  "keep_data_running_fmt": "eski {software} in deza ganny enstale lo ou {model}?",

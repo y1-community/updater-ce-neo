@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ôdłōncz kabel USB i użyj spicy abo pin, coby nacisnōńć guzicz resetu, a potym sprōbuj połōnczyć sie zaś.",
  "flash_hint_wall_charger": "• Zaleca sie podłōnczyć ôdtworzak do ściennyj ładowarki bez 30 minut do godziny przed prōbōm podłōnczynio.",
  "flash_hint_install_drivers": "• Jeźli jesz w Windowsie, upewnij sie, iże masz zainstalowane sterowniki</a>.",
+ "flash_hint_windows_reboot_driver": "• PC z Windows winny być restartowane po instalacyji sterownika przed piyrszym użyciym.",
  "flash_keep_data_option": "Trzimaj moje ustawiynia",
  "flash_keep_settings_option": "Trzimaj moje ustawiynia i media",
  "keep_data_running_fmt": "Je {software} już zainstalowany na twojim {model}?",

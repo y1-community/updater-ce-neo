@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "کابل USB را جدا کنید و از یک گیره یا پین برای فشار دادن دکمه تنظیم مجدد استفاده کنید، سپس دوباره سعی کنید وصل شوید.",
  "flash_hint_wall_charger": "• توصیه می شود قبل از تلاش برای اتصال، پخش کننده را به مدت 30 دقیقه تا یک ساعت به شارژر دیواری وصل کنید.",
  "flash_hint_install_drivers": "• اگر از ویندوز استفاده می کنید، مطمئن شوید که <a href='https://innioasis.app/guide.html'>درایورها را نصب کرده اید</a>.",
+ "flash_hint_windows_reboot_driver": "• رایانه های شخصی ویندوزی باید پس از نصب درایور قبل از اولین استفاده، راه اندازی مجدد شوند.",
  "flash_keep_data_option": "تنظیمات من را حفظ کنید",
  "flash_keep_settings_option": "تنظیمات و رسانه من حفظ شود",
  "keep_data_running_fmt": "آیا {software} قبلاً روی {model} شما نصب شده است؟",

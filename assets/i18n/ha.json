@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Cire haɗin kebul na USB kuma yi amfani da faifan takarda ko fil don danna maɓallin sake saiti, sannan sake gwada haɗawa.",
  "flash_hint_wall_charger": "• Ana ba da shawarar haɗa mai kunnawa zuwa cajar bango na tsawon mintuna 30 zuwa awa ɗaya kafin ƙoƙarin haɗawa.",
  "flash_hint_install_drivers": "• Idan kana kan Windows, tabbatar kana da <a href='https://innioasis.app/guide.html'>Shigar da Direbobi</a>.",
+ "flash_hint_windows_reboot_driver": "• Ya kamata a sake kunna kwamfutocin Windows bayan shigar da direba kafin fara amfani da su.",
  "flash_keep_data_option": "Ajiye saitunana",
  "flash_keep_settings_option": "Ajiye saitunana da kafofin watsa labarai",
  "keep_data_running_fmt": "An riga an shigar da {software} akan {model} naku?",

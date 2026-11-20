@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "युएसबी केबल डिस्कनेक्ट यानाः पेपरक्लिप वा पिन छ्यला रिसेट बटन त्यु, अले हाकनं कनेक्ट यायेगु कुतः या ।",
  "flash_hint_wall_charger": "• स्वायेगु कुतः याये न्ह्यः ३० मिनेटनिसें छघौतक प्लेयरयात वाल चार्जरय् स्वायेगु सल्लाह बियातःगु दु ।",
  "flash_hint_install_drivers": "• यदि छि विन्डोजय् दुसा ड्राइभरत</a> इन्स्टल यानातःगु दु धकाः पक्का यानादिसँ ।",
+ "flash_hint_windows_reboot_driver": "• विन्डोज पीसी न्हापां छ्यले न्ह्यः ड्राइभर इन्स्टल यायेधुंकाः रिस्टार्ट यायेमाः ।",
  "flash_keep_data_option": "जिगु सेटिङ्ग तयाति ।",
  "flash_keep_settings_option": "जिगु सेटिङ्ग व मिडिया तयाति ।",
  "keep_data_running_fmt": "Is {software} already installed on your {model}?",

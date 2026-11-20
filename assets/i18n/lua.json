@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Umbusha tshiamu tshia USB ne wenze mudimu ne tshiamu tshia kukanga nabi mabeji anyi tshiamu tshia kukanga natshi bua kufina butone bua kupingaja, pashishe teta bua kutshilamakaja kabidi.",
  "flash_hint_wall_charger": "• Mbimpe kulamakaja tshiamu tshia kuteleja natshi ku tshiamu tshia ku tshimanu munkatshi mua minite 30 too ne dîba dimue kumpala kua kuteta bua kulamakaja.",
  "flash_hint_install_drivers": "• Shi udi mu Windows, ikala mujadike ne udi ne <a href='https://innioasis.app/guide.html'>Muteka Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Ma PC a Windows adi ne tshia kutuadija kabidi kunyima kua diteka dia driver kumpala kua kuenza mudimu.",
  "flash_keep_data_option": "Lama mishindu yanyi",
  "flash_keep_settings_option": "Lama mishindu yanyi ne bintu bianyi",
  "keep_data_running_fmt": "{software} ukadi muteka pa {model} webe anyi?",

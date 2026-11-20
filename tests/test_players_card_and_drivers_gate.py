@@ -110,41 +110,33 @@ def test_type_carries_the_catalogues_type_tooltip():
         _close(win)
 
 
-def test_windows_asks_for_drivers_and_a_restart_before_the_form(monkeypatch):
+def test_windows_opens_add_device_form_directly_without_drivers_gate(monkeypatch):
     app, win = _window()
     page = win._settings_page
-    settings = QSettings("innioasis", "updater")
-    previous = settings.value(page.DRIVERS_CONFIRMED_KEY, None)
     try:
         monkeypatch.setattr(paths, "IS_WINDOWS", True)
         monkeypatch.setattr(settings_mod, "windows_only_method", lambda: METHOD_SP)
-        settings.setValue(page.DRIVERS_CONFIRMED_KEY, False)
 
-        assert page._drivers_gate_needed()
-        page._open_add_device_panel()
-        _events(app)
-        assert page._drivers_gate.isVisible()
-        assert not page._add_device_panel.isVisible()
-
-        page._confirm_drivers_installed()
-        _events(app)
-        assert settings.value(page.DRIVERS_CONFIRMED_KEY, False, type=bool)
-        assert page._add_device_panel.isVisible()
-        assert not page._drivers_gate.isVisible()
-
-        # Confirmed once, it is never asked again.
-        page._hide_add_device_panel()
+        assert not page._drivers_gate_needed()
         page._open_add_device_panel()
         _events(app)
         assert page._add_device_panel.isVisible()
-        assert not page._drivers_gate.isVisible()
+        assert not hasattr(page, "_drivers_gate") or not page._drivers_gate.isVisible()
     finally:
-        if previous is None:
-            settings.remove(page.DRIVERS_CONFIRMED_KEY)
-        else:
-            settings.setValue(page.DRIVERS_CONFIRMED_KEY, previous)
         page._hide_add_device_panel()
         _close(win)
+
+
+def test_windows_driver_detection_and_reboot_hint(monkeypatch, tmp_path):
+    # Test windows_sp_drivers_installed detection logic
+    monkeypatch.setattr(paths, "IS_WINDOWS", True)
+    driver_exe = tmp_path / "MediaTek" / "SP Driver" / "unins000.exe"
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    assert not paths.windows_sp_drivers_installed()
+
+    driver_exe.parent.mkdir(parents=True, exist_ok=True)
+    driver_exe.touch()
+    assert paths.windows_sp_drivers_installed()
 
 
 def test_arm64_windows_is_not_asked_for_drivers(monkeypatch):
@@ -159,7 +151,7 @@ def test_arm64_windows_is_not_asked_for_drivers(monkeypatch):
         page._open_add_device_panel()
         _events(app)
         assert page._add_device_panel.isVisible()
-        assert not page._drivers_gate.isVisible()
+        assert not hasattr(page, "_drivers_gate") or not page._drivers_gate.isVisible()
     finally:
         page._hide_add_device_panel()
         _close(win)

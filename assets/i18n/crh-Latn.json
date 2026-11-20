@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kabelni ayırıp, skrepka ya da pin yardımınen sbros dögmesini basıñız, soñra kene bağlap baqıñız.",
  "flash_hint_wall_charger": "• Pleyerni qoşmağa tırışmazdan evel, 30 daqqadan bir saatqace divar zarâdkasına bağlamaq tevsiye etile.",
  "flash_hint_install_drivers": "• Eger siz Windows platformasında olsañız, drayverlerni</a> yerleştirgeniñizge emin oluñ.",
+ "flash_hint_windows_reboot_driver": "• Windows PK-lerni birinci kere qullanmazdan evel drayverni yerleştirgen soñ yañıdan başlamaq kerek.",
  "flash_keep_data_option": "Menim parametrlerimni saqla",
  "flash_keep_settings_option": "Menim parametrlerimni ve medianı saqla",
  "keep_data_running_fmt": "{software} endi siziñ {model} telefonıñızğa qoyulğanmı?",

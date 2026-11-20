@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Lepas kabel USB dan pake penjepit kertas atau pin buat pencet tombol reset, trus coba sambungin lagi.",
  "flash_hint_wall_charger": "• Disaranin buat nyambungin pemain ke pengisi daya dinding selama 30 menit sampe satu jam sebelum nyoba nyambungin.",
  "flash_hint_install_drivers": "• Kalo lu pake Windows, pastiin lu udah masang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC harus di-restart setelah masang driver sebelum pertama kali dipake.",
  "flash_keep_data_option": "Jaga pengaturan gue",
  "flash_keep_settings_option": "Jaga pengaturan dan media gue",
  "keep_data_running_fmt": "Apa {software} udah dipasang di {model} lu?",

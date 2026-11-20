@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Twa USB nhama no mu na fa krataa a wɔde kyekyere anaa pin di dwuma de mia reset button no so, afei bɔ mmɔden sɛ wobɛsan abɔ bio.",
  "flash_hint_wall_charger": "• Wɔkamfo kyerɛ sɛ fa player no bata wall charger ho simma 30 kosi dɔnhwerew biako ansa na woabɔ mmɔden sɛ wode bɛka ho.",
  "flash_hint_install_drivers": "• Sɛ wowɔ Windows so a, hwɛ hu sɛ woayɛ <a href='https://innioasis.app/guide.html'>Wɔde Draiver ahorow no ahyɛ mu</a>.",
+ "flash_hint_windows_reboot_driver": "• Ɛsɛ sɛ wɔsan fi ase Windows PC ahorow no bere a woahyɛ draiver no ase awie ansa na wɔadi kan de adi dwuma.",
  "flash_keep_data_option": "Fa me nhyehyɛe ahorow no sie",
  "flash_keep_settings_option": "Fa me nhyehyɛe ne me media sie",
  "keep_data_running_fmt": "So wɔde {software} ahyɛ wo {model} so dedaw?",

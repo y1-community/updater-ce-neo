@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Taho akasimu ka USB kandi okozese ekikwato ky’okukwatiraho orupapura nari pini kunyiga akapesha k’okugaruzaho, reero ogyezeho kugaruka kukwatiraho.",
  "flash_hint_wall_charger": "• Nikirungi kukwaata omuzaani aha charger y’aha kisiika kumara edakiika 30 kuhika aha shaaha emwe otakagyezeho kukwaata.",
  "flash_hint_install_drivers": "• Waaba ori aha Windows, reeba ngu oine <a href='ebiriisa by'okuvuga</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC ziine kugaruka kutandika bwanyima y’okutaho driver zitakatandikire kukozesebwa.",
  "flash_keep_data_option": "Guma n'entebekanisa zangye",
  "flash_keep_settings_option": "Guma n'ebintu byangye n'eby'amakuru",
  "keep_data_running_fmt": "{software} eherize kuteebwa aha {model} yaawe?",

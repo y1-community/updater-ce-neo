@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Shkëputni kabllon USB dhe përdorni një kapëse letre ose një kunj për të shtypur butonin e rivendosjes, më pas provoni të lidheni përsëri.",
  "flash_hint_wall_charger": "• Rekomandohet ta lidhni luajtësin me një karikues në mur për 30 minuta deri në një orë përpara se të provoni ta lidhni.",
  "flash_hint_install_drivers": "• Nëse jeni në Windows, sigurohuni që të keni <a href='https://innioasis.app/guide.html'>Instaluar Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• PC-të me Windows duhet të rinisen pas instalimit të drejtuesit përpara përdorimit të parë.",
  "flash_keep_data_option": "Mbaj cilësimet e mia",
  "flash_keep_settings_option": "Ruaj cilësimet dhe median e mia",
  "keep_data_running_fmt": "A është {software} i instaluar tashmë në {model} tuaj?",

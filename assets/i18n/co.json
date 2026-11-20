@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Scollega u cable USB è aduprate un clip o un pin per appughjà u buttone di reset, dopu pruvate à cunnette torna.",
  "flash_hint_wall_charger": "• Hè ricumandemu per cunnette u lettore à un caricatore di muru per 30 minuti à una ora prima di pruvà à cunnette.",
  "flash_hint_install_drivers": "• Sè vo site in Windows, assicuratevi chì avete <a href='https://innioasis.app/guide.html'>Stallà i Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PC deve esse riiniziata dopu à stallà u driver nanzu prima usu.",
  "flash_keep_data_option": "Mantene i mo paràmetri",
  "flash_keep_settings_option": "Mantene i mo paràmetri è i media",
  "keep_data_running_fmt": "{software} hè digià stallatu nantu à u vostru {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kgaola thapo ya USB gomme o šomiše seripa sa pampiri goba pini go tobetša konope ya go seta gape, ke moka o leke go kgokaganya gape.",
  "flash_hint_wall_charger": "• Go kgothaletšwa go kgokaganya sebapadi go tjhajara ya lebota metsotso ye 30 go ya go iri pele o leka go kgokaganya.",
  "flash_hint_install_drivers": "• Ge e le gore o go Windows, netefatša gore o na le <a href='https://innioasis.app/guide.html'>E Tsenya Dikgantšhi</a>.",
+ "flash_hint_windows_reboot_driver": "• Di-PC tša Windows di swanetše go thongwa gape ka morago ga go tsenya mootledi pele ga go dirišwa la mathomo.",
  "flash_keep_data_option": "Boloka dipeakanyo tša ka",
  "flash_keep_settings_option": "Boloka dipeakanyo tša ka le methopo ya ditaba",
  "keep_data_running_fmt": "Na {software} e šetše e hlomilwe go {model} ya gago?",

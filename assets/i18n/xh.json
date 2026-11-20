@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Nqamula intambo ye-USB kwaye usebenzise i-paperclip okanye i-pin ukucofa iqhosha lokuseta kwakhona, uze uzame ukuqhagamshela kwakhona.",
  "flash_hint_wall_charger": "• Kucetyiswa ukuba udibanise umdlali kwitshaja eludongeni imizuzu engama-30 ukuya kwiyure ngaphambi kokuba uzame ukudibanisa.",
  "flash_hint_install_drivers": "• Ukuba uku-Windows, qinisekisa ukuba <a href='https://innioasis.app/guide.html'>Fakela abaqhubi</a>.",
+ "flash_hint_windows_reboot_driver": "• IiPC zeWindows kufuneka ziphinde ziqaliswe emva kokufaka umqhubi phambi kokusetyenziswa kokuqala.",
  "flash_keep_data_option": "Gcina iisetingi zam",
  "flash_keep_settings_option": "Gcina useto lwam kunye nemidiya",
  "keep_data_running_fmt": "Ngaba i-{software} sele ifakiwe kwi-{model} yakho?",

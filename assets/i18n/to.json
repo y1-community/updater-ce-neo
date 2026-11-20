@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Motuhi ʻa e uaea USB pea fakaʻaongaʻi ha meʻa fakapipiki pe pine ke lomiʻi ʻa e button reset, pea feinga ke toe fakafehokotaki.",
  "flash_hint_wall_charger": "• 'Oku fokotu'u atu ke fakafehokotaki 'a e me'a va'inga ki ha charger 'i he 'a 'i ha miniti 'e 30 ki he houa 'e taha kimu'a pea toki feinga ke fakafehokotaki.",
  "flash_hint_install_drivers": "• Kapau 'oku ke 'i he Windows, fakapapau'i 'oku ke fokotu'u 'a e ngaahi faka'uli</a>.",
+ "flash_hint_windows_reboot_driver": "• 'Oku totonu ke toe kamata 'a e Windows PCs hili hono fokotu'u 'o e faka'uli kimu'a pea toki 'uluaki faka'aonga'i.",
  "flash_keep_data_option": "Tauhi 'eku ngaahi setingi .",
  "flash_keep_settings_option": "Tauhi 'eku ngaahi setingi mo e mitia .",
  "keep_data_running_fmt": "Kuo 'osi fokotu'u 'a e {software} 'i ho'o {model}?",

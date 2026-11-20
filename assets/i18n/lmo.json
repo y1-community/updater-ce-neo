@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Scollega el cavo USB e dupera una grappa o un pin per premer el pulsant de reset, e dopu pruva a culegà ancamò.",
  "flash_hint_wall_charger": "• Se cunsiglia de culegà el letur a un caricatur a paret per 30 minut a un ura prima de pruvar a culegà.",
  "flash_hint_install_drivers": "• Se l’è sü Windows, assicüras de avegh installà i Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• I PC Windows g’han de vèss riavvià dopu l’installaziun del driver prima del prim üs.",
  "flash_keep_data_option": "Mantegni i me impostaziun",
  "flash_keep_settings_option": "Mantegni i me impostaziun e i me media",
  "keep_data_running_fmt": "{software} l’è giamò installà sül {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Idiskonekta ang USB cable at gumamit ng paperclip o pin para pindutin ang reset button, pagkatapos ay subukang kumonekta muli.",
  "flash_hint_wall_charger": "• Inirerekomenda na ikonekta ang player sa isang wall charger sa loob ng 30 minuto hanggang isang oras bago subukang kumonekta.",
  "flash_hint_install_drivers": "• Kung ikaw ay nasa Windows, tiyaking mayroon kang <a href='https://innioasis.app/guide.html'>Naka-install ang Mga Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• Ang mga Windows PC ay dapat na i-restart pagkatapos i-install ang driver bago ang unang paggamit.",
  "flash_keep_data_option": "Panatilihin ang aking mga setting",
  "flash_keep_settings_option": "Panatilihin ang aking mga setting at media",
  "keep_data_running_fmt": "Naka-install na ba ang {software} sa iyong {model}?",

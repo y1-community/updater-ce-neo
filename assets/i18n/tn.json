@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kgaola thapo ya USB mme o dirise setshwareledi sa pampiri kgotsa pin go tobetsa konopo ya go seta gape, o bo o leka go golaganya gape.",
  "flash_hint_wall_charger": "• Go kgothaletswa go golaganya setshamekisi le tšhaja ya lebota metsotso e le 30 go ya go ura pele o leka go golaganya.",
  "flash_hint_install_drivers": "• Fa e le gore o mo Windows, netefatsa gore o tsentse Dikgweetsi</a>.",
+ "flash_hint_windows_reboot_driver": "• Di-PC tsa Windows di tshwanetse go simololwa gape morago ga go tsenya mokgweetsi pele ga tiriso ya ntlha.",
  "flash_keep_data_option": "Boloka diseting tsa me",
  "flash_keep_settings_option": "Boloka diseting tsa me le media",
  "keep_data_running_fmt": "A {software} e setse e tsentswe mo {model} ya gago?",

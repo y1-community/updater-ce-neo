@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Datgysylltwch y cebl USB a defnyddiwch glip papur neu bin i wasgu'r botwm ailosod, yna ceisiwch gysylltu eto.",
  "flash_hint_wall_charger": "• Argymhellir cysylltu'r chwaraewr â charger wal am 30 munud i awr cyn ceisio cysylltu.",
  "flash_hint_install_drivers": "• Os ydych ar Windows, sicrhewch eich bod wedi <a href='https://innioasis.app/guide.html'>Gosod y Gyrwyr</a>.",
+ "flash_hint_windows_reboot_driver": "• Dylid ailgychwyn cyfrifiaduron Windows ar ôl gosod y gyrrwr cyn eu defnyddio gyntaf.",
  "flash_keep_data_option": "Cadw fy gosodiadau",
  "flash_keep_settings_option": "Cadw fy gosodiadau a chyfryngau",
  "keep_data_running_fmt": "Ydy {software} eisoes wedi'i osod ar eich {model}?",

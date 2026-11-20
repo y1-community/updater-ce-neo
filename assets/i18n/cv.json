@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB кабеле уйӑрӑр та скрепкӑпа е булавкӑпа усӑ курса сброс кнопкине пусӑр, унтан тепӗр хут ҫыхӑнтарма тӑрӑшӑр.",
  "flash_hint_wall_charger": "• Плеера ҫыхӑнтарма тӑрӑшиччен 30 минутран пуҫласа пӗр сехет хушши стена ҫинчи зарядник ҫумне ҫыхӑнтарма сӗнеҫҫӗ.",
  "flash_hint_install_drivers": "• Енчен те эсир Windows ҫинче пулсан, <a href='https://innioasis.app/guide.html'>Драйверсене вырнаҫтарнине ҫирӗплетӗр</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows ПК-сене пӗрремӗш хут усӑ куриччен драйвера вырнаҫтарнӑ хыҫҫӑн ҫӗнӗрен пуҫламалла.",
  "flash_keep_data_option": "Манӑн настройкӑсене упрӑр",
  "flash_keep_settings_option": "Манӑн настройкӑсемпе медиана упрӑр",
  "keep_data_running_fmt": "Сирӗн {software} сирӗн {model} ҫинче вырнаҫтарнӑ-и?",

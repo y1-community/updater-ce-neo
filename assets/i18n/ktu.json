@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Katula nsinga ya USB mpi sadila clip to pin sambu na kubula bouton ya reset, na nima meka kukangama diaka.",
  "flash_hint_wall_charger": "• Yo kele mbote na kukanga lecteur na chargeur ya kibaka na nsungi ya miniti 30 tii na ngunga mosi na ntwala ya kumeka kukanga yo.",
  "flash_hint_install_drivers": "• Kana nge kele na Windows, zikisa nde nge me tula ba Pilote</a>.",
+ "flash_hint_windows_reboot_driver": "• Ba ordinatere ya Windows fwete yantika diaka na nima ya kutula pilote na ntwala ya kusadila yo mbala ya ntete.",
  "flash_keep_data_option": "Tanina baparametre na mono .",
  "flash_keep_settings_option": "Bumba baparametre mpi bamedia na mono .",
  "keep_data_running_fmt": "Keti {software} me tulama dezia na {model} na nge?",

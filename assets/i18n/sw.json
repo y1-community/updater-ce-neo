@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Tenganisha kebo ya USB na utumie karatasi au pini ili kubofya kitufe cha kuweka upya, kisha ujaribu kuunganisha tena.",
  "flash_hint_wall_charger": "• Inashauriwa kuunganisha mchezaji kwenye chaja ya ukuta kwa dakika 30 hadi saa moja kabla ya kujaribu kuunganisha.",
  "flash_hint_install_drivers": "• Ikiwa unatumia Windows, hakikisha kuwa <a href='https://innioasis.app/guide.html'>Umesakinisha Viendeshi</a>.",
+ "flash_hint_windows_reboot_driver": "• Kompyuta za Windows zinapaswa kuwashwa upya baada ya kusakinisha kiendeshi kabla ya matumizi ya kwanza.",
  "flash_keep_data_option": "Weka mipangilio yangu",
  "flash_keep_settings_option": "Weka mipangilio na midia yangu",
  "keep_data_running_fmt": "Je, {software} tayari imesakinishwa kwenye {model} yako?",

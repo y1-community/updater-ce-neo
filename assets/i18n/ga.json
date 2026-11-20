@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Déan an cábla USB a dhícheangal agus bain úsáid as fáiscín páipéir nó bioráin chun an cnaipe athshocraithe a bhrú, agus ansin déan iarracht nascadh arís.",
  "flash_hint_wall_charger": "• Moltar an t-imreoir a nascadh le charger balla ar feadh 30 nóiméad go uair an chloig roimh iarracht a dhéanamh nascadh.",
  "flash_hint_install_drivers": "• Má tá tú ar Windows, cinntigh go bhfuil <a href='https://innioasis.app/guide.html'>Na Tiománaithe suiteáilte agat</a>.",
+ "flash_hint_windows_reboot_driver": "• Ba chóir ríomhairí pearsanta Windows a atosú tar éis an tiománaí a shuiteáil roimh é a úsáid den chéad uair.",
  "flash_keep_data_option": "Coinnigh mo chuid socruithe",
  "flash_keep_settings_option": "Coinnigh mo shocruithe agus meáin",
  "keep_data_running_fmt": "An bhfuil {software} suiteáilte ar do {model} cheana?",

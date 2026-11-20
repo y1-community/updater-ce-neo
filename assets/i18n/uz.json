@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "USB kabelini ajratib oling va qayta o'rnatish tugmasini bosish uchun qog'oz qisqichi yoki pindan foydalaning, so'ngra qayta ulanishga urinib ko'ring.",
  "flash_hint_wall_charger": "• Ulanishdan oldin pleerni devordagi zaryadlovchiga 30 daqiqadan bir soatgacha ulash tavsiya etiladi.",
  "flash_hint_install_drivers": "• Agar siz Windows operatsion tizimida bo'lsangiz, <a href='https://innioasis.app/guide.html'>Drayverlarni o'rnatganingizga</a> ishonch hosil qiling.",
+ "flash_hint_windows_reboot_driver": "• Windows kompyuterlari drayverni o'rnatgandan so'ng birinchi foydalanishdan oldin qayta ishga tushirilishi kerak.",
  "flash_keep_data_option": "Sozlamalarimni saqlang",
  "flash_keep_settings_option": "Sozlamalarim va mediani saqlang",
  "keep_data_running_fmt": "{model} qurilmangizga {software} oʻrnatilganmi?",

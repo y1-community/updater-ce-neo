@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Debrancher fiil USB bi nga jëfandikoo clip wala pin ngir tëye butoŋu reset bi, ba noppi jéemaat boolewaat.",
  "flash_hint_wall_charger": "• Dañu lay digal nga boole lecteur bi ak sarseer bi ci kuuraŋ bi 30 simili wala benn waxtu balaa ngay jéema boole.",
  "flash_hint_install_drivers": "• Soo nekkee ci Windows, fexeel nga samp Dawalkat yi</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows yi dañu leen wara tàmbaliwaat ginaaw boo instalee dawalkat bi laata ñuy njëkka jëfandikoo.",
  "flash_keep_data_option": "Denc samay jekkal",
  "flash_keep_settings_option": "Denc samay jekkal ak samay mejaa",
  "keep_data_running_fmt": "Ndax {software} def nañu ko ci sa {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Gwisya ntambo ya USB mpawo ubelesye chipepa naakuti pini kuti utyanke bbatani lyakubweedezya, mpawo usole kuswanizya alimwi.",
  "flash_hint_wall_charger": "• Nchintu chibotu kuti sikusobana ukaswaanganizyigwe kuchaja yabwaanda kwamaminiti aali 30 kusikila kuwoola lyomwe kotanasola kujatanisya.",
  "flash_hint_install_drivers": "• Kuti koli aWindows, kosinizya kuti <a href='https://innioasis.app/guide.html'>wakabikka ma Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Ma PC aaWindows ayelede kutalika alimwi musule aakubikka bbaasi kaatanabelesegwa.",
  "flash_keep_data_option": "Kobamba zyintu zyangu",
  "flash_keep_settings_option": "Kobamba zyintu zyangu azintu zyangu",
  "keep_data_running_fmt": "Sena {software} yabikkwa kale a {model} yako?",

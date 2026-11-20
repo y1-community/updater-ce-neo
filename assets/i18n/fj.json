@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Vakasuka na wa ni USB ka vakayagataka e dua na pepa se pini me tabaka na ibulukau ni vakavoui, qai tovolea mo semati tale.",
  "flash_hint_wall_charger": "• E vakatututaki me semati na dauqito ki na dua na charger ni bai me baleta na 30 na miniti ki na dua na auwa ni bera ni tovolea me semati.",
  "flash_hint_install_drivers": "• Kevaka o tiko ena katubaleka, vakadeitaka ni sa vakacurumi na Draiva</a>.",
+ "flash_hint_windows_reboot_driver": "• Na PC ni katubaleka e dodonu me tekivutaki tale ni oti na kena vakacurumi na draiva ni bera ni vakayagataki taumada.",
  "flash_keep_data_option": "Maroroya na noqu ituvatuva",
  "flash_keep_settings_option": "Maroroya na noqu ituvatuva kei na itukutuku .",
  "keep_data_running_fmt": "Sa vakacurumi oti beka na {software} ena nomu {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Odklopite kabel USB in s sponko za papir ali buciko pritisnite gumb za ponastavitev, nato poskusite znova vzpostaviti povezavo.",
  "flash_hint_wall_charger": "• Priporočljivo je, da predvajalnik priključite na stenski polnilnik za 30 minut do eno uro, preden poskusite vzpostaviti povezavo.",
  "flash_hint_install_drivers": "• Če uporabljate Windows, se prepričajte, da ste <a href='https://innioasis.app/guide.html'>namestili gonilnike</a>.",
+ "flash_hint_windows_reboot_driver": "• Računalnike z operacijskim sistemom Windows je treba po namestitvi gonilnika pred prvo uporabo znova zagnati.",
  "flash_keep_data_option": "Ohrani moje nastavitve",
  "flash_keep_settings_option": "Ohrani moje nastavitve in medije",
  "keep_data_running_fmt": "Je {software} že nameščen na vašem {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Momotuhia te taura USB ka whakamahi i te tope pepa, titi ranei hei pehi i te paatene tautuhi, ka ngana ki te hono ano.",
  "flash_hint_wall_charger": "• E taunaki ana kia honoa te kaitakaro ki te riihi pakitara mo te 30 meneti ki te haora i mua i te ngana ki te hono.",
  "flash_hint_install_drivers": "• Mēnā kei runga koe i te Matapihi, whakarite kia <a href='https://innioasis.app/guide.html'>Kua Tāutahia nga Atekōkiri</a>.",
+ "flash_hint_windows_reboot_driver": "• Me whakaara ano nga PC Windows i muri i te whakaurunga o te atekōkiri i mua i te whakamahinga tuatahi.",
  "flash_keep_data_option": "Kia mau ki aku tautuhinga",
  "flash_keep_settings_option": "Kia mau ki aku tautuhinga me aku papapāho",
  "keep_data_running_fmt": "Kua tāuta kētia te {software} ki tō {model}?",

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kwanyo waya me USB ni ki tii ki gin ma ki lwongo ni paperclip onyo pin me dii bute ma ki lwongo ni reset button, ki dong tem keto ne odoco.",
  "flash_hint_wall_charger": "• Ki waco ni omyero i ket gin ma tuku ni i kom gin ma ki lwongo ni wall charger pi dakika 30 onyo cawa acel ma pwod pi itemo keto ne.",
  "flash_hint_install_drivers": "• Ka itye i Windows, nen ni itye ki <a href='https://innioasis.app/guide.html'>Iketo Drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs omyera ki cak odoco ingee keto driver ma peya ki tiyo kwede mukwongo.",
  "flash_keep_data_option": "Gwok jami ma aketo",
  "flash_keep_settings_option": "Gwok jami ma aketo ki jami ma atiyo kwede",
  "keep_data_running_fmt": "{software} dong ki keto i {model} ni?",

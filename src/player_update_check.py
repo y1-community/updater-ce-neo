@@ -107,8 +107,9 @@ def update_notification_due(installed_tag: str, latest_tag: str, ceiling: str = 
     if not latest_tag or latest_tag == installed_tag:
         return False
     latest_key = _tag_sort(latest_tag)
-    if latest_key <= _tag_sort(installed_tag):
-        return False
+    if str(installed_tag).strip().casefold() != "unknown":
+        if latest_key <= _tag_sort(installed_tag):
+            return False
     if ceiling and latest_key <= _tag_sort(ceiling):
         return False
     return True
@@ -1131,9 +1132,36 @@ def check_device_updates(
             latest_rel = releases[0]
             latest_tag = latest_rel.get("tag_name", "")
 
-            # If the user doesn't know the version, any release is news.
+            # If the user doesn't know the version, compare chronologically
             if str(installed_tag).strip().casefold() == "unknown":
-                pass
+                published_at = str(latest_rel.get("published_at") or "").strip()
+                installed_at = str(install.get("installed_at") or "").strip()
+                is_newer = (published_at > installed_at) if (published_at and installed_at) else True
+
+                # Check if user chose "Do not remind me about this release"
+                if not ignore_last_notified and is_release_skipped(model, latest_tag, settings=settings):
+                    continue
+
+                # Check if already notified about this exact tag
+                last_notified = get_last_notified_tag(model, settings=settings)
+                if not ignore_last_notified and last_notified == latest_tag:
+                    continue
+
+                if is_newer and update_notification_due(
+                    installed_tag, latest_tag, install.get("notify_ceiling") or ""
+                ):
+                    updates.append({
+                        "model": model,
+                        "software_name": matched_pkg.name,
+                        "package": matched_pkg,
+                        "installed_tag": installed_tag,
+                        "installed_label": install.get("release_label") or installed_tag,
+                        "installed_at": install.get("installed_at", ""),
+                        "latest_release": latest_rel,
+                        "latest_tag": latest_tag,
+                        "latest_label": catalog.format_release_display_label(latest_rel),
+                    })
+                continue
             elif not latest_tag or latest_tag == installed_tag:
                 continue
 

@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Desconecte o cabo USB e use um clipe de papel ou alfinete para pressionar o botão de reinicialização e tente conectar novamente.",
  "flash_hint_wall_charger": "• Recomenda-se conectar o reprodutor a um carregador de parede por 30 minutos a uma hora antes de tentar conectar.",
  "flash_hint_install_drivers": "• Se você estiver no Windows, certifique-se de ter <a href='https://innioasis.app/guide.html'>instalado os drivers</a>.",
+ "flash_hint_windows_reboot_driver": "• Os PCs com Windows devem ser reiniciados após a instalação do driver antes do primeiro uso.",
  "flash_keep_data_option": "Manter minhas configurações",
  "flash_keep_settings_option": "Manter minhas configurações e mídia",
  "keep_data_running_fmt": "O {software} já está instalado no seu {model}?",

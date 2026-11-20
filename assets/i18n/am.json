@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "የዩ ኤስ ቢ ገመዱን ያላቅቁት እና የዳግም ማስጀመሪያ አዝራሩን ለመጫን የወረቀት ክሊፕ ወይም ፒን ይጠቀሙ እና ከዚያ እንደገና ለመገናኘት ይሞክሩ።",
  "flash_hint_wall_charger": "• ለማገናኘት ከመሞከርዎ በፊት ተጫዋቹን ከ 30 ደቂቃ እስከ አንድ ሰአት ውስጥ ከግድግድ ቻርጅ ጋር ለማገናኘት ይመከራል.",
  "flash_hint_install_drivers": "• በዊንዶውስ ላይ ከሆኑ <a href='https://innioasis.app/guide.html'>ሾፌሮችን መጫኑን ያረጋግጡ</a>።",
+ "flash_hint_windows_reboot_driver": "• ዊንዶውስ ፒሲዎች መጀመሪያ ከመጠቀምዎ በፊት ሾፌሩን ከጫኑ በኋላ እንደገና መጀመር አለባቸው።",
  "flash_keep_data_option": "ቅንብሮቼን አቆይ",
  "flash_keep_settings_option": "የእኔን ቅንብሮች እና ሚዲያ አቆይ",
  "keep_data_running_fmt": "{software} አስቀድሞ በእርስዎ {model} ላይ ተጭኗል?",

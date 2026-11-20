@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Mo'i ese le uaea USB ma fa'aoga se kipepepe po'o se pine e oomi ai le fa'amau fa'amau, ona toe taumafai lea e fa'afeso'ota'i.",
  "flash_hint_wall_charger": "• E fautuaina e faʻafesoʻotaʻi le tagata taʻalo i se pusa puipui mo le 30 minute i le itula aʻo leʻi taumafai e faʻafesoʻotaʻi.",
  "flash_hint_install_drivers": "• Afai o e i luga ole Windows, ia mautinoa ua e <a href='https://innioasis.app/guide.html'>Fa'apipi'i Aveta'avale</a>.",
+ "flash_hint_windows_reboot_driver": "• O Windows PC e tatau ona toe amata pe a uma ona faʻapipiʻi le avetaʻavale aʻo leʻi faʻaaogaina muamua.",
  "flash_keep_data_option": "Taofi a'u faatulagaga",
  "flash_keep_settings_option": "Taofi a'u faatulagaga ma ala o faasalalauga",
  "keep_data_running_fmt": "Ua uma ona fa'apipi'i le {software} i lau {model}?",

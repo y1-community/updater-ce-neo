@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Lepasin kabel USB lan anggén penjepit kertas utawi pin antuk neken tombol reset, raris indayang sambungang malih.",
  "flash_hint_wall_charger": "• Kasaratang nyambungang pemain ring pengisi daya tembok salami 30 menit ngantos ajam sadurung nyobak nyambungang.",
  "flash_hint_install_drivers": "• Yéning Sameton nganggén Windows, pastiang Sameton sampun masang Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC Windows patut ka-restart sesampun masang driver sadurung kapertama kaanggen.",
  "flash_keep_data_option": "Simpen setélan tiangé",
  "flash_keep_settings_option": "Simpen setélan lan media tiangé",
  "keep_data_running_fmt": "Napike {software} sampun kapasang ring {model} semetone?",

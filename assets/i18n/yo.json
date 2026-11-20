@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ge asopọ okun USB ki o lo agekuru iwe tabi pin lati tẹ bọtini atunto, lẹhinna gbiyanju lati sopọ lẹẹkansii.",
  "flash_hint_wall_charger": "• A ṣe iṣeduro lati so ẹrọ orin pọ mọ ṣaja ogiri fun ọgbọn išẹju 30 si wakati kan ṣaaju igbiyanju lati sopọ.",
  "flash_hint_install_drivers": "• Ti o ba wa lori Windows, rii daju pe o ni <a href='https://innioasis.app/guide.html'>Fi sori ẹrọ Awọn Awakọ</a>.",
+ "flash_hint_windows_reboot_driver": "• Awọn PC Windows yẹ ki o tun bẹrẹ lẹhin fifi awakọ sii ṣaaju lilo akọkọ.",
  "flash_keep_data_option": "Jeki awọn eto mi",
  "flash_keep_settings_option": "Jeki eto mi ati media",
  "keep_data_running_fmt": "Njẹ {software} ti fi sii tẹlẹ lori {model} rẹ?",

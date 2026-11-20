@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Kämni USB cable raar kä lätni paperclip kiɛ pin kɛ ɣöö biɛ la̱th kä reset button, kɛ kɔrɛ biɛ nyɔk kɛ ɣɔ̱n.",
  "flash_hint_wall_charger": "• Ɛ gɔaa ɛn ɣöö deri thɛp mat kä wall charger kɛ minitni 30 ɛ wä kä thaak kɛl ɛ ŋot käni jɛ ni ɣɔ̱n ɛn ɣöö biɛ mat.",
  "flash_hint_install_drivers": "• Mi ti̱i̱ kä Windows, guic ɛ gɔaa ɛn ɣöö ci̱ ji̱n Drivers</a> la̱th thi̱n.",
+ "flash_hint_windows_reboot_driver": "• Windows PCs ba kɛ nyɔk kɛ läth lät kɛ kɔr kä mi ca driver la̱th lät ɛ ŋot kän kɛ ni lät.",
  "flash_keep_data_option": "Käpni thɛtiŋni̱kä",
  "flash_keep_settings_option": "Käpni thɛtiŋni̱kä kɛnɛ midia",
  "keep_data_running_fmt": "Ɛn {software} cɛ ku thuŋ la̱th kä {model} du?",

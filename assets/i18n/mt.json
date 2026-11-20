@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Skonnettja l-kejbil USB u uża paperclip jew pin biex tagħfas il-buttuna reset, imbagħad ipprova erġa' ikkonnettja.",
  "flash_hint_wall_charger": "• Huwa rakkomandat li tqabbad il-plejer ma 'ċarġer tal-ħajt għal 30 minuta sa siegħa qabel ma tipprova tikkonnettja.",
  "flash_hint_install_drivers": "• Jekk inti fuq Windows, kun żgur li għandek <a href='https://innioasis.app/guide.html'>Installa s-Sewwieqa</a>.",
+ "flash_hint_windows_reboot_driver": "• Il-PCs tal-Windows għandhom jerġgħu jibdew wara l-installazzjoni tas-sewwieq qabel l-ewwel użu.",
  "flash_keep_data_option": "Żomm is-settings tiegħi",
  "flash_keep_settings_option": "Żomm is-settings u l-midja tiegħi",
  "keep_data_running_fmt": "{software} diġà installat fuq il-{model} tiegħek?",

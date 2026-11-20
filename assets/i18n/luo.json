@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Ong’ad kebo mar USB kendo oti gi gimoro ma iketoe otas kata pin mondo idi baton mar reset, kae to tem keto kendo.",
  "flash_hint_wall_charger": "• Ober ni iket playerno e chaja ma iketo e wi ohinga kuom dakika 30 nyaka saa achiel kapok itemo keto.",
  "flash_hint_install_drivers": "• Ka in gi Windows, ne ni iketo Driver</a>.",
+ "flash_hint_windows_reboot_driver": "• PC ma nigi Windows onego ochak tiyo kendo bang’ keto draiva kapok otigodo mokuongo.",
  "flash_keep_data_option": "Ket chenro ma an-go",
  "flash_keep_settings_option": "Ket chenro kod gik ma itiyogo",
  "keep_data_running_fmt": "Be {software} oseket e {model} mari?",

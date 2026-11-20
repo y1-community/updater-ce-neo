@@ -319,6 +319,7 @@
  "flash_paperclip_explanation": "Անջատեք USB մալուխը և օգտագործեք թղթի սեղմիչ կամ սեղմակ՝ սեղմելու վերակայման կոճակը, այնուհետև նորից փորձեք միացնել:",
  "flash_hint_wall_charger": "• Խորհուրդ է տրվում միացնել նվագարկիչը պատի լիցքավորիչին 30 րոպեից մեկ ժամ առաջ միացնելուց առաջ:",
  "flash_hint_install_drivers": "• Եթե Windows-ում եք, համոզվեք, որ դուք <a href='https://innioasis.app/guide.html'>տեղադրել եք դրայվերները</a>:",
+ "flash_hint_windows_reboot_driver": "• Windows ԱՀ-ները պետք է վերագործարկվեն վարորդը տեղադրելուց հետո՝ առաջին անգամ օգտագործելուց առաջ:",
  "flash_keep_data_option": "Պահպանեք իմ կարգավորումները",
  "flash_keep_settings_option": "Պահպանեք իմ կարգավորումներն ու մեդիան",
  "keep_data_running_fmt": "Արդյո՞ք {software}-ն արդեն տեղադրված է ձեր {model}-ի վրա:",

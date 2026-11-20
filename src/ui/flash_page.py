@@ -1895,6 +1895,9 @@ class FlashPage(QWidget):
         # before the backend can answer the handshake.
         self._connect_get_ready_active = False
         self._connect_prompt_revealed = False
+        self._write_100_start_time: float | None = None
+        self._write_exceeded_100: bool = False
+        self._write_100_timer = None
         # A new backend search line gets a fresh handshake window even when
         # the power-off card already put the connect sentence on screen and
         # that early window expired while the tool was still starting.
@@ -2307,6 +2310,13 @@ class FlashPage(QWidget):
 
         self._driver_hint_widget.setVisible(False)
         hint_layout.addWidget(self._driver_hint_widget)
+
+        self._driver_reboot_hint_label = QLabel(tr("flash_hint_windows_reboot_driver"))
+        self._driver_reboot_hint_label.setProperty("cssClass", "dimmed")
+        self._driver_reboot_hint_label.setStyleSheet(f"font-size: {_BODY_PX}px;")
+        self._driver_reboot_hint_label.setWordWrap(True)
+        self._driver_reboot_hint_label.setVisible(False)
+        hint_layout.addWidget(self._driver_reboot_hint_label)
 
         self._paperclip_hint_host.setVisible(False)
         # Above the tick, which sits below it: the hint says how to power the
@@ -2901,18 +2911,24 @@ class FlashPage(QWidget):
                 self._driver_hint_widget.setVisible(False)
             if hasattr(self, "_driver_hint_label"):
                 self._driver_hint_label.setVisible(False)
+            if hasattr(self, "_driver_reboot_hint_label"):
+                self._driver_reboot_hint_label.setVisible(False)
             if img_label is not None:
                 img_label.setFixedSize(0, 0)
             host.setMinimumHeight(0)
             self._note_paperclip_visibility_change(was_hidden)
             return
 
-        is_windows = sys.platform == "win32"
+        from .. import paths
+        is_windows = bool(paths.IS_WINDOWS)
+        drivers_installed = paths.windows_sp_drivers_installed()
         self._charger_hint_label.setVisible(True)
         if hasattr(self, "_driver_hint_widget"):
-            self._driver_hint_widget.setVisible(is_windows)
+            self._driver_hint_widget.setVisible(is_windows and not drivers_installed)
         elif hasattr(self, "_driver_hint_label"):
-            self._driver_hint_label.setVisible(is_windows)
+            self._driver_hint_label.setVisible(is_windows and not drivers_installed)
+        if hasattr(self, "_driver_reboot_hint_label"):
+            self._driver_reboot_hint_label.setVisible(is_windows)
 
         if is_connect:
             from ..config import device_label_for_model, is_a5_model
@@ -3295,10 +3311,36 @@ class FlashPage(QWidget):
         self._connect_get_ready_active = False
         self._connect_search_seen = False
 
+    def _reset_write_progress(self) -> None:
+        self._write_100_start_time = None
+        self._write_exceeded_100 = False
+        timer = getattr(self, "_write_100_timer", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
+        for bar in (getattr(self, "_progress_bar", None), getattr(self, "_wait_progress_bar", None)):
+            if bar is not None:
+                bar.setTextVisible(True)
+                if not getattr(bar, "is_getting_ready", lambda: False)():
+                    bar.setFormat("%p%")
+
+    def _on_write_100_timeout(self) -> None:
+        if getattr(self, "_complete", False) or getattr(self, "_failed", False):
+            return
+        for bar in (getattr(self, "_progress_bar", None), getattr(self, "_wait_progress_bar", None)):
+            if bar is not None:
+                bar.setTextVisible(False)
+                bar.setFormat("")
+        part_lbl = getattr(self, "_partition_progress_label", None)
+        if part_lbl is not None and part_lbl.isVisible():
+            part_lbl.clear()
+            part_lbl.setVisible(False)
+            self._notify_geometry_change()
+
     def reset_connect_session(self) -> None:
         """Reset the connect prompt state for a completely new install session."""
         self._reset_connect_prompt_delay()
         self._connect_prompt_revealed = False
+        self._reset_write_progress()
 
     def _finish_connect_prompt_delay(self) -> None:
         """Stop the window once the device is detected or the stage moved on."""
@@ -3518,6 +3560,7 @@ class FlashPage(QWidget):
 
     def show_flashing(self):
         logger.info("show_flashing called, _complete=%s", getattr(self, "_complete", False))
+        self._reset_write_progress()
         self._finish_connect_prompt_delay()
         self._cleanup_mode = False
         self.show_install_app(False)
@@ -5590,7 +5633,7 @@ class FlashPage(QWidget):
             return
         label = getattr(self, "_paperclip_hint", None)
         w = host.width() if host.width() > 0 else (label.width() if label and label.width() > 0 else INSTALL_TEXT_WIDTH)
-        for lbl in (label, getattr(self, "_charger_hint_label", None), getattr(self, "_driver_hint_label", None)):
+        for lbl in (label, getattr(self, "_charger_hint_label", None), getattr(self, "_driver_hint_label", None), getattr(self, "_driver_reboot_hint_label", None)):
             if lbl is not None and hasattr(lbl, "set_measure_width") and w > 0:
                 lbl.set_measure_width(w)
         wanted = host.heightForWidth(w)
@@ -6041,6 +6084,8 @@ class FlashPage(QWidget):
             self._driver_hint_label.setText(clean_driver)
         if hasattr(self, "_driver_hint_btn"):
             self._driver_hint_btn.setText(tr("settings_download_drivers_btn"))
+        if hasattr(self, "_driver_reboot_hint_label"):
+            self._driver_reboot_hint_label.setText(tr("flash_hint_windows_reboot_driver"))
         self._update_paperclip_hint()
         self._update_keep_data_warning()
         if hasattr(self, "_post_install_hint"):
@@ -7033,11 +7078,53 @@ class FlashPage(QWidget):
         self._set_determinate(self._prep_progress, percent)
 
     def update_progress(self, percent):
+        if (
+            getattr(self, "_cleanup_stage", False)
+            or (getattr(self, "themes", None) is not None and self.themes.active)
+            or getattr(self, "_complete", False)
+            or getattr(self, "_failed", False)
+        ):
+            return
+        import time
+
         try:
-            val = float(percent or 0)
+            raw_val = float(percent or 0)
         except (TypeError, ValueError):
-            val = 0.0
-        val = max(0.0, min(100.0, val))
+            raw_val = 0.0
+
+        if raw_val > 100.0:
+            self._write_exceeded_100 = True
+
+        now = time.monotonic()
+        if raw_val >= 100.0:
+            if getattr(self, "_write_100_start_time", None) is None:
+                self._write_100_start_time = now
+                timer = getattr(self, "_write_100_timer", None)
+                if timer is None:
+                    from PySide6.QtCore import QTimer
+
+                    timer = QTimer(self)
+                    timer.setSingleShot(True)
+                    timer.timeout.connect(self._on_write_100_timeout)
+                    self._write_100_timer = timer
+                if not timer.isActive():
+                    timer.start(2000)
+        else:
+            if not getattr(self, "_write_exceeded_100", False):
+                self._write_100_start_time = None
+                timer = getattr(self, "_write_100_timer", None)
+                if timer is not None and timer.isActive():
+                    timer.stop()
+
+        hide_percentage = (
+            getattr(self, "_write_exceeded_100", False)
+            or (
+                getattr(self, "_write_100_start_time", None) is not None
+                and (now - self._write_100_start_time >= 2.0)
+            )
+        )
+
+        val = max(0.0, min(100.0, raw_val))
         if getattr(self, "_getting_ready", False) and val > 12.5:
             self.set_getting_ready(False)
         if (
@@ -7061,7 +7148,31 @@ class FlashPage(QWidget):
         if self._stack.currentWidget() is self._waiting_view and not self._prompt_only:
             self._set_determinate(self._wait_progress_bar, val)
 
+        for bar in (self._progress_bar, getattr(self, "_wait_progress_bar", None)):
+            if bar is not None:
+                if hide_percentage:
+                    bar.setTextVisible(False)
+                    bar.setFormat("")
+                else:
+                    bar.setTextVisible(True)
+                    if not getattr(bar, "is_getting_ready", lambda: False)():
+                        bar.setFormat("%p%")
+
+        if hide_percentage:
+            part_lbl = getattr(self, "_partition_progress_label", None)
+            if part_lbl is not None and part_lbl.isVisible():
+                part_lbl.clear()
+                part_lbl.setVisible(False)
+                self._notify_geometry_change()
+
     def update_step(self, step_key):
+        if (
+            getattr(self, "_cleanup_stage", False)
+            or (getattr(self, "themes", None) is not None and self.themes.active)
+            or getattr(self, "_complete", False)
+            or getattr(self, "_failed", False)
+        ):
+            return
         self._step_key = step_key
         if getattr(self, "_stop_open", False):
             self._apply_stop_hold()
@@ -7085,6 +7196,8 @@ class FlashPage(QWidget):
         label = getattr(self, "_partition_progress_label", None)
         if label is None:
             return
+        import time
+
         text = str(text or "").strip()
         if (
             not text
@@ -7093,6 +7206,11 @@ class FlashPage(QWidget):
             or getattr(self, "_cleanup_stage", False)
             or getattr(self, "_prompt_only", False)
             or (hasattr(self, "themes") and self.themes.active)
+            or getattr(self, "_write_exceeded_100", False)
+            or (
+                getattr(self, "_write_100_start_time", None) is not None
+                and (time.monotonic() - self._write_100_start_time >= 2.0)
+            )
         ):
             label.clear()
             label.setVisible(False)
@@ -7184,7 +7302,11 @@ class FlashPage(QWidget):
         self._action_shown_text = text
 
     def _action_apply_text(self, text):
-        if getattr(self, "themes", None) is not None and (self.themes.active or self._cleanup_stage):
+        if (
+            getattr(self, "themes", None) is not None and (self.themes.active or self._cleanup_stage)
+            or getattr(self, "_complete", False)
+            or getattr(self, "_failed", False)
+        ):
             return
         self._action_label.setText(text)
         if text and not getattr(self, "_stop_open", False) and not getattr(self, "_failed", False) and not self.themes.transfer_running:
@@ -7196,6 +7318,13 @@ class FlashPage(QWidget):
             self._notify_geometry_change()
 
     def update_time(self, elapsed, eta):
+        if (
+            getattr(self, "_cleanup_stage", False)
+            or (getattr(self, "themes", None) is not None and self.themes.active)
+            or getattr(self, "_complete", False)
+            or getattr(self, "_failed", False)
+        ):
+            return
         self._elapsed_row.set_value(elapsed)
         self._eta_row.set_value(eta)
         self._refresh_eta_label(eta)
@@ -7312,6 +7441,8 @@ class FlashPage(QWidget):
             self._driver_hint_label.setText(clean_driver)
         if hasattr(self, "_driver_hint_btn"):
             self._driver_hint_btn.setText(tr("settings_download_drivers_btn"))
+        if hasattr(self, "_driver_reboot_hint_label"):
+            self._driver_reboot_hint_label.setText(tr("flash_hint_windows_reboot_driver"))
         self._update_paperclip_hint()
         self._sync_wait_band_page()
         if hasattr(self, "_post_install_hint"):
