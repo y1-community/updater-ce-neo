@@ -3551,6 +3551,15 @@ class MainWindow(QMainWindow):
         from time import monotonic
         from ..progress_model import format_size_bytes
 
+        if total > 0 and downloaded >= total:
+            # Theme download finished: stop showing download progress and ETA
+            try:
+                if hasattr(self, "_flash_page"):
+                    self._flash_page.set_theme_download_status("")
+            except Exception:
+                pass
+            return
+
         now = monotonic()
         elapsed = max(0.001, now - getattr(self, "_theme_update_last_time", now))
         delta = max(0, int(downloaded) - getattr(self, "_theme_update_last_bytes", 0))
@@ -7338,9 +7347,10 @@ class MainWindow(QMainWindow):
                 getattr(self, "_used_sp_backend", False)
                 or backend_method(getattr(self, "_flash_method", "")) == METHOD_SP
             )
-            if is_sp_install:
+            rebooted_via_cleanup = getattr(self, "_rockbox_cleanup_started", False)
+            if is_sp_install or rebooted_via_cleanup:
                 self._append_log(
-                    "Notice: SP Flash Tool install detected, starting automated Rockbox themes flow "
+                    "Notice: Automated Rockbox themes flow "
                     "(waiting for the player to appear over ADB, no user interaction required)..."
                 )
                 self._start_themes_stage(

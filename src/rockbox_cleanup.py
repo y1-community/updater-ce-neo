@@ -160,21 +160,25 @@ class AdbRockboxCleanupWorker(QThread):
                 return
             self.progress.emit(5, 100)
             dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
-            if not dirs:
-                self.progress.emit(100, 100)
-                self.finished.emit(True, "No .rockbox folder was found on the player")
-                return
-            self.log.emit(
-                f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): {', '.join(dirs)}"
-            )
-            self.progress.emit(30, 100)
-            ok, message = _adb.adb_delete_rockbox_dirs(
-                self._adb,
-                self._serial,
-                dirs,
-                cancel_cb=self.isInterruptionRequested,
-                log_cb=self.log.emit,
-            )
+            if dirs:
+                self.log.emit(
+                    f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): {', '.join(dirs)}"
+                )
+                self.progress.emit(30, 100)
+                ok, message = _adb.adb_delete_rockbox_dirs(
+                    self._adb,
+                    self._serial,
+                    dirs,
+                    cancel_cb=self.isInterruptionRequested,
+                    log_cb=self.log.emit,
+                )
+            else:
+                ok = True
+                message = "No .rockbox folder was found on the player"
+
+            self.progress.emit(70, 100)
+            self.log.emit("[Rockbox Cleanup] Automatically rebooting device via ADB so Rockbox can populate a new .rockbox folder...")
+            _adb.adb_reboot(self._adb, self._serial)
             self.progress.emit(100, 100)
             self.finished.emit(ok, message)
         except Exception as e:
@@ -200,19 +204,33 @@ class LocalRockboxCleanupWorker(QThread):
                 return
             self.progress.emit(10, 100)
             dirs = find_rockbox_dirs(self._selected)
-            if not dirs:
-                self.progress.emit(100, 100)
-                self.finished.emit(True, "No .rockbox folder was found in the selected folder", 0)
-                return
-            self.log.emit(
-                f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): "
-                + ", ".join(str(p) for p in dirs)
-            )
-            ok, message, count = delete_local_rockbox_dirs(
-                dirs,
-                log_cb=self.log.emit,
-                cancel_cb=self.isInterruptionRequested,
-            )
+            if dirs:
+                self.log.emit(
+                    f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): "
+                    + ", ".join(str(p) for p in dirs)
+                )
+                ok, message, count = delete_local_rockbox_dirs(
+                    dirs,
+                    log_cb=self.log.emit,
+                    cancel_cb=self.isInterruptionRequested,
+                )
+            else:
+                ok = True
+                message = "No .rockbox folder was found in the selected folder"
+                count = 0
+
+            # Reboot device via ADB if binary is available so Rockbox populates a new .rockbox folder
+            from .adb import find_adb_binary, adb_devices, adb_reboot
+            adb_bin = find_adb_binary()
+            if adb_bin:
+                try:
+                    devs = adb_devices(adb_bin)
+                    if devs:
+                        self.log.emit(f"[Rockbox Cleanup] Automatically rebooting {devs[0]} via ADB so Rockbox can populate a new .rockbox folder...")
+                        adb_reboot(adb_bin, devs[0])
+                except Exception:
+                    pass
+
             self.progress.emit(100, 100)
             self.finished.emit(ok, message, count)
         except Exception as e:

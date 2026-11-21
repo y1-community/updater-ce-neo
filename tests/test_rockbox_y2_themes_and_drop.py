@@ -233,3 +233,49 @@ def test_is_rockbox_android_port_assumptions():
     assert is_rockbox_android_port(pkg_false_str) is False
 
 
+def test_keep_data_label_model_distinction():
+    from src.i18n import tr
+    from src.keep_data import keep_data_label
+
+    # Y1 is settings only (media retained on MicroSD)
+    assert keep_data_label("Y1") == tr("flash_keep_data_option")
+    # Y2 is settings and media (internal MMC + MicroSD)
+    assert keep_data_label("Y2") == tr("flash_keep_settings_option")
+
+
+def test_set_theme_download_status_clearing():
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    try:
+        page.set_theme_download_status("Downloading 45% (40 MB of 86 MB) · 5 MB/s")
+        assert "Downloading 45%" in page._step_label.text()
+
+        # When download finishes and empty string is passed, status label must be cleared
+        page.set_theme_download_status("")
+        assert page._step_label.text() == ""
+    finally:
+        page.close()
+        app.processEvents()
+
+
+def test_adb_rockbox_cleanup_worker_reboots():
+    from src import adb as adbmod
+    from src.rockbox_cleanup import AdbRockboxCleanupWorker
+
+    reboot_calls = []
+    del_calls = []
+
+    with patch.object(adbmod, "adb_find_all_rockbox_dirs", return_value=["/sdcard/.rockbox"]), \
+         patch.object(adbmod, "adb_delete_rockbox_dirs", side_effect=lambda a, s, d, **kw: del_calls.append(d) or (True, "Deleted")), \
+         patch.object(adbmod, "adb_reboot", side_effect=lambda a, s: reboot_calls.append((a, s)) or True):
+
+        worker = AdbRockboxCleanupWorker("adb", "SERIAL123")
+        worker.run()
+
+        assert del_calls == [["/sdcard/.rockbox"]]
+        assert reboot_calls == [("adb", "SERIAL123")]
+
+
+

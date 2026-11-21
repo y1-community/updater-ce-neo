@@ -3421,8 +3421,12 @@ class FlashPage(QWidget):
 
     def set_theme_download_status(self, text: str) -> None:
         """Show the theme-pack download line on the install card itself."""
-        if hasattr(self, "_step_label") and text:
-            self._step_label.setText(text)
+        if hasattr(self, "_step_label"):
+            if text:
+                self._step_label.setText(text)
+            else:
+                default_step = tr("rockbox_cleanup_step") if self._cleanup_stage else tr("rockbox_stage_installing")
+                self._step_label.setText(default_step if (getattr(self, "themes", None) and self.themes.active) else "")
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()

@@ -1943,13 +1943,21 @@ class Rockbox360pSetupWizard(QDialog):
             push = getattr(self, "_push_worker", None)
             pushing = push is not None and push.isRunning()
             if idx == 1 and not pushing and not getattr(self, "_via_adb", False):
-                text = f"{label}: {done}/{total}" if total else str(label)
-                self._adb_status.setText(text)
-                if total:
-                    self._adb_bar.setValue(int(done / total * 100))
+                if total > 0 and done >= total:
+                    self._adb_status.setText(tr("rockbox_wizard_adb_searching"))
+                    self._adb_bar.setValue(0)
+                else:
+                    text = f"{label}: {done}/{total}" if total else str(label)
+                    self._adb_status.setText(text)
+                    if total:
+                        self._adb_bar.setValue(int(done / total * 100))
             elif idx == 2 and getattr(self, "_usb_target", None) is None:
-                self._usb_status.setVisible(True)
-                self._usb_status.setText(f"{label}: {done}/{total}" if total else str(label))
+                if total > 0 and done >= total:
+                    self._usb_status.setVisible(False)
+                    self._usb_status.setText("")
+                else:
+                    self._usb_status.setVisible(True)
+                    self._usb_status.setText(f"{label}: {done}/{total}" if total else str(label))
         except Exception:
             pass
 

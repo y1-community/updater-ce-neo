@@ -519,7 +519,14 @@ def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, ha
 
 
 def keep_data_label(model: str) -> str:
-    """One novice-facing label for every model; the warning carries the detail."""
+    """Label for Keep Settings / Media checkbox depending on model.
+
+    On Y1: "Keep my settings" (settings only - all media is retained on MicroSD).
+    On Y2: "Keep my settings and media" (both internal MMC and external MicroSD).
+    """
+    from .config import is_y2_model
     from .i18n import tr
 
+    if is_y2_model(model):
+        return tr("flash_keep_settings_option")
     return tr("flash_keep_data_option")
