@@ -42,6 +42,9 @@ class ThemesJourney:
         self._purpose = PURPOSE_THEMES
         self.payload_zip_path = None
         self.is_standalone = False
+        self.is_custom_theme = False
+        self.custom_theme_count = 0
+        self.custom_theme_name = ""
         self.rb_themes_path_fix = None
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
@@ -214,6 +217,9 @@ class ThemesJourney:
         self._prompt_pending = False
         self.payload_zip_path = None
         self.is_standalone = False
+        self.is_custom_theme = False
+        self.custom_theme_count = 0
+        self.custom_theme_name = ""
         self.rb_themes_path_fix = None
 
     def mark_placement_failed(self) -> None:
@@ -225,9 +231,10 @@ class ThemesJourney:
     def reset_completion(self) -> None:
         """A new run starts: its completion screen has not been shown yet."""
         self.completion_shown = False
-        self.payload_zip_path = None
-        self.is_standalone = False
-        self.rb_themes_path_fix = None
+        if not getattr(self, "is_custom_theme", False):
+            self.payload_zip_path = None
+            self.is_standalone = False
+            self.rb_themes_path_fix = None
 
     def mark_completion_shown(self) -> None:
         self.completion_shown = True
@@ -296,7 +303,10 @@ class ThemesJourney:
 
         ADB wins because it can find every ``.rockbox`` mount and unpack on the
         device; a folder choice is only a fallback for when ADB cannot help.
+        Once an ADB push has failed (adb_attempted), the manual pick is honoured.
         """
+        if getattr(self, "adb_attempted", False):
+            return False
         return live_count == 1 and not self._player_taken
 
     # ------------------------------------------------------------------

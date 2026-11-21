@@ -279,7 +279,13 @@ def find_removable_rockbox_dirs() -> list[Path]:
         if sys.platform == "darwin":
             volumes = Path("/Volumes")
             if volumes.is_dir():
-                roots.extend(p for p in volumes.iterdir())
+                root_dev = os.stat("/").st_dev
+                for p in volumes.iterdir():
+                    try:
+                        if p.resolve() != Path("/").resolve() and os.stat(p).st_dev != root_dev:
+                            roots.append(p)
+                    except OSError:
+                        pass
         elif os.name == "nt":
             system = os.environ.get("SystemDrive", "C:").upper()
             for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":

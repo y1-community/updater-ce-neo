@@ -596,6 +596,19 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     return out
 
 
+def get_rockbox_installed_models(settings: Optional[QSettings] = None) -> list[str]:
+    """Return list of distinct models (e.g. ['Y1', 'Y2']) where Rockbox is currently tracked."""
+    installs = get_all_device_installs(settings)
+    rockbox_models = set()
+    for key, rec in installs.items():
+        base_model = (rec.get("model") or key.split("_")[0] or "").strip().upper()
+        sw = f"{rec.get('software_name', '')} {rec.get('package_slug', '')}".lower()
+        if "rockbox" in sw:
+            if base_model in ("Y1", "Y2"):
+                rockbox_models.add(base_model)
+    return sorted(list(rockbox_models))
+
+
 def hardware_type_label(hardware_type: str) -> str:
     """Localized “Type A” / “Type B” wording for a hardware revision."""
     from .i18n import tr

@@ -212,3 +212,24 @@ def test_rockbox_power_on_prompt_button_for_y2_and_y1():
         w.close()
         app.processEvents()
 
+
+def test_is_rockbox_android_port_assumptions():
+    from src.catalog import FirmwarePackage, is_rockbox_android_port
+
+    # Unspecified or None defaults to True (assumed Android port)
+    assert is_rockbox_android_port(None) is True
+    pkg_default = FirmwarePackage(slug="test", name="Rockbox for Y1", model="Y1", repo=".", package_name="pkg")
+    assert is_rockbox_android_port(pkg_default) is True
+
+    # Explicitly True
+    pkg_true = FirmwarePackage(slug="test", name="Rockbox for Y1", model="Y1", repo=".", package_name="pkg", is_rockbox_android_port=True)
+    assert is_rockbox_android_port(pkg_true) is True
+
+    # Explicitly False (non-Android port)
+    pkg_false = FirmwarePackage(slug="test", name="Baremetal Rockbox", model="Y1", repo=".", package_name="pkg", is_rockbox_android_port=False)
+    assert is_rockbox_android_port(pkg_false) is False
+
+    pkg_false_str = FirmwarePackage(slug="test", name="Baremetal Rockbox", model="Y1", repo=".", package_name="pkg", is_rockbox_android_port="false")
+    assert is_rockbox_android_port(pkg_false_str) is False
+
+

@@ -105,6 +105,15 @@ def theme_pack_refresh_stamp_path() -> Path:
     return downloads_dir() / THEME_PACK_REFRESH_STAMP_NAME
 
 
+def is_theme_pack_cached() -> bool:
+    """True when a usable theme pack zip is already cached on disk."""
+    cached = downloads_dir() / THEME_PACK_ZIP_NAME
+    try:
+        return cached.is_file() and cached.stat().st_size > 1024
+    except OSError:
+        return False
+
+
 def theme_pack_refresh_due(now: Optional[float] = None) -> bool:
     """Whether the cached pack needs a refresh (missing, stale or corrupt)."""
     now = time.time() if now is None else now
@@ -881,77 +890,192 @@ def ensure_theme_zip_patched_for_y2(
     return dst
 
 
-def prepare_dragged_theme_payload(
-    source: Path | str,
-    target_zip: Path | str,
-    apply_path_fix: bool = False,
-) -> tuple[bool, str]:
-    """Package a dropped Rockbox theme into a normalized zip ready to merge into .rockbox.
+class ThemePayloadResult(tuple):
+    """Result of packaging a dragged theme payload.
 
-    ``source`` can be:
-    - A .zip / .rar archive containing .rockbox or theme subfolders (themes, wps, fonts...)
-    - A folder that is named .rockbox, contains a .rockbox dir, or contains theme subfolders (themes, wps...)
-    - A theme config file (.cfg or config.ini) alongside its assets or in a theme folder.
-
-    Entries inside ``target_zip`` are stored relative to .rockbox (e.g. 'themes/...', 'wps/...').
-    If ``apply_path_fix`` is True, all /sdcard/.rockbox/ path references in .cfg and .txt files
-    are rewritten to /.rockbox/.
+    Unpacks as (ok, msg) for backward compatibility, while exposing
+    ok, msg, and count attributes.
     """
-    src_path = Path(source)
-    if not src_path.exists():
-        return False, f"Source path does not exist: {source}"
-    target = Path(target_zip)
-    target.parent.mkdir(parents=True, exist_ok=True)
 
-    entries: dict[str, bytes] = {}
-    if src_path.is_file() and zipfile.is_zipfile(src_path):
-        try:
-            with zipfile.ZipFile(src_path, "r") as zf:
-                for info in zf.infolist():
-                    if info.is_dir() or info.filename.endswith("/"):
-                        continue
-                    name = info.filename.replace("\\", "/")
-                    if "__MACOSX" in name or ".DS_Store" in name:
-                        continue
-                    rel = normalize_rockbox_rel_path(name)
-                    if not rel:
-                        parts = name.split("/")
-                        for idx, p in enumerate(parts):
-                            if p in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
-                                rel = "/".join(parts[idx:])
-                                break
-                        if not rel and name.endswith(".cfg"):
-                            rel = f"themes/{Path(name).name}"
-                    if rel:
-                        data = zf.read(info)
-                        if apply_path_fix and (rel.endswith(".cfg") or rel.endswith(".txt") or b"/sdcard" in data):
-                            data = patch_theme_content_for_y2(data)
-                        entries[rel] = data
-        except Exception as e:
-            return False, f"Could not read zip archive: {e}"
-    elif src_path.is_dir():
-        rockbox_root = None
-        if src_path.name.lower() == ".rockbox":
-            rockbox_root = src_path
-        elif (src_path / ".rockbox").is_dir():
-            rockbox_root = src_path / ".rockbox"
+    def __new__(cls, ok: bool, msg: str, count: int = 1):
+        return super().__new__(cls, (ok, msg))
+
+    def __init__(self, ok: bool, msg: str, count: int = 1):
+        self.ok = ok
+        self.msg = msg
+        self.count = count
+
+
+def _scan_referenced_theme_assets(cfg_path: Path) -> dict[str, Path]:
+    """Inspect a .cfg or config.ini for referenced assets (.wps, .sbs, .fnt, .bmp).
+
+    Searches cfg_path.parent, sibling folders, and parent directories to locate
+    referenced files and return {rel_rockbox_path: local_path}.
+    """
+    found: dict[str, Path] = {}
+    try:
+        content = cfg_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return found
+
+    line_re = re.compile(r"^\s*([a-zA-Z0-9_\- ]+)\s*:\s*(.+)$")
+    candidates_to_search: list[tuple[str, str]] = []
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = line_re.match(line)
+        if not m:
+            continue
+        key, val = m.group(1).strip().lower(), m.group(2).strip()
+        category = ""
+        if "wps" in key or "sbs" in key or "fms" in key:
+            category = "wps"
+        elif "font" in key:
+            category = "fonts"
+        elif "backdrop" in key:
+            category = "backdrops"
+        elif "icon" in key:
+            category = "icons"
+        elif val.endswith(".wps") or val.endswith(".sbs") or val.endswith(".fms"):
+            category = "wps"
+        elif val.endswith(".fnt"):
+            category = "fonts"
+        elif val.endswith(".bmp"):
+            category = "backdrops"
+
+        if category and val:
+            clean_val = val.split("#", 1)[0].strip()
+            if clean_val and clean_val != "-":
+                fname = Path(clean_val).name
+                if fname:
+                    candidates_to_search.append((category, fname))
+
+    search_roots = [cfg_path.parent]
+    if cfg_path.parent.parent and cfg_path.parent.parent.is_dir():
+        search_roots.append(cfg_path.parent.parent)
+
+    for cat, fname in candidates_to_search:
+        rel_key = f"{cat}/{fname}"
+        if rel_key in found:
+            continue
+        checked_paths = [
+            cfg_path.parent / fname,
+            cfg_path.parent / cat / fname,
+        ]
+        if cfg_path.parent.parent:
+            checked_paths.extend([
+                cfg_path.parent.parent / cat / fname,
+                cfg_path.parent.parent / ".rockbox" / cat / fname,
+                cfg_path.parent.parent / fname,
+            ])
+        for cp in checked_paths:
+            if cp.is_file():
+                found[rel_key] = cp
+                break
         else:
-            try:
-                for child in src_path.iterdir():
-                    if child.is_dir() and child.name.lower() == ".rockbox":
-                        rockbox_root = child
+            for root in search_roots:
+                for candidate in root.rglob(fname):
+                    if candidate.is_file() and "__MACOSX" not in str(candidate):
+                        found[rel_key] = candidate
                         break
-            except OSError:
-                pass
-            if not rockbox_root:
-                rockbox_root = src_path
+                if rel_key in found:
+                    break
 
-        for p in rockbox_root.rglob("*"):
+    return found
+
+
+def _collect_entries_from_file(
+    src_file: Path, entries: dict[str, bytes], apply_path_fix: bool
+) -> None:
+    """Collect entries from a single dropped theme config (.cfg or config.ini)."""
+    parent = src_file.parent
+    base_dir = parent
+    if parent.name in ("themes", "wps", "configs") and parent.parent.is_dir():
+        base_dir = parent.parent
+    elif (parent / ".rockbox").is_dir():
+        base_dir = parent / ".rockbox"
+
+    for p in base_dir.rglob("*"):
+        if p.is_file():
+            if "__MACOSX" in str(p) or p.name == ".DS_Store":
+                continue
+            try:
+                rel = str(p.relative_to(base_dir)).replace("\\", "/")
+            except ValueError:
+                continue
+            rel_norm = normalize_rockbox_rel_path(rel)
+            if not rel_norm:
+                parts = rel.split("/")
+                for idx, part in enumerate(parts):
+                    if part in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
+                        rel_norm = "/".join(parts[idx:])
+                        break
+                if not rel_norm and p.name == src_file.name:
+                    rel_norm = f"themes/{p.name}"
+            if rel_norm:
+                try:
+                    data = p.read_bytes()
+                    if apply_path_fix and (rel_norm.endswith(".cfg") or rel_norm.endswith(".txt") or b"/sdcard" in data):
+                        data = patch_theme_content_for_y2(data)
+                    entries[rel_norm] = data
+                except OSError:
+                    continue
+
+    if src_file.suffix.lower() == ".cfg" or src_file.name.lower() in ("config.ini", "theme.cfg"):
+        referenced = _scan_referenced_theme_assets(src_file)
+        for rel_key, asset_path in referenced.items():
+            if rel_key not in entries:
+                try:
+                    data = asset_path.read_bytes()
+                    if apply_path_fix and (rel_key.endswith(".cfg") or rel_key.endswith(".txt") or b"/sdcard" in data):
+                        data = patch_theme_content_for_y2(data)
+                    entries[rel_key] = data
+                except OSError:
+                    continue
+
+    if not any(k.endswith(src_file.name) for k in entries):
+        try:
+            data = src_file.read_bytes()
+            if apply_path_fix:
+                data = patch_theme_content_for_y2(data)
+            dest_name = f"themes/{src_file.name}" if src_file.suffix.lower() == ".cfg" else f"themes/{src_file.stem}.cfg"
+            entries[dest_name] = data
+        except OSError:
+            pass
+
+
+def _collect_entries_from_dir(
+    dir_path: Path, entries: dict[str, bytes], apply_path_fix: bool
+) -> None:
+    """Collect entries from a dropped directory, supporting multi-theme subfolders."""
+    rockbox_roots: list[Path] = []
+    if dir_path.name.lower() == ".rockbox":
+        rockbox_roots.append(dir_path)
+    elif (dir_path / ".rockbox").is_dir():
+        rockbox_roots.append(dir_path / ".rockbox")
+
+    try:
+        for child in dir_path.iterdir():
+            if child.is_dir():
+                if child.name.lower() == ".rockbox" and child not in rockbox_roots:
+                    rockbox_roots.append(child)
+                elif (child / ".rockbox").is_dir() and (child / ".rockbox") not in rockbox_roots:
+                    rockbox_roots.append(child / ".rockbox")
+    except OSError:
+        pass
+
+    if not rockbox_roots:
+        rockbox_roots = [dir_path]
+
+    for root in rockbox_roots:
+        for p in root.rglob("*"):
             if p.is_file():
                 if "__MACOSX" in str(p) or p.name == ".DS_Store":
                     continue
                 try:
-                    rel = str(p.relative_to(rockbox_root)).replace("\\", "/")
+                    rel = str(p.relative_to(root)).replace("\\", "/")
                 except ValueError:
                     continue
                 rel_norm = normalize_rockbox_rel_path(rel)
@@ -971,52 +1095,79 @@ def prepare_dragged_theme_payload(
                         entries[rel_norm] = data
                     except OSError:
                         continue
-    elif src_path.is_file():
-        parent = src_path.parent
-        base_dir = parent
-        if parent.name in ("themes", "wps", "configs") and parent.parent.is_dir():
-            base_dir = parent.parent
-        elif (parent / ".rockbox").is_dir():
-            base_dir = parent / ".rockbox"
 
-        for p in base_dir.rglob("*"):
-            if p.is_file():
-                if "__MACOSX" in str(p) or p.name == ".DS_Store":
-                    continue
-                try:
-                    rel = str(p.relative_to(base_dir)).replace("\\", "/")
-                except ValueError:
-                    continue
-                rel_norm = normalize_rockbox_rel_path(rel)
-                if not rel_norm:
-                    parts = rel.split("/")
-                    for idx, part in enumerate(parts):
-                        if part in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
-                            rel_norm = "/".join(parts[idx:])
-                            break
-                    if not rel_norm and p.name == src_path.name:
-                        rel_norm = f"themes/{p.name}"
-                if rel_norm:
-                    try:
-                        data = p.read_bytes()
-                        if apply_path_fix and (rel_norm.endswith(".cfg") or rel_norm.endswith(".txt") or b"/sdcard" in data):
-                            data = patch_theme_content_for_y2(data)
-                        entries[rel_norm] = data
-                    except OSError:
-                        continue
 
-        if not any(k.endswith(src_path.name) for k in entries):
-            try:
-                data = src_path.read_bytes()
-                if apply_path_fix:
+def _collect_entries_from_zip(
+    zip_path: Path, entries: dict[str, bytes], apply_path_fix: bool
+) -> None:
+    """Collect entries from a dropped zip archive."""
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for info in zf.infolist():
+            if info.is_dir() or info.filename.endswith("/"):
+                continue
+            name = info.filename.replace("\\", "/")
+            if "__MACOSX" in name or ".DS_Store" in name:
+                continue
+            rel = normalize_rockbox_rel_path(name)
+            if not rel:
+                parts = name.split("/")
+                for idx, p in enumerate(parts):
+                    if p in ("themes", "wps", "fonts", "backdrops", "icons", "apps"):
+                        rel = "/".join(parts[idx:])
+                        break
+                if not rel and name.endswith(".cfg"):
+                    rel = f"themes/{Path(name).name}"
+            if rel:
+                data = zf.read(info)
+                if apply_path_fix and (rel.endswith(".cfg") or rel.endswith(".txt") or b"/sdcard" in data):
                     data = patch_theme_content_for_y2(data)
-                dest_name = f"themes/{src_path.name}" if src_path.suffix.lower() == ".cfg" else f"themes/{src_path.stem}.cfg"
-                entries[dest_name] = data
-            except OSError as e:
-                return False, f"Could not read config file: {e}"
+                entries[rel] = data
+
+
+def prepare_dragged_theme_payload(
+    source: Path | str | list[Path | str] | tuple[Path | str, ...],
+    target_zip: Path | str,
+    apply_path_fix: bool = False,
+) -> ThemePayloadResult:
+    """Package dropped Rockbox theme(s) into a normalized zip ready to merge into .rockbox.
+
+    ``source`` can be a single path or collection of paths:
+    - .zip / .rar archives containing .rockbox or theme subfolders (themes, wps, fonts...)
+    - Folders named .rockbox, containing .rockbox dirs, or multi-theme folders
+    - Theme config files (.cfg or config.ini) alongside their assets or in theme folders
+
+    Entries inside ``target_zip`` are stored relative to .rockbox (e.g. 'themes/...', 'wps/...').
+    If ``apply_path_fix`` is True, all /sdcard/.rockbox/ path references in .cfg and .txt files
+    are rewritten to /.rockbox/.
+    """
+    if isinstance(source, (str, Path)):
+        sources_list = [Path(source)]
+    else:
+        sources_list = [Path(s) for s in source]
+
+    target = Path(target_zip)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    entries: dict[str, bytes] = {}
+    for src_path in sources_list:
+        if not src_path.exists():
+            continue
+        if src_path.is_file() and zipfile.is_zipfile(src_path):
+            try:
+                _collect_entries_from_zip(src_path, entries, apply_path_fix)
+            except Exception as e:
+                logger.warning("Could not read zip archive %s: %s", src_path, e)
+        elif src_path.is_dir():
+            _collect_entries_from_dir(src_path, entries, apply_path_fix)
+        elif src_path.is_file():
+            _collect_entries_from_file(src_path, entries, apply_path_fix)
 
     if not entries:
-        return False, "No valid Rockbox theme files found in dropped source"
+        return ThemePayloadResult(False, "No valid Rockbox theme files found in dropped source", 0)
+
+    theme_count = len([k for k in entries if k.startswith("themes/") and k.endswith(".cfg")])
+    if theme_count == 0 and entries:
+        theme_count = 1
 
     tmp_file = target.with_suffix(".tmp_build")
     try:
@@ -1027,9 +1178,9 @@ def prepare_dragged_theme_payload(
     except Exception as e:
         if tmp_file.exists():
             tmp_file.unlink(missing_ok=True)
-        return False, f"Failed to build theme payload zip: {e}"
+        return ThemePayloadResult(False, f"Failed to build theme payload zip: {e}", 0)
 
-    return True, ""
+    return ThemePayloadResult(True, "", theme_count)
 
 
 def bundled_rockbox_dir() -> Path:

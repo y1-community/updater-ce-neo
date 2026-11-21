@@ -305,6 +305,34 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 rb_themes_path_fix = False
             else:
                 rb_themes_path_fix = None
+
+        raw_rap = mapping.get("is_rockbox_android_port")
+        if raw_rap is None:
+            is_rockbox_android_port = None
+        elif isinstance(raw_rap, bool):
+            is_rockbox_android_port = raw_rap
+        else:
+            val = str(raw_rap).strip().lower()
+            if val in ("true", "1", "yes"):
+                is_rockbox_android_port = True
+            elif val in ("false", "0", "no"):
+                is_rockbox_android_port = False
+            else:
+                is_rockbox_android_port = None
+
+        raw_rp = mapping.get("is_rockbox_port")
+        if raw_rp is None:
+            is_rockbox_port = None
+        elif isinstance(raw_rp, bool):
+            is_rockbox_port = raw_rp
+        else:
+            val = str(raw_rp).strip().lower()
+            if val in ("true", "1", "yes"):
+                is_rockbox_port = True
+            elif val in ("false", "0", "no"):
+                is_rockbox_port = False
+            else:
+                is_rockbox_port = None
         desc = str(mapping.get("description") or description or "").strip()
         type_a_asset = str(mapping.get("type_a_asset") or "").strip()
         type_b_asset = str(mapping.get("type_b_asset") or "").strip()
@@ -368,6 +396,8 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 install_first_once=install_first_once,
                 keep_data_on_first_install=keep_data_on_first_install,
                 rb_themes_path_fix=rb_themes_path_fix,
+                is_rockbox_android_port=is_rockbox_android_port,
+                is_rockbox_port=is_rockbox_port,
             )
         )
     return out

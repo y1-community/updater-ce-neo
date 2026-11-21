@@ -2768,7 +2768,7 @@ class FlashPage(QWidget):
         # Dummy attributes for backward compatibility
         self._flash_img = QLabel()
         self._flash_img.setVisible(False)
-        self._action_label = QLabel("")
+        self._action_label = QLabel("", parent=self)
         self._action_label.setVisible(False)
         self._status_card = Card("flash_status_panel")
         self._status_card.setVisible(False)
@@ -3421,9 +3421,6 @@ class FlashPage(QWidget):
 
     def set_theme_download_status(self, text: str) -> None:
         """Show the theme-pack download line on the install card itself."""
-        if hasattr(self, "_action_label"):
-            self._action_label.setText(text or "")
-            self._action_label.setVisible(bool(text))
         if hasattr(self, "_step_label") and text:
             self._step_label.setText(text)
         flow = getattr(self, "_status_flow", None)
@@ -4010,7 +4007,7 @@ class FlashPage(QWidget):
         self._log_theme("[Rockbox Themes] User confirmed the player is powered on. Asking for the USB cable.")
         self._show_theme_connect_usb_question()
 
-    def rockbox_power_on_question(self, model: str) -> str:
+    def rockbox_power_on_question(self, model: str = "", standalone: bool = False) -> str:
         """The one power-on question, for every model and both flash methods.
 
         Only the button differs per player: the Y1 wakes on its centre button,
@@ -4021,13 +4018,19 @@ class FlashPage(QWidget):
         from ..config import device_label_for_model, is_y1_model, is_y2_model
 
         eff_model = model or getattr(self, "_model", "") or getattr(self.themes, "model", "")
-        if is_y2_model(eff_model) or is_y2_model(getattr(self, "_model", "")):
+        pkg_name = getattr(self, "_package_name", "") or ""
+        if "for Y2" in pkg_name or "for y2" in pkg_name.lower():
+            eff_model = "Y2"
+        elif is_y2_model(eff_model) or is_y2_model(getattr(self, "_model", "")):
             eff_model = "Y2"
         elif is_y1_model(eff_model):
             eff_model = "Y1"
 
         label = device_label_for_model(eff_model)
-        is_y1 = is_y1_model(eff_model) and not is_y2_model(eff_model)
+        if standalone:
+            return tr("rockbox_step_standalone_power_on_usb").format(model=label)
+
+        is_y1 = (eff_model == "Y1")
         button = tr("button_centre" if is_y1 else "button_power")
         return tr("rockbox_step1_power_on_button").format(model=label, button=button)
 
@@ -4202,6 +4205,32 @@ class FlashPage(QWidget):
             self._start_simulated_themes_stage()
             return
 
+        from ..catalog import is_rockbox_android_port
+        pkg_name = getattr(self, "_package_name", "") or ""
+        win = self.window()
+        pkg = getattr(win, "_details_package", None) if win else None
+        android_port = is_rockbox_android_port(package=pkg, name=pkg_name)
+
+        if not android_port:
+            self._log_theme(
+                f"[Rockbox Themes] Non-Android Rockbox port detected for {model_str}: "
+                "using USB storage mode."
+            )
+            if not already_powered_on and not automatic:
+                self._show_theme_step1_disconnect_power_on()
+                return
+            try:
+                from ..theme_sync import find_removable_rockbox_dirs
+                removable = find_removable_rockbox_dirs()
+                if len(removable) == 1:
+                    self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
+                    self._on_theme_folder_chosen(str(removable[0]))
+                    return
+            except Exception:
+                pass
+            self._show_theme_fallback_usb_mode()
+            return
+
         from ..adb import find_adb_binary, adb_devices
         adb_bin = find_adb_binary()
         if not adb_bin:
@@ -4242,6 +4271,11 @@ class FlashPage(QWidget):
         if automatic:
             # Nothing asked the user anything (SP Flash Tool reboots the player
             # itself), so the watch is the whole step.
+            self._start_theme_step2_connect_usb()
+            return
+        if getattr(self.themes, "is_standalone", False):
+            # Standalone/drag-and-drop prompt already asked the user to connect
+            # USB and power on before clicking Next; go straight to the ADB watch.
             self._start_theme_step2_connect_usb()
             return
         if already_powered_on:
@@ -4373,7 +4407,10 @@ class FlashPage(QWidget):
 
     def _show_theme_step1_disconnect_power_on(self) -> None:
         model_str = (self.themes.model or self._model or "").upper()
-        if "Y2" in model_str or "Y2" in getattr(self, "_model", "").upper():
+        pkg_name = getattr(self, "_package_name", "") or ""
+        if "for Y2" in pkg_name or "for y2" in pkg_name.lower():
+            model_str = "Y2"
+        elif "Y2" in model_str or "Y2" in getattr(self, "_model", "").upper():
             model_str = "Y2"
         elif "Y1" in model_str:
             model_str = "Y1"
@@ -4383,7 +4420,8 @@ class FlashPage(QWidget):
         # Powering the player on is the question's subject, so it takes the
         # band's slot with the Next chip beside it rather than sitting under a
         # bar that has no percentage to report here.
-        self.show_flash_question(self.rockbox_power_on_question(model_str))
+        is_standalone = getattr(self.themes, "is_standalone", False)
+        self.show_flash_question(self.rockbox_power_on_question(model_str, standalone=is_standalone))
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_step1_widget"):
@@ -4689,7 +4727,17 @@ class FlashPage(QWidget):
             self._log_theme("[Rockbox Themes] Themes and fonts were transferred and verified successfully via ADB.")
             self._finish_rockbox_themes_stage()
         else:
+            self.themes.adb_attempted = True
             self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}. Falling back to USB storage guidance.")
+            try:
+                from ..theme_sync import find_removable_rockbox_dirs
+                removable = find_removable_rockbox_dirs()
+                if len(removable) == 1:
+                    self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
+                    self._on_theme_folder_chosen(str(removable[0]))
+                    return
+            except Exception:
+                pass
             self._show_theme_fallback_usb_mode()
 
     def _show_theme_fallback_usb_mode(self) -> None:
@@ -4757,11 +4805,32 @@ class FlashPage(QWidget):
         until the picker closed. Opening the dialog keeps this page live: the
         presence watcher can dismiss it and take the transfer over.
         """
+        import sys
         from PySide6.QtWidgets import QFileDialog
-
         from ..downloads import default_picker_dir
 
-        title = tr("rockbox_step_select_player_folder")
+        try:
+            from ..theme_sync import find_removable_rockbox_dirs
+            removable = find_removable_rockbox_dirs()
+            if len(removable) == 1:
+                self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
+                self._on_theme_folder_chosen(str(removable[0]))
+                return
+        except Exception as e:
+            logger.debug("Error checking removable rockbox dirs: %s", e)
+
+        title = tr("rockbox_step_select_rockbox_folder") if sys.platform == "win32" else tr("rockbox_step_select_player_folder")
+        if sys.platform == "win32":
+            chosen = QFileDialog.getExistingDirectory(
+                self,
+                title,
+                default_picker_dir(),
+                QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
+            )
+            if chosen:
+                self._on_theme_folder_chosen(chosen)
+            return
+
         existing = self.themes.folder_dialog
         if existing is not None:
             existing.raise_()
@@ -4813,8 +4882,7 @@ class FlashPage(QWidget):
             if self.themes.prefer_player(len(live_devices)):
                 self._on_adb_device_found(live_devices[0])
                 return
-        # If the user selects a folder, run the preparation/cleanup process again
-        # even if it was already attempted or if a player answered through ADB.
+        self._close_theme_folder_dialog()
         self._stop_adb_presence_watch()
         self.dismiss_flash_question()
         if hasattr(self, "_theme_row"):
@@ -6560,7 +6628,11 @@ class FlashPage(QWidget):
 
         if self._complete_note_themes and not self.themes.placement_failed:
             if getattr(self.themes, "is_standalone", False):
-                installed = tr("donate_completion_theme_standalone_subtitle").format(model=model)
+                count = getattr(self.themes, "custom_theme_count", 1)
+                if count > 1:
+                    installed = tr("donate_completion_themes_standalone_plural_subtitle").format(count=count, model=model)
+                else:
+                    installed = tr("donate_completion_theme_standalone_subtitle").format(model=model)
             else:
                 installed = tr("donate_completion_themes_subtitle").format(model=model)
             self._completion_title_label.setText(f"<b>{escape(installed)}</b>")
@@ -6688,7 +6760,12 @@ class FlashPage(QWidget):
                 self._progress_card.setVisible(False)
             if hasattr(self, "_intro"):
                 if getattr(self.themes, "is_standalone", False):
-                    self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
+                    count = getattr(self.themes, "custom_theme_count", 1)
+                    if count > 1:
+                        from .support_appeal import THEME_STANDALONE_PLURAL_COMPLETION_KEYS
+                        self._intro.set_keys(THEME_STANDALONE_PLURAL_COMPLETION_KEYS, count=count)
+                    else:
+                        self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
                 elif themes_installed:
                     self._intro.set_keys(THEMES_COMPLETION_KEYS)
                 elif self._has_post_install():
@@ -6736,7 +6813,12 @@ class FlashPage(QWidget):
             return
         if hasattr(self, "_intro"):
             if getattr(self.themes, "is_standalone", False):
-                self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
+                count = getattr(self.themes, "custom_theme_count", 1)
+                if count > 1:
+                    from .support_appeal import THEME_STANDALONE_PLURAL_COMPLETION_KEYS
+                    self._intro.set_keys(THEME_STANDALONE_PLURAL_COMPLETION_KEYS, count=count)
+                else:
+                    self._intro.set_keys(THEME_STANDALONE_COMPLETION_KEYS)
             elif themes_installed:
                 self._intro.set_keys(THEMES_COMPLETION_KEYS)
             elif self._has_post_install():

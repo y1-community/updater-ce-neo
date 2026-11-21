@@ -1202,7 +1202,16 @@ class MainWindow(QMainWindow):
         overlay = getattr(self, "_drop_overlay", None)
         if overlay is not None:
             overlay.hide()
-        path = first_accepted_drop(self._local_paths_from_mime(event.mimeData()))
+        all_paths = self._local_paths_from_mime(event.mimeData())
+        theme_paths = [p for p in all_paths if classify_drop(p) == "rockbox_theme"]
+        if theme_paths:
+            event.acceptProposedAction()
+            if self._install_run_active() or getattr(self, "_drop_check_active", False):
+                return
+            self._start_theme_drop_install(theme_paths)
+            return
+
+        path = first_accepted_drop(all_paths)
         if path is None:
             event.ignore()
             return
@@ -1235,38 +1244,51 @@ class MainWindow(QMainWindow):
         self._start_drop_check(candidate)
         return True
 
-    def _start_theme_drop_install(self, path: Path) -> None:
-        """Start a standalone Rockbox theme install from a dropped theme file/folder."""
+    def _start_theme_drop_install(self, path) -> None:
+        """Start a standalone Rockbox theme install from dropped theme file(s)/folder(s)."""
         if self._install_run_active():
             self._append_log("Theme drop ignored: an install is already running.")
+            return
+        paths = [path] if isinstance(path, (str, Path)) else list(path)
+        if not paths:
             return
         model = self._manual_themes_model()
         from ..theme_pack import prepare_dragged_theme_payload, should_apply_theme_path_fix
         import tempfile
         import time
         apply_fix = should_apply_theme_path_fix(model=model)
-        target_zip = Path(tempfile.gettempdir()) / f"dragged_theme_{int(time.time())}_{path.stem}.zip"
-        ok, msg = prepare_dragged_theme_payload(path, target_zip, apply_path_fix=apply_fix)
+        target_zip = Path(tempfile.gettempdir()) / f"dragged_theme_{int(time.time())}.zip"
+        res = prepare_dragged_theme_payload(paths, target_zip, apply_path_fix=apply_fix)
+        ok = bool(res[0])
+        msg = str(res[1])
+        count = getattr(res, "count", 1)
         if not ok:
             self._show_status(f"Could not load theme: {msg}", 10000)
-            self._append_log(f"Failed to load dropped Rockbox theme {path}: {msg}")
+            self._append_log(f"Failed to load dropped Rockbox theme(s): {msg}")
             return
-        self._append_log(f"Loaded dropped Rockbox theme {path.name} for {model}.")
+        first_stem = Path(paths[0]).stem
+        display_name = first_stem if count <= 1 else f"{count} Rockbox Themes"
+        theme_names = ", ".join(Path(p).name for p in paths[:3]) + ("..." if len(paths) > 3 else "")
+        self._append_log(f"Loaded {count} dropped Rockbox theme(s) ({theme_names}) for {model}.")
         self._package_model = model
-        self._package_name = path.stem or "Rockbox Theme"
+        self._package_name = display_name
         self._install_complete = False
         self._install_failed = False
         self.themes.reset_completion()
         self.themes.set_apk("", "")
         self.themes.payload_zip_path = target_zip
         self.themes.is_standalone = True
+        self.themes.is_custom_theme = True
+        self.themes.custom_theme_count = count
+        self.themes.custom_theme_name = display_name
         self.themes.model = model
         self.themes.rb_themes_path_fix = apply_fix
         self._compact_install_screen = False
         self._is_360p_rockbox = True
         self._flash_page.set_model(model)
+        self._flash_page.set_package_name(display_name)
         self._nav_to_page(_PAGE_FLASH)
-        self._show_rockbox_power_on_prompt(model)
+        self._show_rockbox_power_on_prompt(model, standalone=True)
 
     def eventFilter(self, watched, event):  # noqa: N802
         """Catch a firmware drag over any child of the window.
@@ -3418,17 +3440,58 @@ class MainWindow(QMainWindow):
 
     def _manual_themes_model(self) -> str:
         """Model for a manually started themes stage: Y1 or Y2 based on selection or device."""
+        try:
+            from ..player_update_check import get_rockbox_installed_models
+            rb_models = get_rockbox_installed_models(self.settings)
+            if len(rb_models) == 1:
+                return rb_models[0]
+            if len(rb_models) > 1:
+                from PySide6.QtWidgets import QInputDialog
+                from ..config import device_label_for_model
+                items = [device_label_for_model(m) for m in rb_models]
+                chosen, ok = QInputDialog.getItem(
+                    self,
+                    tr("rockbox_select_device_title"),
+                    tr("rockbox_select_device_prompt"),
+                    items,
+                    0,
+                    False,
+                )
+                if ok and chosen:
+                    for m in rb_models:
+                        if device_label_for_model(m) == chosen or m in chosen:
+                            return m
+        except Exception as e:
+            logger.debug("Error determining Rockbox installed models: %s", e)
+
+        try:
+            from ..adb import find_adb_binary, adb_command
+            adb_bin = find_adb_binary()
+            if adb_bin:
+                out = adb_command(adb_bin, "shell", "getprop", "ro.product.model", timeout=2.0)
+                if out:
+                    m = out.strip().upper()
+                    if "Y2" in m:
+                        return "Y2"
+                    if "Y1" in m:
+                        return "Y1"
+        except Exception:
+            pass
+
+        pkg_model = (getattr(self, "_package_model", "") or "").upper()
+        pkg_name = (getattr(self, "_package_name", "") or "")
+        pkg_path = (getattr(self, "_package_path", "") or "")
+        if "for Y2" in pkg_name or "rom_y2" in pkg_path or "y2-rockbox" in pkg_path or "Y2" in pkg_model:
+            return "Y2"
+        if "Y1" in pkg_model:
+            return "Y1"
+
         if hasattr(self, "_select_page") and hasattr(self._select_page, "_model_combo"):
             combo_text = self._select_page._model_combo.currentText().strip().upper()
             if "Y2" in combo_text:
                 return "Y2"
             if "Y1" in combo_text:
                 return "Y1"
-        pkg_model = (getattr(self, "_package_model", "") or "").upper()
-        if "Y2" in pkg_model:
-            return "Y2"
-        if "Y1" in pkg_model:
-            return "Y1"
         return "Y1"
 
     def _on_settings_install_rockbox_themes(self) -> None:
@@ -3555,13 +3618,17 @@ class MainWindow(QMainWindow):
         self.themes.reset_completion()
         self.themes.set_apk("", "")
         self.themes.is_standalone = True
+        self.themes.is_custom_theme = False
+        self.themes.payload_zip_path = None
         self.themes.model = model
         self.themes.rb_themes_path_fix = (model == "Y2")
+        self._package_name = tr("rockbox_themes_and_fonts_pack")
         self._compact_install_screen = False
         self._is_360p_rockbox = True
         self._flash_page.set_model(model)
+        self._flash_page.set_package_name(self._package_name)
         self._nav_to_page(_PAGE_FLASH)
-        self._show_rockbox_power_on_prompt(model)
+        self._show_rockbox_power_on_prompt(model, standalone=True)
         return True
 
     def _apk_install_info(self) -> tuple[str, str]:
@@ -3713,12 +3780,20 @@ class MainWindow(QMainWindow):
         )
 
     def _show_rockbox_power_on_prompt(
-        self, model: str, *, after_firmware: bool = False, on_continue=None, purpose: str = "themes"
+        self,
+        model: str,
+        *,
+        after_firmware: bool = False,
+        standalone: bool = False,
+        on_continue=None,
+        purpose: str = "themes",
     ) -> None:
         """Ask the user to boot the flashed player before ADB/theme setup."""
         pkg_model = (getattr(self, "_package_model", "") or "").upper()
+        pkg_name = getattr(self, "_package_name", "") or ""
+        pkg_path = getattr(self, "_package_path", "") or ""
         target_model = (model or pkg_model or "").upper()
-        if "Y2" in target_model or "Y2" in pkg_model:
+        if "for Y2" in pkg_name or "rom_y2" in pkg_path or "y2-rockbox" in pkg_path or "Y2" in target_model or "Y2" in pkg_model:
             model = "Y2"
         elif "Y1" in target_model or "Y1" in pkg_model:
             model = "Y1"
@@ -3726,9 +3801,16 @@ class MainWindow(QMainWindow):
         self._install_complete = True
         self._install_failed = False
         self.themes.ask_power_on(model, after_firmware=after_firmware)
+
+        # Background download decoupled themes pack during prompt if not cached
+        if not getattr(self.themes, "is_custom_theme", False) and purpose != "cleanup":
+            from ..theme_pack import is_theme_pack_cached
+            if not is_theme_pack_cached():
+                self._start_theme_pack_refresh()
+
         # One question for every model and both flash methods: only the button
         # it names changes (the Y1's centre button, the power button elsewhere).
-        prompt = self._flash_page.rockbox_power_on_question(model)
+        prompt = self._flash_page.rockbox_power_on_question(model, standalone=standalone)
         self._flash_page.show_rockbox_power_on_prompt(
             prompt,
             on_continue=on_continue or self._continue_rockbox_power_on,
@@ -7440,10 +7522,14 @@ class MainWindow(QMainWindow):
         if apk_path or apk_url:
             return False
 
-        stage_model = (self._package_model or "").upper() or "Y1"
-        if "Y2" in stage_model:
+        eff_model = (self._package_model or "").upper()
+        pkg_low = (getattr(self, "_package_name", "") or "").lower()
+        path_low = (getattr(self, "_package_path", "") or "").lower()
+        if "for y2" in pkg_low or "y2" in eff_model or "y2" in path_low or "y2-rockbox" in path_low:
             stage_model = "Y2"
-        elif "Y1" in stage_model:
+        elif "y1" in eff_model or "y1" in path_low or "y1" in pkg_low:
+            stage_model = "Y1"
+        else:
             stage_model = "Y1"
         self._rockbox_cleanup_started = True
         self._nav_to_page(_PAGE_FLASH)
@@ -7738,22 +7824,24 @@ class MainWindow(QMainWindow):
         # unless it gave up; a give-up keeps the power-on steps and try-again note.
         themes_failed = self.themes.placement_failed
         themes_installed = not themes_failed
-        if not donation_disabled:
+        model = self._package_model or ""
+        software = self._package_name or software_word()
+        if not donation_disabled and not themes_failed:
             self._flash_page.show_completion_appeal(
                 True, self._on_completion_dont_ask, self._on_completion_not_now,
                 themes_installed=themes_installed,
             )
-        model = self._package_model or ""
-        software = self._package_name or software_word()
-        # A themes stage that gave up still lands on this screen, so its note
-        # must be shown even where the donations appeal would otherwise be the
-        # only block — the try-again copy is why the user is reading.
-        self._flash_page.show_completion_note(
-            not donation_disabled, software=software, model=model,
-            themes_installed=themes_installed and not was_apk_stage,
-            post_install_once=self._post_install_once,
-            post_install_suppressed=self._post_install_guides_suppressed,
-        )
+        else:
+            self._flash_page.show_completion_appeal(
+                not donation_disabled, self._on_completion_dont_ask, self._on_completion_not_now,
+                themes_installed=themes_installed,
+            )
+            self._flash_page.show_completion_note(
+                not donation_disabled, software=software, model=model,
+                themes_installed=themes_installed and not was_apk_stage,
+                post_install_once=self._post_install_once,
+                post_install_suppressed=self._post_install_guides_suppressed,
+            )
         self._sync_install_app_button()
         self._adjust_window_geometry()
         self._sync_sp_history()

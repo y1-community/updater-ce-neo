@@ -123,6 +123,11 @@ class FirmwarePackage:
     # adapted to /.rockbox/ (rb_themes_path_fix="true"/"false" in slidia_manifest.xml).
     # None defaults to True for Y2 models and False for Y1/others.
     rb_themes_path_fix: Optional[bool] = None
+    # Whether Rockbox port runs on Android and uses ADB for theme transfers
+    # (is_rockbox_android_port="true"/"false" in slidia_manifest.xml).
+    is_rockbox_android_port: Optional[bool] = None
+    # Whether this package is a generic/non-Android Rockbox port (is_rockbox_port="true").
+    is_rockbox_port: Optional[bool] = None
     # Archive names declared per player and hardware revision
     # (``package_name_y2``, ``package_name_y1_type_b``,
     # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after
@@ -132,6 +137,27 @@ class FirmwarePackage:
     package_names: dict = dataclasses.field(
         default_factory=dict, compare=False, hash=False, repr=False
     )
+
+
+def is_rockbox_android_port(package=None, name: str = "", repo: str = "") -> bool:
+    """Whether a firmware package runs Rockbox on Android with ADB support.
+
+    Controlled by ``is_rockbox_android_port`` in slidia_manifest.xml if set.
+    Defaults to True (we assume it is an Android port unless explicitly declared
+    as ``is_rockbox_android_port="false"`` or boolean False).
+    Asking the user to intervene in mass storage mode is strictly a last resort.
+    """
+    if package is not None:
+        rap = getattr(package, "is_rockbox_android_port", None)
+        if rap is False or str(rap).strip().lower() == "false":
+            return False
+        if rap is True or str(rap).strip().lower() == "true":
+            return True
+        rp = getattr(package, "is_rockbox_port", None)
+        if (rp is True or str(rp).strip().lower() == "true") and (rap is False or str(rap).strip().lower() == "false"):
+            return False
+        return True
+    return True
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:

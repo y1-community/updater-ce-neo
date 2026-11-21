@@ -4211,6 +4211,14 @@ _STRINGS: dict = {
         "de": "Dein Rockbox-Design ist auf deinem {model} installiert.",
         "ja": "{model} に Rockbox テーマをインストールしました。",
     },
+    "donate_completion_themes_standalone_plural_subtitle": {
+        "zh-CN": "已在你的 {model} 上安装了 {count} 个 Rockbox 主题。",
+        "en": "{count} Rockbox themes have been installed on your {model}.",
+        "fr": "{count} thèmes Rockbox ont été installés sur votre {model}.",
+        "es": "Se han instalado {count} temas de Rockbox en tu {model}.",
+        "de": "{count} Rockbox-Designs wurden auf deinem {model} installiert.",
+        "ja": "{model} に {count} 個の Rockbox テーマをインストールしました。",
+    },
     # Variants about the person and the quiet costs behind the app. Each says
     # one thing once: the headline already thanked the reader, so none of
     # these restate the install or repeat another variant's ask.
@@ -7520,6 +7528,38 @@ _STRINGS: dict = {
         "fr": "Débranchez l'USB, maintenez le {button} enfoncé pour allumer votre {model}, puis cliquez sur Suivant.",
         "es": "Desconecta el USB, mantén pulsado el {button} para encender tu {model} y pulsa Siguiente.",
         "ja": "USB を取り外し、{button}を長押しして {model} の電源を入れてから「次へ」を押してください。",
+    },
+    "rockbox_step_standalone_power_on_usb": {
+        "en": "Connect your {model} via USB, power it on, then press Next.",
+        "zh-CN": "请使用 USB 连接您的 {model}，将其开机，然后点击下一步。",
+        "de": "Verbinden Sie Ihr {model} per USB, schalten Sie es ein und klicken Sie dann auf Weiter.",
+        "fr": "Connectez votre {model} par USB, allumez-le, puis cliquez sur Suivant.",
+        "es": "Conecta tu {model} por USB, enciéndelo y pulsa Siguiente.",
+        "ja": "{model} を USB で接続し、電源を入れてから「次へ」を押してください。",
+    },
+    "rockbox_step_select_rockbox_folder": {
+        "en": "Please select the player itself or the .rockbox folder",
+        "zh-CN": "请选择播放器本身或 .rockbox 文件夹",
+        "de": "Bitte wählen Sie den Player selbst oder den .rockbox-Ordner aus",
+        "fr": "Veuillez sélectionner le lecteur lui-même ou le dossier .rockbox",
+        "es": "Selecciona el reproductor o la carpeta .rockbox",
+        "ja": "プレイヤー本体または .rockbox フォルダを選択してください",
+    },
+    "rockbox_select_device_title": {
+        "en": "Select Rockbox Device",
+        "zh-CN": "选择 Rockbox 设备",
+        "de": "Rockbox-Gerät auswählen",
+        "fr": "Sélectionner l'appareil Rockbox",
+        "es": "Seleccionar dispositivo Rockbox",
+        "ja": "Rockbox デバイスの選択",
+    },
+    "rockbox_select_device_prompt": {
+        "en": "Which player are you installing Rockbox themes for?",
+        "zh-CN": "您要为哪台播放器安装 Rockbox 主题？",
+        "de": "Für welchen Player installieren Sie Rockbox-Designs?",
+        "fr": "Pour quel lecteur installez-vous des thèmes Rockbox ?",
+        "es": "¿Para qué reproductor estás instalando los temas de Rockbox?",
+        "ja": "どのプレイヤーに Rockbox テーマをインストールしますか？",
     },
     "rockbox_step2_connect_usb": {
         "en": "Please connect your {model} by USB",

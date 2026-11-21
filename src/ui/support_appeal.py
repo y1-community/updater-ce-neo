@@ -20,6 +20,7 @@ INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
 THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
 THEME_STANDALONE_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_theme_standalone_subtitle")
+THEME_STANDALONE_PLURAL_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_standalone_plural_subtitle")
 #: A firmware that has post-install steps is not finished when the write ends:
 #: its letter leads with what is left to do instead of thanking the reader.
 ONE_MORE_THING_KEYS = ("completion_one_more_thing", "donate_completion_subtitle")
@@ -336,8 +337,9 @@ class SupportIntro(QWidget):
 
         self.icon.setPixmap(squircle_pixmap(pixmap, 40))
 
-    def set_keys(self, keys) -> None:
+    def set_keys(self, keys, count: int = 1) -> None:
         self._keys = tuple(keys)
+        self._count = count
         self.retranslate()
 
     def retranslate(self, software: str = "", model: str = "") -> None:
@@ -355,4 +357,5 @@ class SupportIntro(QWidget):
         ):
             self.subtitle.setText(_fill(tr("donate_completion_subtitle_the_software"), model=model))
         else:
-            self.subtitle.setText(_fill(tr(subtitle_key), software=named, model=model))
+            count_val = getattr(self, "_count", 1)
+            self.subtitle.setText(_fill(tr(subtitle_key), software=named, model=model, count=count_val))
