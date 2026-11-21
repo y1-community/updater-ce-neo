@@ -4644,7 +4644,7 @@ class FlashPage(QWidget):
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         self.themes.reset_progress()
         from ..adb import find_adb_binary
-        from ..theme_pack import AdbPushWorker, ensure_normalized_theme_pack_zip, should_apply_theme_path_fix
+        from ..theme_pack import AdbPushWorker, should_apply_theme_path_fix
         adb_bin = find_adb_binary()
         model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
         rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
@@ -4654,7 +4654,7 @@ class FlashPage(QWidget):
         if custom_zip and Path(custom_zip).is_file():
             norm_zip = Path(custom_zip)
         else:
-            norm_zip = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
+            norm_zip = None
 
         self._adb_push_worker = AdbPushWorker(
             adb_bin,
@@ -4667,6 +4667,7 @@ class FlashPage(QWidget):
         )
         self._adb_push_worker.progress.connect(self._on_theme_push_progress)
         self._adb_push_worker.log.connect(self._log_theme)
+        self._adb_push_worker.status.connect(self.set_theme_download_status)
         self._adb_push_worker.finished.connect(self._on_theme_push_finished)
         self._adb_push_worker.start()
 
@@ -4727,6 +4728,8 @@ class FlashPage(QWidget):
                 self._log_theme(f"[Rockbox Themes] Pushed {curr}/{total} theme files to player ({int(pct)}%)...")
 
     def _on_theme_push_finished(self, ok: bool, msg: str) -> None:
+        # A download line must never outlive the transfer it described.
+        self.set_theme_download_status("")
         if ok:
             self._log_theme("[Rockbox Themes] Themes and fonts were transferred and verified successfully via ADB.")
             self._finish_rockbox_themes_stage()
@@ -4918,28 +4921,19 @@ class FlashPage(QWidget):
         from ..theme_pack import (
             find_or_create_rockbox_dir,
             DirMergeWorker,
-            ensure_normalized_theme_pack_zip,
             should_apply_theme_path_fix,
         )
         dest_dir = find_or_create_rockbox_dir(chosen)
         self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
-        # Same payload the ADB transfer pushes: bundled themes + fonts pack +
-        # any cached remote refresh. The old bundled-directory source is not a
-        # real directory in a packaged build, so it copied nothing and sent the
-        # user straight to the give-up screen.
-        try:
-            model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
-            rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
-            apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
-            custom_zip = getattr(self.themes, "payload_zip_path", None)
-            if custom_zip and Path(custom_zip).is_file():
-                payload_zip = Path(custom_zip)
-            else:
-                payload_zip = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
-        except Exception as e:
-            self._log_theme(f"[Rockbox Themes] Could not prepare the themes payload: {e}")
-            self._giveup_rockbox_themes_stage(str(e))
-            return
+        model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
+        rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
+        apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
+        custom_zip = getattr(self.themes, "payload_zip_path", None)
+        payload_zip = Path(custom_zip) if custom_zip and Path(custom_zip).is_file() else None
+        if payload_zip is None:
+            # The worker downloads/validates the full pack itself: doing it here
+            # would freeze the page while the user waits in USB storage mode.
+            self._log_theme("[Rockbox Themes] Preparing the complete themes & fonts pack...")
         self._log_theme(f"[Rockbox Themes] Merging themes & fonts payload into {dest_dir}...")
         if hasattr(self, "_theme_fallback_widget"):
             self._theme_fallback_widget.setVisible(False)
@@ -4952,7 +4946,11 @@ class FlashPage(QWidget):
         self._stop_adb_presence_watch()
 
         self._dir_merge_worker = DirMergeWorker(
-            dst_dir=dest_dir, parent=self, zip_path=payload_zip
+            dst_dir=dest_dir,
+            parent=self,
+            zip_path=payload_zip,
+            ensure_full=True,
+            apply_path_fix=apply_fix,
         )
         self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
         self._dir_merge_worker.log.connect(self._log_theme)

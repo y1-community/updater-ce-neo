@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,9 @@ DEVICE_ROCKBOX_CANDIDATES = (
     "/storage/emulated/0/.rockbox",
     "/mnt/sdcard/.rockbox",
     "/mnt/sdcard2/.rockbox",
+    "/mnt/media_rw/sdcard0/.rockbox",
+    "/mnt/media_rw/sdcard1/.rockbox",
+    "/data/.rockbox",
 )
 
 
@@ -312,6 +316,30 @@ def adb_find_rockbox_dir(adb: str, serial: str) -> Optional[str]:
     return found[0] if found else None
 
 
+def _media_rw_counterpart(path: str) -> str:
+    """The ``/storage`` spelling of a ``/mnt/media_rw`` path (or "")."""
+    match = re.match(r"^/mnt/media_rw/(sdcard[01])/\.rockbox$", path.rstrip("/"))
+    return f"/storage/{match.group(1)}/.rockbox" if match else ""
+
+
+def _dedupe_rockbox_dirs(paths: list[str]) -> list[str]:
+    """One entry per physical storage: a bind mount must not be pushed twice.
+
+    Android exposes the same card as ``/storage/sdcard0`` and
+    ``/mnt/media_rw/sdcard0``. Pushing into both doubled the transfer time
+    and made the verification list look like it had duplicate targets.
+    """
+    available = set(paths)
+    unique: list[str] = []
+    for path in paths:
+        counterpart = _media_rw_counterpart(path)
+        if counterpart and counterpart in available:
+            continue
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
 def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
     """Every probed ``.rockbox`` directory on the device (passive merges hit all)."""
     found: list[str] = []
@@ -320,7 +348,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
             adb,
             *_target(serial),
             "shell",
-            'for p in /storage/*/.rockbox /sdcard/.rockbox /mnt/*/.rockbox; do '
+            'for p in /storage/*/.rockbox /sdcard/.rockbox /mnt/*/.rockbox /mnt/*/*/.rockbox /data/.rockbox; do '
             '[ -d "$p" ] && (cd "$p" 2>/dev/null && pwd -P || readlink -f "$p" 2>/dev/null || echo "$p"); done',
             timeout=15,
         )
@@ -336,7 +364,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
                 ):
                     found.append(line)
             if found:
-                return found
+                return _dedupe_rockbox_dirs(found)
     except Exception as e:
         logger.debug("ADB shell rockbox discovery failed: %s", e)
 
@@ -357,7 +385,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
                     found.append(target)
         except Exception:
             continue
-    return found
+    return _dedupe_rockbox_dirs(found)
 
 
 def adb_delete_rockbox_dirs(
@@ -399,22 +427,68 @@ def adb_delete_rockbox_dirs(
                 timeout=180,
             )
         except Exception as e:
-            failed.append(f"{clean}: {e}")
+            proc = None
+            logger.debug("ADB rm -rf failed for %s: %s", clean, e)
+
+        if (
+            proc is not None
+            and proc.returncode == 0
+            and "__ADB_RM_OK__" in (proc.stdout or "")
+            and not adb_shell_ls(adb, serial, clean)
+        ):
+            removed.append(clean)
+            if log_cb is not None:
+                try:
+                    log_cb(f"Removed {clean}")
+                except Exception:
+                    logger.debug("ADB cleanup log callback failed", exc_info=True)
             continue
-        if proc.returncode != 0 or "__ADB_RM_OK__" not in (proc.stdout or ""):
+
+        # Rockbox runs while its card is mounted over FUSE and can recreate a
+        # file mid-delete, which makes rm -rf exit with ENOTEMPTY even though
+        # the folder is already being emptied. Renaming the tree takes it out
+        # of Rockbox's sight atomically; the reboot then creates a fresh one.
+        trash = f"{clean}.deleted-{int(time.time())}"
+        try:
+            moved = _run_adb(
+                adb,
+                *_target(serial),
+                "shell",
+                f"mv {_shell_quote(clean)} {_shell_quote(trash)} && echo __ADB_MV_OK__",
+                timeout=60,
+            )
+        except Exception as e:
             failed.append(
-                f"{clean}: {(proc.stderr or proc.stdout or 'rm failed').strip()}"
+                f"{clean}: {(proc.stderr or proc.stdout or 'rm failed').strip() if proc is not None else e}"
             )
             continue
-        if adb_shell_ls(adb, serial, clean):
-            failed.append(f"{clean}: still present after removal")
-            continue
-        removed.append(clean)
-        if log_cb is not None:
+        if (
+            moved.returncode == 0
+            and "__ADB_MV_OK__" in (moved.stdout or "")
+            and not adb_shell_ls(adb, serial, clean)
+        ):
+            removed.append(clean)
+            if log_cb is not None:
+                try:
+                    log_cb(f"Moved {clean} aside so Rockbox can rebuild it")
+                except Exception:
+                    logger.debug("ADB cleanup log callback failed", exc_info=True)
+            # Best effort: the reboot finishes the job for any file still open.
             try:
-                log_cb(f"Removed {clean}")
+                _run_adb(
+                    adb,
+                    *_target(serial),
+                    "shell",
+                    f"rm -rf {_shell_quote(trash)}",
+                    timeout=120,
+                )
             except Exception:
-                logger.debug("ADB cleanup log callback failed", exc_info=True)
+                logger.debug("Could not remove renamed .rockbox tree %s", trash)
+            continue
+
+        failed.append(
+            f"{clean}: {(proc.stderr or proc.stdout or 'rm failed').strip() if proc is not None else 'rm failed'}"
+        )
 
     if removed and failed:
         return False, f"Removed {len(removed)}; issues: {'; '.join(failed[:3])}"
@@ -759,8 +833,35 @@ def _payload_missing_from(
             path = parts[1]
         path = path.strip()
         if path.startswith(prefix):
-            present.add(path[len(prefix):])
-    return [rel for rel in entries if rel not in present]
+            present.add(path[len(prefix):].casefold())
+    # Rockbox storage is FAT: two archive names that differ only by case are
+    # one file on the device, so verification compares case-insensitively.
+    return [rel for rel in entries if rel.casefold() not in present]
+
+
+def adb_verify_theme_payload(
+    adb: str,
+    serial: "AdbDevice | str",
+    device_dir: str,
+    zip_path: str | Path,
+) -> tuple[bool, str]:
+    """Check every file in the theme archive is present under ``device_dir``.
+
+    The per-file fallback has no built-in verification (unlike the on-device
+    unpack), so without this a partial push was reported as a complete install.
+    """
+    entries = _payload_entries(Path(zip_path))
+    if not entries:
+        return False, f"Could not read the theme archive's file list: {zip_path}"
+    missing = _payload_missing_from(adb, serial, device_dir, entries)
+    if missing is None:
+        return False, f"Could not verify the theme files in {device_dir}"
+    if missing:
+        return False, (
+            f"{len(missing)} of {len(entries)} theme files are missing from "
+            f"{device_dir} (first: {missing[0]})"
+        )
+    return True, f"{len(entries)} theme files verified in {device_dir}"
 
 
 def adb_push_and_unpack_zip(

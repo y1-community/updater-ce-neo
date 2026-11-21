@@ -387,7 +387,7 @@ def test_manual_folder_merge_lands_the_real_payload(tmp_path):
     page.themes.model = "Y1"
     try:
         page._on_theme_fallback_next_clicked()
-        with patch.object(tp, "ensure_normalized_theme_pack_zip", return_value=payload), patch("src.adb.adb_devices", return_value=[]):
+        with patch.object(tp, "ensure_ready_theme_pack_zip", return_value=(payload, "")), patch("src.adb.adb_devices", return_value=[]):
             page._on_theme_folder_chosen(str(chosen))
             worker = page._dir_merge_worker
             assert worker is not None

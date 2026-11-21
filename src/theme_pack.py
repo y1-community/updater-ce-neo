@@ -64,15 +64,26 @@ THEME_PACK_URLS = THEME_PACK_THEME_URLS + THEME_PACK_FONT_URLS
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
 THEME_PACK_ZIP_NAME_Y2 = "rockbox_360p_themepack_y2.zip"
 
-_Y2_THEME_PATH_RE_BYTES = re.compile(rb"/(?:storage/sdcard0|sdcard0|sdcard)/\.rockbox/")
-_Y2_THEME_PATH_RE_STR = re.compile(r"/(?:storage/sdcard0|sdcard0|sdcard)/\.rockbox/")
+#: Any storage-qualified prefix that points at a ``.rockbox`` directory. The
+#: trailing separator is optional: configs also carry paths such as
+#: ``/sdcard/.rockbox`` with no slash after it.
+_Y2_ROCKBOX_PATH = (
+    r"/?(?:storage/(?:sdcard[01]|emulated/(?:0|legacy))"
+    r"|mnt/(?:media_rw/sdcard[01]|sdcard)|sdcard[01]|sdcard)/\.rockbox"
+)
+_Y2_THEME_PATH_RE_BYTES = re.compile((_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)").encode("utf-8"))
+_Y2_THEME_PATH_RE_STR = re.compile(_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)")
+
+#: File types that carry Rockbox settings (theme configs, WPS/SBS sources and
+#: the small text files shipped beside them).
+THEME_CONTENT_SUFFIXES = (".cfg", ".wps", ".sbs", ".fms", ".ini", ".txt")
 
 
 def patch_theme_content_for_y2(content: str | bytes) -> str | bytes:
-    """Replace /sdcard/.rockbox/ (and /sdcard0/, /storage/sdcard0/) with /.rockbox/."""
+    """Replace /sdcard/.rockbox (and its storage variants) with /.rockbox."""
     if isinstance(content, bytes):
-        return _Y2_THEME_PATH_RE_BYTES.sub(b"/.rockbox/", content)
-    return _Y2_THEME_PATH_RE_STR.sub("/.rockbox/", content)
+        return _Y2_THEME_PATH_RE_BYTES.sub(b"/.rockbox", content)
+    return _Y2_THEME_PATH_RE_STR.sub("/.rockbox", content)
 
 
 def should_apply_theme_path_fix(
@@ -175,6 +186,8 @@ def refresh_theme_pack_if_due_async(now: Optional[float] = None) -> bool:
 def normalize_rockbox_rel_path(filename: str) -> str:
     """Normalize a zip entry name to a clean relative path inside .rockbox."""
     name = filename.replace("\\", "/").lstrip("/")
+    while name.startswith("./"):
+        name = name[2:]
     if "/.rockbox/" in name:
         name = name.split("/.rockbox/", 1)[1]
     elif name.startswith(".rockbox/"):
@@ -187,6 +200,95 @@ def normalize_rockbox_rel_path(filename: str) -> str:
     if not name or any(part in ("", ".", "..") for part in parts):
         return ""
     return name
+
+
+def theme_zip_has_themes(zip_path: Path | str) -> bool:
+    """Whether an archive really carries themes (not just the fonts pack).
+
+    Accepts both the normalized layout (``themes/...``) and the raw release
+    layout (``.rockbox/themes/...`` or ``themes-themepack/.rockbox/...``).
+    A payload that only adds fonts must never be treated as an installed theme
+    pack, which is what made a 91-file fonts archive pass as a full install.
+    """
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = [info.filename for info in zf.infolist() if not info.is_dir()]
+    except (OSError, zipfile.BadZipFile):
+        return False
+    themes = 0
+    screens = 0
+    for raw in names:
+        rel = normalize_rockbox_rel_path(raw)
+        if not rel:
+            continue
+        if rel.startswith("themes/") and rel.endswith(".cfg"):
+            themes += 1
+        elif rel.startswith("wps/") and rel.endswith((".wps", ".sbs")):
+            screens += 1
+    return themes > 0 and screens > 0
+
+
+def ensure_theme_pack_downloaded(
+    timeout: float = 120.0,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+) -> tuple[bool, str]:
+    """Make sure the downloaded archive has themes in it, fetching if needed.
+
+    The themes archive is not bundled, so an automated install that skipped
+    this step silently pushed only the bundled fonts. Returns ``(ok, status)``;
+    ``status`` explains a failure (offline with no cache, download failed, or
+    an archive that still has no themes).
+    """
+    cached = downloads_dir() / THEME_PACK_ZIP_NAME
+    if theme_zip_has_themes(cached):
+        return True, "cached"
+
+    from . import config
+
+    if config.is_offline_mode():
+        return False, "offline mode is on and no complete theme pack is cached"
+    try:
+        _ok, status, _count = download_and_merge_theme_pack(
+            cached, timeout=timeout, progress_cb=progress_cb
+        )
+    except Exception as e:
+        logger.warning("Theme pack download failed: %s", e, exc_info=True)
+        return False, f"the theme download failed ({e})"
+    if theme_zip_has_themes(cached):
+        return True, status
+    return False, "the downloaded archive did not contain any themes"
+
+
+def ensure_ready_theme_pack_zip(
+    apply_path_fix: bool = False,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+    log_cb: Optional[Callable[[str], None]] = None,
+) -> tuple[Optional[Path], str]:
+    """Return a validated, normalized themes+fonts zip, downloading if needed.
+
+    Unlike :func:`ensure_normalized_theme_pack_zip`, this never hands back a
+    fonts-only payload as if it were an install: callers get ``(None, reason)``
+    when the themes could not be obtained or built.
+    """
+
+    def _log(message: str) -> None:
+        logger.info(message)
+        if log_cb is not None:
+            try:
+                log_cb(message)
+            except Exception:
+                pass
+
+    ok, status = ensure_theme_pack_downloaded(progress_cb=progress_cb)
+    if not ok:
+        _log(f"[Rockbox Themes] Full theme pack unavailable: {status}")
+
+    target = ensure_normalized_theme_pack_zip(
+        apply_path_fix=apply_path_fix, force_rebuild=False
+    )
+    if not theme_zip_has_themes(target):
+        return None, status or "the theme pack contains fonts only"
+    return target, ""
 
 
 def merge_remote_theme_pack_into_zip(
@@ -471,7 +573,11 @@ def extract_theme_pack_zip(
             dest_path = target_rockbox_dir / rel_part
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             data = zf.read(info)
-            if apply_path_fix and (rel_part.endswith(".cfg") or rel_part.endswith(".txt") or b"/sdcard" in data):
+            if apply_path_fix and (
+                rel_part.endswith(THEME_CONTENT_SUFFIXES)
+                or b"sdcard" in data
+                or b".rockbox" in data
+            ):
                 data = patch_theme_content_for_y2(data)
             dest_path.write_bytes(data)
             extracted_count += 1
@@ -789,21 +895,38 @@ def ensure_normalized_theme_pack_zip(
     default_name = THEME_PACK_ZIP_NAME_Y2 if apply_path_fix else THEME_PACK_ZIP_NAME
     target = Path(target_zip_path) if target_zip_path else (downloads_dir() / default_name)
     target.parent.mkdir(parents=True, exist_ok=True)
+    source_theme_pack = downloads_dir() / THEME_PACK_ZIP_NAME
 
     if not force_rebuild and target.is_file() and target.stat().st_size > 1024:
         # Check if already normalized (no themes-themepack/ or .rockbox/ prefix)
-        try:
-            with zipfile.ZipFile(target, "r") as zf:
-                sample = [info.filename for info in zf.infolist() if not info.is_dir()][:10]
-                if sample and not any(s.startswith("themes-themepack/") or s.startswith(".rockbox/") for s in sample):
-                    if apply_path_fix:
-                        cfg_samples = [s for s in zf.namelist() if s.endswith(".cfg")][:3]
-                        if not any(b"/sdcard" in zf.read(c) for c in cfg_samples):
+        # and that it carries themes rather than the fonts pack alone.
+        is_stale = False
+        if source_theme_pack.is_file() and source_theme_pack != target:
+            try:
+                if source_theme_pack.stat().st_mtime > target.stat().st_mtime:
+                    is_stale = True
+            except OSError:
+                pass
+        if not is_stale:
+            try:
+                with zipfile.ZipFile(target, "r") as zf:
+                    sample = [info.filename for info in zf.infolist() if not info.is_dir()][:25]
+                    if (
+                        sample
+                        and not any(
+                            s.startswith(("themes-themepack/", ".rockbox/"))
+                            for s in sample
+                        )
+                        and theme_zip_has_themes(target)
+                    ):
+                        if apply_path_fix:
+                            cfg_samples = [s for s in zf.namelist() if s.endswith(".cfg")][:12]
+                            if cfg_samples and not any(b"sdcard" in zf.read(c) for c in cfg_samples):
+                                return target
+                        else:
                             return target
-                    else:
-                        return target
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     entries: dict[str, bytes] = {}
 
@@ -835,15 +958,30 @@ def ensure_normalized_theme_pack_zip(
         except Exception as e:
             logger.warning("Could not read bundled themes zip %s: %s", themes_zip, e)
 
-    # 3. Existing cached target zip (may have remote themes already merged)
-    if target.is_file() and target != themes_zip:
+    # 3. Downloaded theme pack archive. Read it even when it is also the
+    # target: the Y1 payload name matches the downloaded archive, and skipping
+    # it used to overwrite the full themes with the bundled fonts alone.
+    if source_theme_pack.is_file():
+        try:
+            with zipfile.ZipFile(source_theme_pack, "r") as sz:
+                for info in sz.infolist():
+                    if info.is_dir() or info.filename.endswith("/"):
+                        continue
+                    rel = normalize_rockbox_rel_path(info.filename)
+                    if rel:
+                        entries[rel] = sz.read(info)
+        except Exception as e:
+            logger.warning("Could not read downloaded themes zip %s: %s", source_theme_pack, e)
+
+    # 4. Existing cached target zip (may have remote themes already merged)
+    if target.is_file() and target != themes_zip and target != source_theme_pack:
         try:
             with zipfile.ZipFile(target, "r") as cz:
                 for info in cz.infolist():
                     if info.is_dir() or info.filename.endswith("/"):
                         continue
                     rel = normalize_rockbox_rel_path(info.filename)
-                    if rel:
+                    if rel and rel not in entries:
                         entries[rel] = cz.read(info)
         except Exception as e:
             logger.debug("Could not read cached target zip %s: %s", target, e)
@@ -852,13 +990,21 @@ def ensure_normalized_theme_pack_zip(
     with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
         for rel in sorted(entries.keys()):
             data = entries[rel]
-            if apply_path_fix and (rel.endswith(".cfg") or rel.endswith(".txt") or b"/sdcard" in data):
+            if apply_path_fix and (
+                rel.endswith(THEME_CONTENT_SUFFIXES)
+                or b"sdcard" in data
+                or b".rockbox" in data
+            ):
                 data = patch_theme_content_for_y2(data)
             ozf.writestr(rel, data)
 
     if tmp_file.exists():
         os.replace(tmp_file, target)
 
+    if not theme_zip_has_themes(target):
+        logger.warning(
+            "[Rockbox Themes] Normalized payload has no themes (fonts only): %s", target
+        )
     return target
 
 
@@ -874,7 +1020,13 @@ def ensure_theme_zip_patched_for_y2(
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime and dst.stat().st_size > 1024:
-        return dst
+        try:
+            with zipfile.ZipFile(dst, "r") as zf:
+                cfg_samples = [n for n in zf.namelist() if n.endswith(".cfg")][:12]
+                if cfg_samples and not any(b"/sdcard" in zf.read(n) for n in cfg_samples):
+                    return dst
+        except Exception:
+            pass
 
     tmp_file = dst.with_suffix(".tmp_patch")
     with zipfile.ZipFile(src, "r") as izf, zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
@@ -882,7 +1034,11 @@ def ensure_theme_zip_patched_for_y2(
             if info.is_dir() or info.filename.endswith("/"):
                 continue
             data = izf.read(info)
-            if info.filename.endswith(".cfg") or info.filename.endswith(".txt") or b"/sdcard" in data:
+            if (
+                info.filename.endswith(THEME_CONTENT_SUFFIXES)
+                or b"sdcard" in data
+                or b".rockbox" in data
+            ):
                 data = patch_theme_content_for_y2(data)
             ozf.writestr(info.filename, data)
 
@@ -1392,6 +1548,7 @@ class AdbPushWorker(QThread):
 
     progress = Signal(int, int)
     log = Signal(str)  # raw adb transfer output, for the install output log
+    status = Signal(str)  # current stage line (download progress, then blank)
     finished = Signal(bool, str)  # success, message
 
     def __init__(
@@ -1411,6 +1568,19 @@ class AdbPushWorker(QThread):
         self._zip_path = Path(zip_path) if zip_path else None
         self._model = model
         self._rb_themes_path_fix = rb_themes_path_fix
+        self._last_download_pct = -1
+
+    def _download_progress(self, downloaded: int, total: int) -> None:
+        """Report pack download progress without pretending it is a file push."""
+        if total <= 0:
+            return
+        pct = max(0, min(100, int(downloaded * 100 / total)))
+        if pct == self._last_download_pct or (pct < 100 and pct % 5):
+            return
+        self._last_download_pct = pct
+        text = f"{tr('themepack_status_downloading')} {pct}%"
+        self.log.emit(f"[Rockbox Themes] {text}")
+        self.status.emit(text)
 
     def run(self):
         try:
@@ -1429,14 +1599,35 @@ class AdbPushWorker(QThread):
                 model=self._model, rb_themes_path_fix=self._rb_themes_path_fix
             )
 
-            # Ensure we have our normalized zip ready
+            # Ensure we have a complete, normalized, path-patched zip ready.
+            # The themes archive is downloaded here when it is not cached, so a
+            # fast device handshake can never race the download and push fonts only.
             if self._zip_path:
                 if apply_fix:
                     zip_file = ensure_theme_zip_patched_for_y2(self._zip_path)
                 else:
                     zip_file = self._zip_path
             else:
-                zip_file = ensure_normalized_theme_pack_zip(apply_path_fix=apply_fix)
+                self.log.emit(
+                    "[Rockbox Themes] Preparing the complete 360p themes & fonts pack..."
+                )
+                zip_file, reason = ensure_ready_theme_pack_zip(
+                    apply_path_fix=apply_fix,
+                    progress_cb=self._download_progress,
+                    log_cb=self.log.emit,
+                )
+                if zip_file is None:
+                    self.status.emit("")
+                    self.finished.emit(
+                        False,
+                        f"The theme pack could not be prepared: {reason}",
+                    )
+                    return
+                self.status.emit("")
+                self.log.emit(
+                    f"[Rockbox Themes] Theme pack ready: {zip_file.name}"
+                    + (" (paths patched for Y2)" if apply_fix else "")
+                )
 
             # The automated path stays on ADB. If the user separately enabled
             # USB mass storage, the timeout/fallback UI presents a folder picker.
@@ -1526,8 +1717,19 @@ class AdbPushWorker(QThread):
                 if not ok:
                     all_ok = False
                     messages.append(f"{d_dir}: {msg or 'push failed'}")
-                elif msg:
+                    continue
+                if msg:
                     messages.append(msg)
+                # A push command exiting 0 is not proof the files landed. Check
+                # the device against the archive's own manifest before calling
+                # the install complete, otherwise a partial transfer looks fine.
+                verified, verify_msg = _adb.adb_verify_theme_payload(
+                    self._adb, self._serial, d_dir, zip_file
+                )
+                self.log.emit(f"[Rockbox Themes] {verify_msg}")
+                if not verified:
+                    all_ok = False
+                messages.append(verify_msg)
 
             if temp_extract_dir and temp_extract_dir.exists():
                 shutil.rmtree(temp_extract_dir, ignore_errors=True)
@@ -1621,11 +1823,21 @@ class DirMergeWorker(QThread):
     log = Signal(str)
     finished = Signal(bool, str, int)  # success, error, count
 
-    def __init__(self, src_dir=None, dst_dir=None, parent=None, zip_path=None):
+    def __init__(
+        self,
+        src_dir=None,
+        dst_dir=None,
+        parent=None,
+        zip_path=None,
+        ensure_full: bool = False,
+        apply_path_fix: bool = False,
+    ):
         super().__init__(parent)
         self._src = Path(src_dir) if src_dir else None
         self._zip = Path(zip_path) if zip_path else None
         self._dst = Path(dst_dir)
+        self._ensure_full = ensure_full
+        self._apply_path_fix = apply_path_fix
 
     def run(self):
         import tempfile
@@ -1633,10 +1845,25 @@ class DirMergeWorker(QThread):
         unpacked = None
         try:
             src = self._src
-            if src is None and self._zip is not None:
-                unpacked = Path(tempfile.mkdtemp(prefix="rockbox_payload_"))
-                extract_theme_pack_zip(self._zip, unpacked)
-                src = unpacked
+            if src is None:
+                payload_zip = self._zip
+                if payload_zip is None and self._ensure_full:
+                    self.log.emit(
+                        "[Rockbox Themes] Preparing the complete 360p themes & fonts pack..."
+                    )
+                    payload_zip, reason = ensure_ready_theme_pack_zip(
+                        apply_path_fix=self._apply_path_fix,
+                        log_cb=self.log.emit,
+                    )
+                    if payload_zip is None:
+                        self.finished.emit(False, reason, 0)
+                        return
+                if payload_zip is not None:
+                    unpacked = Path(tempfile.mkdtemp(prefix="rockbox_payload_"))
+                    extract_theme_pack_zip(
+                        payload_zip, unpacked, apply_path_fix=self._apply_path_fix
+                    )
+                    src = unpacked
             if src is None:
                 self.finished.emit(False, "No theme payload to copy", 0)
                 return
@@ -1988,13 +2215,23 @@ class Rockbox360pSetupWizard(QDialog):
         if not self._adb_binary or not self._adb_serial:
             return
         self._adb_status.setText(tr("rockbox_wizard_adb_pushing"))
-        norm_zip = ensure_normalized_theme_pack_zip(self._zip_path)
+        apply_fix = should_apply_theme_path_fix(model=self.model)
+        norm_zip, reason = ensure_ready_theme_pack_zip(apply_path_fix=apply_fix)
+        if norm_zip is None:
+            self._adb_status.setText(
+                tr("themepack_download_failed_fmt").format(error=reason)
+            )
+            self._stack.setCurrentIndex(2)
+            self._sync_buttons()
+            return
         self._push_worker = AdbPushWorker(
             self._adb_binary,
             self._adb_serial,
             local_dir=self._combined_dir,
             parent=self,
             zip_path=norm_zip,
+            model=self.model,
+            rb_themes_path_fix=apply_fix,
         )
         self._push_worker.progress.connect(self._on_push_progress)
         self._push_worker.finished.connect(self._on_push_finished)

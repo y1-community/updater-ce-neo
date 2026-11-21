@@ -278,4 +278,33 @@ def test_adb_rockbox_cleanup_worker_reboots():
         assert reboot_calls == [("adb", "SERIAL123")]
 
 
+def test_y2_theme_path_regex_variations():
+    from src.theme_pack import patch_theme_content_for_y2
 
+    cases = [
+        ("wps: /sdcard/.rockbox/wps/test.wps", "wps: /.rockbox/wps/test.wps"),
+        ("sbs: /sdcard0/.rockbox/wps/test.sbs", "sbs: /.rockbox/wps/test.sbs"),
+        ("font: sdcard/.rockbox/fonts/test.fnt", "font: /.rockbox/fonts/test.fnt"),
+        ("iconset: /storage/sdcard0/.rockbox/icons/test.bmp", "iconset: /.rockbox/icons/test.bmp"),
+        ("iconset: /storage/sdcard1/.rockbox/icons/test.bmp", "iconset: /.rockbox/icons/test.bmp"),
+        ("viewers: /mnt/media_rw/sdcard0/.rockbox/icons/v.bmp", "viewers: /.rockbox/icons/v.bmp"),
+        ("viewers: /mnt/sdcard/.rockbox/icons/v.bmp", "viewers: /.rockbox/icons/v.bmp"),
+        ("backdrop: /.rockbox/backdrops/test.bmp", "backdrop: /.rockbox/backdrops/test.bmp"),
+    ]
+    for raw, expected in cases:
+        assert patch_theme_content_for_y2(raw) == expected
+        assert patch_theme_content_for_y2(raw.encode("utf-8")) == expected.encode("utf-8")
+
+
+def test_rockbox_connection_and_title_strings():
+    from src.i18n import tr
+
+    title = tr("rockbox_themes_and_fonts_pack")
+    assert title != "rockbox_themes_and_fonts_pack"
+    assert "Rockbox" in title and "Themes" in title
+
+    usb_prompt = tr("rockbox_step_standalone_power_on_usb").format(model="Y2")
+    assert "Attach the USB cable to your Y2" in usb_prompt
+
+    usb_step2 = tr("rockbox_step2_connect_usb").format(model="Y2")
+    assert "Attach the USB cable to your Y2" in usb_step2

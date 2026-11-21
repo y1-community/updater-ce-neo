@@ -149,9 +149,11 @@ def test_flash_stage_pushes_through_when_one_player_and_watches_when_two():
             page._on_adb_multiple_devices(2)
             prompt = tr("rockbox_stage_disconnect_extra")
             assert page.themes.multiple_players is True
-            assert page._eta_label.text() == prompt
+            # The question owns the card's band while it is asking.
+            assert page._flash_question_label.text() == prompt
+            assert page._flash_question_label.isVisible()
             page._on_adb_watch_tick()
-            assert page._eta_label.text() == prompt
+            assert page._flash_question_label.text() == prompt
     finally:
         page.stop_theme_workers()
         page.close()

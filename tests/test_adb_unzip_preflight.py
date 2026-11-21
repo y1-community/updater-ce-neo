@@ -150,7 +150,9 @@ def test_a_complete_extract_is_a_success_and_a_failed_one_falls_back(tmp_path):
 
     with patch.object(adb, "adb_find_all_rockbox_dirs", return_value=[DEST]), patch.object(
         adb, "adb_push_and_unpack_zip", side_effect=no_unpack
-    ), patch.object(adb, "adb_push_merge", side_effect=fake_push):
+    ), patch.object(adb, "adb_push_merge", side_effect=fake_push), patch.object(
+        adb, "adb_verify_theme_payload", return_value=(True, "verified")
+    ):
         worker.run()
 
     assert pushes == [DEST]
