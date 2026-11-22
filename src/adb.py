@@ -184,6 +184,8 @@ class AdbDevice:
     serial: str
     transport_id: str = ""
     model: str = ""
+    product: str = ""
+    device: str = ""
 
     def __str__(self) -> str:
         return self.serial
@@ -212,13 +214,247 @@ def adb_device_list(adb: str, timeout: float = 10) -> list[AdbDevice]:
             continue
         transport = ""
         model = ""
+        product = ""
+        dev_name = ""
         for field in parts[2:]:
             if field.startswith("transport_id:"):
                 transport = field.split(":", 1)[1]
             elif field.startswith("model:"):
                 model = field.split(":", 1)[1]
-        devices.append(AdbDevice(serial=parts[0], transport_id=transport, model=model))
+            elif field.startswith("product:"):
+                product = field.split(":", 1)[1]
+            elif field.startswith("device:"):
+                dev_name = field.split(":", 1)[1]
+        devices.append(
+            AdbDevice(
+                serial=parts[0],
+                transport_id=transport,
+                model=model,
+                product=product,
+                device=dev_name,
+            )
+        )
     return devices
+
+
+_ADB_MODEL_PROPS = (
+    "ro.product.model",
+    "ro.product.device",
+    "ro.product.name",
+    "ro.product.board",
+    "ro.build.product",
+    "ro.product.brand",
+    "ro.product.manufacturer",
+    "ro.build.display.id",
+    "ro.build.fingerprint",
+    "ro.hardware",
+    "ro.board.platform",
+)
+
+_ADB_BOARD_MARKERS = {
+    "Y2": ("EASTAEON82", "Y2_ROCKBOX", "Y2ROCKBOX"),
+    "Y1": ("G368_NYX", "Y1_HVGA", "Y1_ROCKBOX", "Y1ROCKBOX"),
+}
+
+_ADB_SOC_FALLBACK = {
+    "MT6582": "Y2",
+    "MT6572": "Y1",
+}
+
+_OTHER_KNOWN_PLAYER_MODELS = (
+    "G1",
+    "G3",
+    "G5",
+    "Q3",
+    "Q3E",
+    "Q5",
+    "R1",
+    "PR1",
+    "SR1",
+    "A5",
+)
+
+_INNIOASIS_LIKE_BRANDS = frozenset({
+    "",
+    "innioasis",
+    "alps",
+    "mediatek",
+    "mtk",
+    "rockbox",
+    "y1",
+    "y2",
+    "unknown",
+    "generic",
+    "android",
+})
+
+
+def _match_adb_model_text(text: str, supported: tuple[str, ...]) -> Optional[str]:
+    """Extract an unambiguous supported player model ID from one property string."""
+    upper = str(text or "").strip().upper()
+    if not upper:
+        return None
+    marker_hits: list[str] = []
+    for model_id, markers in _ADB_BOARD_MARKERS.items():
+        if model_id in supported and any(marker in upper for marker in markers):
+            marker_hits.append(model_id)
+    if len(marker_hits) == 1:
+        return marker_hits[0]
+    token_hits = [
+        m for m in supported
+        if re.search(rf"(?<![A-Z0-9]){re.escape(m)}(?![A-Z0-9])", upper)
+    ]
+    if len(token_hits) == 1:
+        return token_hits[0]
+    return None
+
+
+def classify_adb_model(
+    props: dict[str, str],
+    *,
+    serial: str = "",
+    supported_models: tuple[str, ...] | list[str] = ("Y1", "Y2"),
+) -> Optional[str]:
+    """Identify an attached player model (e.g. ``Y1`` or ``Y2``) from ADB properties.
+
+    Checks ``adb devices -l`` banner tokens and Android ``getprop`` fields in
+    priority order: explicit model/device/product/board identifiers first,
+    then build fingerprint/display ID, then MediaTek SoC fallback (``mt6582``
+    for Y2, ``mt6572`` for Y1) when brand/manufacturer does not point to an
+    unrelated device.
+    """
+    supported = tuple(dict.fromkeys(str(m).strip().upper() for m in supported_models if str(m).strip()))
+    if not supported:
+        return None
+    norm = {str(k).strip().lower(): str(v or "").strip() for k, v in (props or {}).items()}
+
+    primary_keys = (
+        "ro.product.model",
+        "model",
+        "ro.product.device",
+        "device",
+        "ro.product.name",
+        "product",
+        "ro.build.product",
+        "ro.product.board",
+    )
+    excluded_other = tuple(m for m in _OTHER_KNOWN_PLAYER_MODELS if m not in supported)
+    for key in primary_keys:
+        val = norm.get(key, "")
+        if not val:
+            continue
+        hit = _match_adb_model_text(val, supported)
+        if hit:
+            return hit
+        upper = val.upper()
+        if any(re.search(rf"(?<![A-Z0-9]){re.escape(other)}(?![A-Z0-9])", upper) for other in excluded_other):
+            return None
+
+    for key in ("ro.build.display.id", "ro.build.fingerprint", "ro.build.description"):
+        val = norm.get(key, "")
+        if not val:
+            continue
+        hit = _match_adb_model_text(val, supported)
+        if hit:
+            return hit
+
+    brand = norm.get("ro.product.brand", "").casefold()
+    manufacturer = norm.get("ro.product.manufacturer", "").casefold()
+    brand_ok = (brand in _INNIOASIS_LIKE_BRANDS and manufacturer in _INNIOASIS_LIKE_BRANDS)
+    if brand_ok or (serial == STANDARD_Y_ADB_SERIAL and brand in _INNIOASIS_LIKE_BRANDS):
+        for key in ("ro.hardware", "ro.board.platform"):
+            soc = norm.get(key, "").upper()
+            if not soc:
+                continue
+            for soc_key, model_id in _ADB_SOC_FALLBACK.items():
+                if soc_key in soc and model_id in supported:
+                    return model_id
+    return None
+
+
+def _adb_read_device_props(
+    adb: str,
+    device: "AdbDevice | str",
+    timeout: float = 2.5,
+) -> dict[str, str]:
+    """Read key Android identity properties from one ADB target in a single shell call."""
+    props_list = " ".join(_ADB_MODEL_PROPS)
+    cmd = f'for k in {props_list}; do echo "$k=$(getprop $k)"; done'
+    try:
+        proc = _run_adb(adb, *_target(device), "shell", cmd, timeout=timeout)
+    except Exception as e:
+        logger.debug("ADB getprop probe failed for %s: %s", device, e)
+        return {}
+    if proc.returncode != 0 or not proc.stdout:
+        return {}
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+        if key:
+            out[key] = val
+    return out
+
+
+def adb_detect_player_model(
+    adb: Optional[str] = None,
+    *,
+    device: "AdbDevice | str | None" = None,
+    timeout: float = 2.5,
+    supported_models: Optional[tuple[str, ...] | list[str]] = None,
+) -> Optional[str]:
+    """Automatically identify an ADB-connected player model (e.g. ``Y1`` or ``Y2``).
+
+    Returns ``None`` when no ADB binary or player is available, when the
+    attached Android device is not a recognised Rockbox player, or when
+    multiple different player models are connected at once.
+    """
+    supported = tuple(supported_models or ("Y1", "Y2"))
+    try:
+        adb_bin = adb or find_adb_binary()
+    except Exception:
+        adb_bin = None
+    if not adb_bin:
+        return None
+
+    def _probe_one(target: "AdbDevice | str") -> Optional[str]:
+        serial = target.serial if isinstance(target, AdbDevice) else str(target)
+        banner_props: dict[str, str] = {}
+        if isinstance(target, AdbDevice):
+            banner_props = {
+                "model": target.model,
+                "device": target.device,
+                "product": target.product,
+            }
+            hit = classify_adb_model(banner_props, serial=serial, supported_models=supported)
+            if hit:
+                return hit
+        shell_props = _adb_read_device_props(adb_bin, target, timeout=timeout)
+        if not shell_props:
+            return None
+        merged = {**banner_props, **shell_props}
+        return classify_adb_model(merged, serial=serial, supported_models=supported)
+
+    try:
+        if device is not None:
+            return _probe_one(device)
+        devices = adb_device_list(adb_bin, timeout=min(timeout, 2.0))
+        if not devices:
+            return None
+        detected: set[str] = set()
+        for dev in devices:
+            hit = _probe_one(dev)
+            if hit:
+                detected.add(hit)
+        if len(detected) == 1:
+            return next(iter(detected))
+        return None
+    except Exception as e:
+        logger.debug("ADB player model detection failed: %s", e)
+        return None
 
 
 def adb_devices(adb: str, timeout: float = 10) -> list[str]:

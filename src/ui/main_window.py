@@ -1253,6 +1253,9 @@ class MainWindow(QMainWindow):
         if not paths:
             return
         model = self._manual_themes_model()
+        if not model:
+            self._append_log("Dropped Rockbox theme install cancelled: no device selected.")
+            return
         from ..theme_pack import prepare_dragged_theme_payload, should_apply_theme_path_fix
         import tempfile
         import time
@@ -1281,6 +1284,7 @@ class MainWindow(QMainWindow):
         self.themes.is_custom_theme = True
         self.themes.custom_theme_count = count
         self.themes.custom_theme_name = display_name
+        self.themes.custom_theme_paths = [Path(p) for p in paths]
         self.themes.model = model
         self.themes.rb_themes_path_fix = apply_fix
         self._compact_install_screen = False
@@ -3444,61 +3448,122 @@ class MainWindow(QMainWindow):
         self._notify_app_update(info, force=True)
         self._offer_app_update(info)
 
-    def _manual_themes_model(self) -> str:
-        """Model for a manually started themes stage: Y1 or Y2 based on selection or device."""
-        try:
-            from ..player_update_check import get_rockbox_installed_models
-            rb_models = get_rockbox_installed_models(self.settings)
-            if len(rb_models) == 1:
-                return rb_models[0]
-            if len(rb_models) > 1:
-                from PySide6.QtWidgets import QInputDialog
-                from ..config import device_label_for_model
-                items = [device_label_for_model(m) for m in rb_models]
-                chosen, ok = QInputDialog.getItem(
-                    self,
-                    tr("rockbox_select_device_title"),
-                    tr("rockbox_select_device_prompt"),
-                    items,
-                    0,
-                    False,
-                )
-                if ok and chosen:
-                    for m in rb_models:
-                        if device_label_for_model(m) == chosen or m in chosen:
-                            return m
-        except Exception as e:
-            logger.debug("Error determining Rockbox installed models: %s", e)
-
-        try:
-            from ..adb import find_adb_binary, adb_command
-            adb_bin = find_adb_binary()
-            if adb_bin:
-                out = adb_command(adb_bin, "shell", "getprop", "ro.product.model", timeout=2.0)
-                if out:
-                    m = out.strip().upper()
-                    if "Y2" in m:
-                        return "Y2"
-                    if "Y1" in m:
-                        return "Y1"
-        except Exception:
-            pass
-
+    def _manual_themes_fallback_default(self, supported_models: list[str]) -> str:
+        """Hint for pre-selecting a device in the manual Rockbox themes picker."""
         pkg_model = (getattr(self, "_package_model", "") or "").upper()
-        pkg_name = (getattr(self, "_package_name", "") or "")
-        pkg_path = (getattr(self, "_package_path", "") or "")
+        pkg_name = getattr(self, "_package_name", "") or ""
+        pkg_path = getattr(self, "_package_path", "") or ""
         if "for Y2" in pkg_name or "rom_y2" in pkg_path or "y2-rockbox" in pkg_path or "Y2" in pkg_model:
-            return "Y2"
-        if "Y1" in pkg_model:
+            if "Y2" in supported_models:
+                return "Y2"
+        if "Y1" in pkg_model and "Y1" in supported_models:
             return "Y1"
+        for m in supported_models:
+            if m in pkg_model:
+                return m
 
         if hasattr(self, "_select_page") and hasattr(self._select_page, "_model_combo"):
             combo_text = self._select_page._model_combo.currentText().strip().upper()
-            if "Y2" in combo_text:
-                return "Y2"
-            if "Y1" in combo_text:
-                return "Y1"
-        return "Y1"
+            for m in supported_models:
+                if m in combo_text:
+                    return m
+        return supported_models[0] if supported_models else "Y1"
+
+    def _prompt_manual_themes_model(
+        self,
+        choices: list[str],
+        default_model: str = "",
+    ) -> str | None:
+        """Ask the user which supported player they are installing Rockbox themes for."""
+        from PySide6.QtWidgets import QInputDialog
+        from ..config import device_label_for_model
+
+        if not choices:
+            return None
+        default_idx = choices.index(default_model) if default_model in choices else 0
+        headless = (
+            os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+            or bool(os.environ.get("INNIOASIS_HEADLESS"))
+        )
+        get_item = QInputDialog.getItem
+        is_mocked = not callable(get_item) or type(get_item).__name__ not in (
+            "builtin_function_or_method",
+            "method_descriptor",
+            "wrapper_descriptor",
+        )
+        if headless and not is_mocked and not getattr(self, "_allow_offscreen_device_prompt", False):
+            return choices[default_idx]
+
+        items = [device_label_for_model(m) for m in choices]
+        chosen, ok = get_item(
+            self,
+            tr("rockbox_select_device_title"),
+            tr("rockbox_select_device_prompt"),
+            items,
+            default_idx,
+            False,
+        )
+        if not ok or not chosen:
+            return None
+        for m, label in zip(choices, items):
+            if chosen == label or chosen.strip().upper() == m:
+                return m
+        for m in choices:
+            if m in chosen.upper():
+                return m
+        return None
+
+    def _manual_themes_model(self, *, prompt: bool = True) -> str | None:
+        """Resolve the target model for standalone/manual Rockbox theme installs.
+
+        Priority:
+        1. Automatically detect an attached player via ADB (skips the prompt).
+        2. If exactly one Rockbox-theme-capable model is tracked, use it.
+        3. Otherwise (unknown devices or multiple Rockbox-theme-capable models
+           tracked), prompt the user to pick the device, returning ``None`` if
+           cancelled.
+        """
+        from ..player_update_check import (
+            get_rockbox_installed_models,
+            get_rockbox_theme_supported_models,
+            get_tracked_rockbox_theme_models,
+        )
+        from ..themes_journey import resolve_manual_themes_choice
+
+        supported = get_rockbox_theme_supported_models()
+        adb_model: str | None = None
+        try:
+            from ..adb import adb_detect_player_model
+
+            adb_model = adb_detect_player_model(supported_models=supported)
+        except Exception as e:
+            logger.debug("Error detecting connected player via ADB: %s", e)
+
+        tracked_supported: list[str] = []
+        rb_models: list[str] = []
+        try:
+            tracked_supported = get_tracked_rockbox_theme_models(self.settings)
+            rb_models = get_rockbox_installed_models(self.settings)
+        except Exception as e:
+            logger.debug("Error reading tracked Rockbox models: %s", e)
+
+        fallback_default = self._manual_themes_fallback_default(supported)
+        auto_model, choices, default_model = resolve_manual_themes_choice(
+            adb_model=adb_model,
+            tracked_supported_models=tracked_supported,
+            rockbox_installed_models=rb_models,
+            supported_models=supported,
+            fallback_default=fallback_default,
+        )
+        if auto_model:
+            if adb_model and auto_model == adb_model:
+                self._append_log(
+                    f"[Rockbox Themes] Detected connected {auto_model} over ADB; skipping device prompt."
+                )
+            return auto_model
+        if not prompt:
+            return default_model
+        return self._prompt_manual_themes_model(choices, default_model=default_model)
 
     def _on_settings_install_rockbox_themes(self) -> None:
         """Triggered from Settings card: install Rockbox 360p themes."""
@@ -3506,9 +3571,13 @@ class MainWindow(QMainWindow):
             self._append_log("Rockbox themes install ignored: an install is already in progress.")
             return
 
+        model = self._manual_themes_model()
+        if not model:
+            self._append_log("Rockbox themes installation cancelled: no device selected.")
+            return
+
         from ..config import is_offline_mode
         offline = is_offline_mode()
-        model = self._manual_themes_model()
         self._append_log(f"Starting Rockbox 360p themes installation for {model}...")
 
         if not offline:
@@ -3520,7 +3589,7 @@ class MainWindow(QMainWindow):
         else:
             self._append_log("[Rockbox Themes] Offline mode active: using cached 360p themes and the bundled fonts pack.")
         self._theme_install_pending = False
-        self.start_rockbox_themes_manually()
+        self.start_rockbox_themes_manually(model=model)
 
     def _on_refresh_themes(self) -> None:
         """Manual refresh from the Rockbox themes settings card."""
@@ -3612,7 +3681,7 @@ class MainWindow(QMainWindow):
         if pending:
             self.start_rockbox_themes_manually()
 
-    def start_rockbox_themes_manually(self) -> bool:
+    def start_rockbox_themes_manually(self, model: str | None = None) -> bool:
         """Begin the Rockbox themes & fonts stage without a flash having just run.
 
         Does nothing while an install is in progress. Otherwise it opens the same
@@ -3622,8 +3691,16 @@ class MainWindow(QMainWindow):
         if self._install_run_active():
             self._append_log("Rockbox themes shortcut ignored: an install is already running.")
             return False
-        model = self._manual_themes_model()
-        if model not in ("Y1", "Y2"):
+        if model is None:
+            model = self._manual_themes_model()
+        if not model:
+            self._append_log("Rockbox themes stage cancelled: no device selected.")
+            return False
+        from ..player_update_check import get_rockbox_theme_supported_models
+        from ..theme_pack import should_apply_theme_path_fix
+
+        supported = get_rockbox_theme_supported_models()
+        if model not in supported:
             self._append_log(f"Rockbox themes are not supported for {model}; the themes stage was not started.")
             return False
         self._append_log(f"Rockbox themes & fonts stage started manually for {model}.")
@@ -3634,9 +3711,10 @@ class MainWindow(QMainWindow):
         self.themes.set_apk("", "")
         self.themes.is_standalone = True
         self.themes.is_custom_theme = False
+        self.themes.custom_theme_paths = []
         self.themes.payload_zip_path = None
         self.themes.model = model
-        self.themes.rb_themes_path_fix = (model == "Y2")
+        self.themes.rb_themes_path_fix = should_apply_theme_path_fix(model=model)
         self._package_name = tr("rockbox_themes_and_fonts_pack")
         self._compact_install_screen = False
         self._is_360p_rockbox = True

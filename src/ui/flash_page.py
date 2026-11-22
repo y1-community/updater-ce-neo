@@ -4787,18 +4787,62 @@ class FlashPage(QWidget):
         self._log_theme("[Rockbox Themes] Pushing 360p themes & fonts over ADB...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         self.themes.reset_progress()
-        from ..adb import find_adb_binary
-        from ..theme_pack import AdbPushWorker, should_apply_theme_path_fix
+        from ..adb import adb_detect_player_model, find_adb_binary
+        from ..player_update_check import get_rockbox_theme_supported_models
+        from ..theme_pack import (
+            AdbPushWorker,
+            prepare_dragged_theme_payload,
+            should_apply_theme_path_fix,
+        )
         adb_bin = find_adb_binary()
         model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
         rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
-        apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
 
         custom_zip = getattr(self.themes, "payload_zip_path", None)
         if custom_zip and Path(custom_zip).is_file():
             norm_zip = Path(custom_zip)
         else:
             norm_zip = None
+
+        if getattr(self.themes, "is_standalone", False) and adb_bin:
+            try:
+                supported = get_rockbox_theme_supported_models()
+                detected = adb_detect_player_model(
+                    adb_bin,
+                    device=serial,
+                    supported_models=supported,
+                )
+            except Exception:
+                detected = None
+            if detected and detected.upper() != str(model or "").upper():
+                prev_fix = should_apply_theme_path_fix(
+                    model=model, rb_themes_path_fix=rb_themes_path_fix
+                )
+                self._log_theme(
+                    f"[Rockbox Themes] Detected connected {detected} over ADB (updating from {model or 'unknown'})."
+                )
+                model = detected
+                rb_themes_path_fix = should_apply_theme_path_fix(model=detected)
+                self.themes.model = detected
+                self.themes.rb_themes_path_fix = rb_themes_path_fix
+                self._model = detected
+                win = self.window()
+                if win is not None and hasattr(win, "_package_model"):
+                    win._package_model = detected
+                if (
+                    getattr(self.themes, "is_custom_theme", False)
+                    and norm_zip is not None
+                    and getattr(self.themes, "custom_theme_paths", None)
+                    and rb_themes_path_fix != prev_fix
+                ):
+                    try:
+                        prepare_dragged_theme_payload(
+                            self.themes.custom_theme_paths,
+                            norm_zip,
+                            apply_path_fix=bool(rb_themes_path_fix),
+                        )
+                    except Exception:
+                        pass
 
         self._adb_push_worker = AdbPushWorker(
             adb_bin,

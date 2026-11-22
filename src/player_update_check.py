@@ -596,17 +596,54 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     return out
 
 
+def get_rockbox_theme_supported_models() -> list[str]:
+    """Return distinct player models that support Rockbox theme installation."""
+    supported: list[str] = ["Y1", "Y2"]
+    try:
+        for pkg in catalog._catalog_packages():
+            model = str(getattr(pkg, "model", "") or "").strip().upper()
+            if not model or model in supported:
+                continue
+            if bool(getattr(pkg, "rockbox_no_themes", False)):
+                continue
+            if bool(getattr(pkg, "is_240p_rockbox", False)):
+                continue
+            ident = " ".join(
+                str(getattr(pkg, attr, "") or "")
+                for attr in ("name", "slug", "repo")
+            ).lower()
+            if "rockbox" in ident:
+                supported.append(model)
+    except Exception as e:
+        logger.debug("Error inspecting catalog for Rockbox theme models: %s", e)
+    return supported
+
+
+def get_tracked_rockbox_theme_models(settings: Optional[QSettings] = None) -> list[str]:
+    """Return distinct tracked models that support Rockbox theme installation."""
+    supported = get_rockbox_theme_supported_models()
+    supported_set = set(supported)
+    installs = get_all_device_installs(settings)
+    found: set[str] = set()
+    for key, rec in (installs or {}).items():
+        base_model = (rec.get("model") or key.split("_")[0] or "").strip().upper()
+        if base_model in supported_set:
+            found.add(base_model)
+    return [m for m in supported if m in found]
+
+
 def get_rockbox_installed_models(settings: Optional[QSettings] = None) -> list[str]:
     """Return list of distinct models (e.g. ['Y1', 'Y2']) where Rockbox is currently tracked."""
+    supported = get_rockbox_theme_supported_models()
+    supported_set = set(supported)
     installs = get_all_device_installs(settings)
-    rockbox_models = set()
-    for key, rec in installs.items():
+    rockbox_models: set[str] = set()
+    for key, rec in (installs or {}).items():
         base_model = (rec.get("model") or key.split("_")[0] or "").strip().upper()
         sw = f"{rec.get('software_name', '')} {rec.get('package_slug', '')}".lower()
-        if "rockbox" in sw:
-            if base_model in ("Y1", "Y2"):
-                rockbox_models.add(base_model)
-    return sorted(list(rockbox_models))
+        if "rockbox" in sw and base_model in supported_set:
+            rockbox_models.add(base_model)
+    return [m for m in supported if m in rockbox_models]
 
 
 def hardware_type_label(hardware_type: str) -> str:

@@ -45,6 +45,7 @@ class ThemesJourney:
         self.is_custom_theme = False
         self.custom_theme_count = 0
         self.custom_theme_name = ""
+        self.custom_theme_paths: list = []
         self.rb_themes_path_fix = None
         # USB mass-storage details from slidia_manifest.xml. Non-ADB Rockbox
         # builds use the drive scan instead of the ADB watch.
@@ -237,6 +238,7 @@ class ThemesJourney:
         self.is_custom_theme = False
         self.custom_theme_count = 0
         self.custom_theme_name = ""
+        self.custom_theme_paths = []
         self.rb_themes_path_fix = None
         self.rockbox_folder_path = ""
         self.rockbox_no_themes = False
@@ -253,6 +255,7 @@ class ThemesJourney:
         self.completion_shown = False
         if not getattr(self, "is_custom_theme", False):
             self.payload_zip_path = None
+            self.custom_theme_paths = []
             self.is_standalone = False
             self.rb_themes_path_fix = None
 
@@ -410,3 +413,59 @@ class ThemesJourney:
         dialog = self.folder_dialog
         self.folder_dialog = None
         return dialog
+
+
+def resolve_manual_themes_choice(
+    *,
+    adb_model: str | None,
+    tracked_supported_models: list[str],
+    rockbox_installed_models: list[str] | None = None,
+    supported_models: list[str] | tuple[str, ...] = ("Y1", "Y2"),
+    fallback_default: str = "",
+) -> tuple[str | None, list[str], str]:
+    """Decide the target model (or dropdown choices) for a standalone themes run.
+
+    Used by Settings ("Install Themes Now"), ``Ctrl+T``/``Cmd+T``, and
+    drag-and-dropped theme installs — never by an install journey that already
+    knows the flashed target model.
+
+    Returns ``(auto_model, choices, default_model)``:
+    - When ``auto_model`` is not ``None``, no user prompt is needed: either the
+      connected player was identified over ADB, or exactly one Rockbox-theme-
+      capable model is tracked.
+    - When ``auto_model`` is ``None``, the user must be asked to pick from
+      ``choices`` (pre-selecting ``default_model``): either multiple models
+      that support Rockbox theme installation are tracked, or the user's
+      Rockbox-capable device is unknown (no supported model tracked).
+    """
+    supported = list(dict.fromkeys(str(m).strip().upper() for m in supported_models if str(m).strip()))
+    if not supported:
+        supported = ["Y1", "Y2"]
+
+    adb_norm = str(adb_model or "").strip().upper()
+    if adb_norm and adb_norm in supported:
+        return adb_norm, [adb_norm], adb_norm
+
+    tracked_set = {str(m).strip().upper() for m in (tracked_supported_models or []) if str(m).strip()}
+    tracked = [m for m in supported if m in tracked_set]
+
+    if len(tracked) == 1:
+        return tracked[0], tracked, tracked[0]
+
+    rb_set = {str(m).strip().upper() for m in (rockbox_installed_models or []) if str(m).strip()}
+    rb_models = [m for m in supported if m in rb_set]
+    fb_norm = str(fallback_default or "").strip().upper()
+
+    if len(tracked) > 1:
+        choices = tracked
+    else:
+        choices = list(supported)
+
+    if len(rb_models) == 1 and rb_models[0] in choices:
+        default_model = rb_models[0]
+    elif fb_norm in choices:
+        default_model = fb_norm
+    else:
+        default_model = choices[0]
+
+    return None, choices, default_model
