@@ -86,6 +86,10 @@ class FirmwarePackage:
     pmt_format_needed: bool = False
     # Explicit hardware type target: 'A' or 'B' (or empty for both/auto)
     hw_type: str = ""
+    # The manifest marks this build as Rockbox with 240p themes
+    # (``is_240p_rockbox="true"``). It is not a 360p-only build, and the
+    # current Y1 catalogue's 240p Rockbox builds target Type A hardware.
+    is_240p_rockbox: bool = False
     # Asset filename/glob pattern for Type A variant
     type_a_asset: str = ""
     # Asset filename/glob pattern for Type B variant
@@ -128,6 +132,14 @@ class FirmwarePackage:
     is_rockbox_android_port: Optional[bool] = None
     # Whether this package is a generic/non-Android Rockbox port (is_rockbox_port="true").
     is_rockbox_port: Optional[bool] = None
+    # Optional Unix-style path to the folder that contains ``.rockbox`` on a
+    # player's storage (``rockbox_folder_path="rockbox_sdcard"`` in
+    # slidia_manifest.xml). It is a hint for USB mass-storage installs; the
+    # app still searches every removable drive on its own.
+    rockbox_folder_path: str = ""
+    # Leave the automatic bundled theme install out for this firmware
+    # (``rockbox_no_themes="true"`` in slidia_manifest.xml).
+    rockbox_no_themes: bool = False
     # Archive names declared per player and hardware revision
     # (``package_name_y2``, ``package_name_y1_type_b``,
     # ``package_name_timmkoo_a5``), keyed by the attribute's own suffix after
@@ -142,12 +154,17 @@ class FirmwarePackage:
 def is_rockbox_android_port(package=None, name: str = "", repo: str = "") -> bool:
     """Whether a firmware package runs Rockbox on Android with ADB support.
 
-    Controlled by ``is_rockbox_android_port`` in slidia_manifest.xml if set.
+    Controlled by ``is_rockbox_android_port`` (or ``is_rockbox_android_false="true"``)
+    in slidia_manifest.xml if set.
     Defaults to True (we assume it is an Android port unless explicitly declared
-    as ``is_rockbox_android_port="false"`` or boolean False).
+    as ``is_rockbox_android_port="false"``, ``is_rockbox_android_false="true"``,
+    or boolean False).
     Asking the user to intervene in mass storage mode is strictly a last resort.
     """
     if package is not None:
+        raf = getattr(package, "is_rockbox_android_false", None)
+        if raf is True or str(raf).strip().lower() in ("true", "1", "yes"):
+            return False
         rap = getattr(package, "is_rockbox_android_port", None)
         if rap is False or str(rap).strip().lower() == "false":
             return False
@@ -295,6 +312,77 @@ def _brand_matches(package, brand: str) -> bool:
     return package_brand(package).casefold() == wanted.casefold()
 
 
+_REPO_CACHE_ROWS: dict = {}
+
+
+def _cached_repo_releases_for_type_check(repo: str):
+    """Best local release list for ``repo`` (per-repo cache, then fresh snapshot).
+
+    Returns ``None`` when no fresh local list exists so callers fail open rather
+    than hiding software from a stale or missing backup.
+    """
+    repo_clean = str(repo or "").strip()
+    if not repo_clean or "/" not in repo_clean:
+        return None
+    try:
+        cache_file = _app_cache_dir() / "releases" / f"{repo_clean.replace('/', '_')}.json"
+        if cache_file.is_file() and cache_file.stat().st_size > 2:
+            stat = cache_file.stat()
+            key = (str(cache_file), stat.st_mtime_ns, stat.st_size)
+            cached = _REPO_CACHE_ROWS.get(repo_clean.lower())
+            if cached is not None and cached[0] == key:
+                return cached[1]
+            data = json.loads(cache_file.read_text(encoding="utf-8", errors="ignore"))
+            if isinstance(data, list) and data:
+                _REPO_CACHE_ROWS[repo_clean.lower()] = (key, data)
+                return data
+    except Exception:
+        pass
+    try:
+        age = _release_snapshot_age()
+        if age is not None and age <= RELEASE_SNAPSHOT_HIDE_MAX_AGE_SECONDS:
+            snapshot = _release_snapshot_rows() or {}
+            rows = snapshot.get(repo_clean.lower())
+            if isinstance(rows, list) and rows:
+                return rows
+    except Exception:
+        pass
+    return None
+
+
+def package_supports_hw_type(package, hw_type: str = "") -> bool:
+    """Whether ``package`` is offered for a Y1 hardware revision.
+
+    An explicit ``hw_type`` on the package (from ``supported_types`` /
+    ``hardware_type`` in the manifest) narrows it to those revisions. A
+    240p Rockbox build with no declared revision targets Type A unless its
+    releases actually publish a Type B variant. When fresh cached releases
+    exist for a Y1 package and none of them carry a ROM for ``hw_type``, the
+    package is hidden for that revision rather than showing an empty version
+    list. An empty ``hw_type`` or a model without hardware revisions passes.
+    """
+    wanted = re.findall(r"\b[AB]\b", str(hw_type or "").strip().upper())
+    if not wanted:
+        return True
+    declared = re.findall(r"\b[AB]\b", str(getattr(package, "hw_type", "") or "").upper())
+    if declared:
+        return any(label in declared for label in wanted)
+    model = str(getattr(package, "model", "") or "").strip().upper()
+    if model and model != "Y1":
+        return True
+    repo = str(getattr(package, "repo", "") or "").strip()
+    if repo and not getattr(package, "info_repo", "") and not getattr(package, "apk_repo", ""):
+        rows = _cached_repo_releases_for_type_check(repo)
+        if rows and _rows_have_installable_release(package, rows):
+            return any(
+                _rows_have_installable_release(package, rows, selected_type=label)
+                for label in wanted
+            )
+    if bool(getattr(package, "is_240p_rockbox", False)):
+        return "A" in wanted
+    return True
+
+
 def brand_names() -> list:
     """Brands the catalogue offers, Innioasis first.
 
@@ -317,13 +405,14 @@ def brand_names() -> list:
     return names
 
 
-def packages_for_model(model: str, brand: str = ""):
+def packages_for_model(model: str, brand: str = "", hw_type: str = ""):
     # An info_repo package without a post-install page has no instructions for
     # its APK, so it is not offered at all.
     return [
         p for p in _catalog_packages()
         if p.model == model
         and _brand_matches(p, brand)
+        and package_supports_hw_type(p, hw_type)
         and (not p.info_repo or p.post_install or p.post_install_2)
     ]
 
@@ -349,7 +438,7 @@ def available_models(brand: str = ""):
     return seen
 
 
-def software_names_for_model(model: str, brand: str = ""):
+def software_names_for_model(model: str, brand: str = "", hw_type: str = ""):
     """Software names that model can actually list a release for.
 
     While a live manifest is loaded it is the whole list. Merging the static
@@ -357,16 +446,20 @@ def software_names_for_model(model: str, brand: str = ""):
     beside the manifest's current name for the same software ("Android 4.2"
     next to "Android 4.2 (Dev)"), which is a drop-down row that can never
     produce a release. The static table remains the offline fallback.
+
+    ``hw_type`` narrows the list to software published for that hardware
+    revision; a row with no restriction is offered for every revision.
     """
     if LIVE_CATALOG:
         packages = [
             p for p in LIVE_CATALOG
             if p.model == model
             and _brand_matches(p, brand)
+            and package_supports_hw_type(p, hw_type)
             and (not p.info_repo or p.post_install or p.post_install_2)
         ]
     else:
-        packages = packages_for_model(model, brand=brand)
+        packages = packages_for_model(model, brand=brand, hw_type=hw_type)
     seen_lower = set()
     seen = []
     for p in packages:
@@ -377,11 +470,13 @@ def software_names_for_model(model: str, brand: str = ""):
     return seen
 
 
-def packages_for_model_software(model: str, software: str, brand: str = ""):
+def packages_for_model_software(
+    model: str, software: str, brand: str = "", hw_type: str = ""
+):
     target = (software or "").strip().lower()
     return [
         p
-        for p in packages_for_model(model, brand=brand)
+        for p in packages_for_model(model, brand=brand, hw_type=hw_type)
         if p.name.strip().lower() == target
     ]
 
@@ -2210,14 +2305,20 @@ class ReleasesClient:
         """
         info_repo = getattr(package, "info_repo", "") or ""
         apk_repo = getattr(package, "apk_repo", "") or ""
+        package_is_240p = bool(getattr(package, "is_240p_rockbox", False))
         if info_repo or apk_repo:
-            return self._apk_repo_releases(
+            rows = self._apk_repo_releases(
                 package, model, info_repo or apk_repo, force_refresh=force_refresh,
                 selected_type=selected_type, show_nightly=show_nightly,
                 show_old_rockbox=show_old_rockbox, prefer_240p=prefer_240p,
                 show_original_pre_307=show_original_pre_307,
                 show_safety_blocked=show_safety_blocked,
             )
+            if package_is_240p:
+                for row in rows:
+                    row["is_240p_rockbox"] = True
+                    row["selected_resolution"] = "240p"
+            return rows
         releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
         # Whether this repository publishes rom*.zip at all decides whether a
         # differently named zip may stand in for firmware (see
@@ -2309,6 +2410,27 @@ class ReleasesClient:
                 rom_variants = [v for v in rom_variants if v.get("type") == selected_type]
             if not rom_variants:
                 continue
+            if package_is_240p:
+                # The manifest marks the whole package as a 240p Rockbox
+                # build. Its archive may simply be rom.zip, so trusting the
+                # filename would wrongly hide it behind the 240p filter and
+                # label it as a 360p-only build.
+                preferred = select_preferred_rom_asset(
+                    rom_variants,
+                    selected_type=selected_type,
+                    model=model,
+                    prefer_240p=True,
+                )
+                if preferred:
+                    rel = dict(rel)  # shallow copy, don't mutate cache
+                    rel["download_url"] = preferred["asset"]["browser_download_url"]
+                    rel["asset_name"] = preferred["asset"]["name"]
+                    rel["asset_size"] = preferred["asset"].get("size", 0)
+                    rel["selected_resolution"] = "240p"
+                    rel["prefer_240p"] = True
+                    rel["is_240p_rockbox"] = True
+                out.append(rel)
+                continue
             if not prefer_240p and rom_variants and all(
                 v.get("resolution") == "240p" for v in rom_variants
             ):
@@ -2347,6 +2469,7 @@ class ReleasesClient:
                     row["asset_size"] = pick["asset"].get("size", 0)
                     row["selected_resolution"] = pick.get("resolution")
                     row["prefer_240p"] = True
+                    row["is_240p_rockbox"] = False
                     out.append(row)
                 continue
             preferred = select_preferred_rom_asset(
@@ -2362,6 +2485,7 @@ class ReleasesClient:
                 rel["asset_size"] = preferred["asset"].get("size", 0)
                 rel["selected_resolution"] = preferred.get("resolution")
                 rel["prefer_240p"] = prefer_240p
+                rel["is_240p_rockbox"] = False
             out.append(rel)
         return sorted(
             _with_portable_packages(package, out), key=release_sort_key, reverse=True
@@ -2534,7 +2658,7 @@ def _release_snapshot_rows():
     return rows_by_repo
 
 
-def _rows_have_installable_release(package, rows) -> bool:
+def _rows_have_installable_release(package, rows, selected_type=None) -> bool:
     """True when ``rows`` hold a release with a zip usable by ``package``."""
     repo = str(getattr(package, "repo", "") or "").strip()
     model = str(getattr(package, "model", "") or "").strip()
@@ -2567,8 +2691,12 @@ def _rows_have_installable_release(package, rows) -> bool:
             repo_has_rom=repo_has_rom,
             package=package,
             model=model,
+            selected_type=selected_type,
         )
-        if filter_rom_variants_for_model(variants, model, model, repo):
+        matched = filter_rom_variants_for_model(variants, model, model, repo)
+        if selected_type:
+            matched = [v for v in matched if v.get("type") == selected_type]
+        if matched:
             return True
     return False
 

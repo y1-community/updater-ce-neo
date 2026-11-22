@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilion an Rockbox Device",
  "rockbox_select_device_prompt": "Para sa arin na parakawat an pig-iinstalar mo an mga tema nin Rockbox?",
  "rockbox_step2_connect_usb": "Ikabit an USB cable sa saimong {model}",
+ "rockbox_step2_connect_usb_storage": "Pakikonektar an saimong {model} sa paagi nin USB transfer mode",
  "rockbox_step_usb_storage_mode": "Paki-enable an USB storage mode sa saimong aparato asin i-click an Sunod",
  "rockbox_step_usb_storage_folder": "Paki-enable an USB storage mode sa saimong {model}, dangan pilion an drive na minalataw",
  "rockbox_step_select_player_folder": "Pakipili an player mismo o an saro sa mga folder na yaon digdi",

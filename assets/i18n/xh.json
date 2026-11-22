@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Khetha Isixhobo seRockbox",
  "rockbox_select_device_prompt": "Ngowuphi umdlali omfakelayo imixholo yeRockbox?",
  "rockbox_step2_connect_usb": "Qhoboshela intambo ye-USB kwi-{model} yakho",
+ "rockbox_step2_connect_usb_storage": "Nceda uqhagamshele i-{model} yakho ngemowudi yodluliselo lwe-USB",
  "rockbox_step_usb_storage_mode": "Nceda uvule imowudi yokugcina i-USB kwisixhobo sakho kwaye ucofe Okulandelayo",
  "rockbox_step_usb_storage_folder": "Nceda uvule imowudi yogcino lwe-USB kwi-{model} yakho, emva koko ukhethe idrayivu evelayo",
  "rockbox_step_select_player_folder": "Nceda khetha umdlali ngokwakhe okanye enye yeefolda ezikuyo",

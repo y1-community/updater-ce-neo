@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Perangkat Rockbox",
  "rockbox_select_device_prompt": "Pemain na ija do na ipasang nasiam tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang ma kabel USB ai hubani {model} nasiam",
+ "rockbox_step2_connect_usb_storage": "Sambungkon nasiam ma {model} nasiam marhitei mode transfer USB",
  "rockbox_step_usb_storage_mode": "Tolong aktifkon mode penyimpanan USB bani perangkat nassiam dob ai klik Selanjutni",
  "rockbox_step_usb_storage_folder": "Aktifkon ma mode penyimpanan USB bani {model} nassiam, dob ai pilih ma drive na taridah",
  "rockbox_step_select_player_folder": "Pilih ma pemutar ai sandiri atap salah sada folder na adong ijai",

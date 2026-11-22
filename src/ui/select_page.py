@@ -1948,7 +1948,9 @@ class SelectPackagePage(QWidget):
             # Rebuild the names for the reset model instead of leaving the
             # previous model's list in place, and start on Original Software.
             names = catalog.software_names_for_model(
-                self.current_model(), brand=self.current_brand()
+                self.current_model(),
+                brand=self.current_brand(),
+                hw_type=self._selected_type or "",
             )
             self._populate_software_combo(names)
         if hasattr(self, "_software_combo") and not is_generic_mtk():
@@ -2332,7 +2334,11 @@ class SelectPackagePage(QWidget):
             self.current_software() if hasattr(self, "_software_combo") else ""
         )
         model = self.current_model()
-        names = catalog.software_names_for_model(model, brand=self.current_brand())
+        self._update_type_filter_visibility()
+        hw_type = (self._selected_type or "") if self._model_has_multiple_types() else ""
+        names = catalog.software_names_for_model(
+            model, brand=self.current_brand(), hw_type=hw_type
+        )
         # The same software name means the equivalent firmware for the new
         # model; anything else falls back to Original Software in the combo.
         self._populate_software_combo(
@@ -2340,7 +2346,6 @@ class SelectPackagePage(QWidget):
             select=self._software_name_kept_across_models(previous_software, names),
         )
         self._update_device_status_copy()
-        self._update_type_filter_visibility()
         self._on_software_changed()
         self._sync_notice_context()
 
@@ -2479,6 +2484,9 @@ class SelectPackagePage(QWidget):
         """
         if not (self.is_rockbox_y1_browsing() or self.is_rockbox_y2_browsing()):
             return ""
+        package = self.current_package()
+        if package is not None and getattr(package, "is_240p_rockbox", False):
+            return ""
         suffix = tr("rockbox_themes_only_suffix")
         cur = str(current_label).lower()
         if suffix and suffix.lower() in cur:
@@ -2523,7 +2531,9 @@ class SelectPackagePage(QWidget):
     def refresh_software_list(self) -> None:
         """Repopulate the software dropdown to reflect any newly tracked/untracked software."""
         names = catalog.software_names_for_model(
-            self.current_model(), brand=self.current_brand()
+            self.current_model(),
+            brand=self.current_brand(),
+            hw_type=self._selected_type or "",
         )
         self._populate_software_combo(names, select=self.current_software())
 
@@ -2535,7 +2545,9 @@ class SelectPackagePage(QWidget):
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
         names = catalog.software_names_for_model(
-            self.current_model(), brand=self.current_brand()
+            self.current_model(),
+            brand=self.current_brand(),
+            hw_type=self._selected_type or "",
         )
         self._populate_software_combo(names, select=self.current_software())
         self._update_type_filter_visibility()
@@ -2699,7 +2711,9 @@ class SelectPackagePage(QWidget):
         self.refresh_models()
         current_sw = self.current_software()
         names = catalog.software_names_for_model(
-            self.current_model(), brand=self.current_brand()
+            self.current_model(),
+            brand=self.current_brand(),
+            hw_type=self._selected_type or "",
         )
         combo = self._software_combo
         existing = [
@@ -4963,7 +4977,10 @@ class SelectPackagePage(QWidget):
         model = self.current_model()
         software = self.current_software()
         pkgs = catalog.packages_for_model_software(
-            model, software, brand=self.current_brand()
+            model,
+            software,
+            brand=self.current_brand(),
+            hw_type=self._selected_type or "",
         )
         return pkgs[0] if pkgs else None
 

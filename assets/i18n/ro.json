@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Selectați dispozitivul Rockbox",
  "rockbox_select_device_prompt": "Pentru ce player instalezi teme Rockbox?",
  "rockbox_step2_connect_usb": "Atașați cablul USB la {model}",
+ "rockbox_step2_connect_usb_storage": "Vă rugăm să conectați {model} prin modul de transfer USB",
  "rockbox_step_usb_storage_mode": "Activați modul de stocare USB pe dispozitiv și faceți clic pe Următorul",
  "rockbox_step_usb_storage_folder": "Activați modul de stocare USB pe {model}, apoi alegeți unitatea care apare",
  "rockbox_step_select_player_folder": "Vă rugăm să selectați playerul în sine sau unul dintre folderele de pe acesta",

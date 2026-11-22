@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Selektearje Rockbox-apparaat",
  "rockbox_select_device_prompt": "Foar hokker spiler ynstallearje jo Rockbox-tema's?",
  "rockbox_step2_connect_usb": "Befestigje de USB-kabel oan jo {model}",
+ "rockbox_step2_connect_usb_storage": "Ferbine jo {model} asjebleaft mei USB-oerdrachtmodus",
  "rockbox_step_usb_storage_mode": "Aktivearje asjebleaft USB-opslachmodus op jo apparaat en klikje op Folgjende",
  "rockbox_step_usb_storage_folder": "Aktivearje asjebleaft USB-opslachmodus op jo {model}, kies dan it stasjon dat ferskynt",
  "rockbox_step_select_player_folder": "Selektearje asjebleaft de spiler sels of ien fan de mappen dêrop",

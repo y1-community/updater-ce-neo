@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Taght yn innid Rockbox",
  "rockbox_select_device_prompt": "C'raad t'ou uss ry-install themes Rockbox?",
  "rockbox_step2_connect_usb": "Taggyrt yn cable USB rish dty {model}",
+ "rockbox_step2_connect_usb_storage": "Ceaghl dty {model} liorish moddey ymmyrkey USB",
  "rockbox_step_usb_storage_mode": "Cur stiagh y moddey stoo USB er dty innid as click Next .",
  "rockbox_step_usb_storage_folder": "Cur stiagh y moddey stoo USB er dty {model}, as roish y drive ta ry-akin",
  "rockbox_step_select_player_folder": "Taght yn player hene ny un jeh ny foldeyryn er",

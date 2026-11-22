@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Рокбокс махсулатыны сечип алынъыз .",
  "rockbox_select_device_prompt": "Рокбокс мевзуларыны къайсы оюнджы ичюн ерлештиресинъиз?",
  "rockbox_step2_connect_usb": "USB кабельни озь {model} .",
+ "rockbox_step2_connect_usb_storage": "Лютфен, озь {model} телефонынъызны USB ёллав режими ярдымынен багъламакъ керексинъиз .",
  "rockbox_step_usb_storage_mode": "Лютфен, озь махсулатынъызда USB сакълав режимини къошынъыз ве «Илери» ны басынъыз.",
  "rockbox_step_usb_storage_folder": "Лютфен, {model} дискинъизде USB сакълав режимини къошынъыз, сонъра пейда олгъан дискни сечип алынъыз .",
  "rockbox_step_select_player_folder": "Лютфен, плеернинъ озюни я да онынъ устюндеки папкалардан бирини сечип алынъыз .",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "रकबक्स डिभाइस ल्य ।",
  "rockbox_select_device_prompt": "छिं गुम्ह कासामिया निंतिं रकबक्स थीम इन्स्टल यानाच्वनादीगु दु ?",
  "rockbox_step2_connect_usb": "Attach the USB cable to your {model}",
+ "rockbox_step2_connect_usb_storage": "Please connect your {model} by USB transfer mode",
  "rockbox_step_usb_storage_mode": "छिगु डिभाइसय् यूएसबि स्टोरेज मोड चायेकादिसँ अले मेगु क्लिक यानादिसँ ।",
  "rockbox_step_usb_storage_folder": "छिगु {model} य् यूएसबि स्टोरेज मोड चायेकादिसँ, अले खनेदइगु ड्राइभ ल्ययादिसँ ।",
  "rockbox_step_select_player_folder": "कृपा यानाः प्लेयर हे ल्ययादिसँ बाय् थुकी च्वंगु फोल्डर मध्यय् छगू ल्ययादिसँ ।",

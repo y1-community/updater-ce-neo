@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Выберыце прыладу Rockbox",
  "rockbox_select_device_prompt": "Для якога прайгравальніка вы ўсталёўваеце тэмы Rockbox?",
  "rockbox_step2_connect_usb": "Падключыце кабель USB да вашага {model}",
+ "rockbox_step2_connect_usb_storage": "Калі ласка, падключыце {model} у рэжыме перадачы USB",
  "rockbox_step_usb_storage_mode": "Уключыце рэжым USB-назапашвальніка на сваёй прыладзе і націсніце \"Далей\".",
  "rockbox_step_usb_storage_folder": "Калі ласка, уключыце рэжым USB-назапашвальніка на вашым {model}, затым выберыце дыск, які з'явіцца",
  "rockbox_step_select_player_folder": "Калі ласка, абярыце сам прайгравальнік або адну з тэчак на ім",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox түхеэрэлгэ шэлэхэ",
  "rockbox_select_device_prompt": "Ямар наадагшадта Rockbox сэдэбүүдые табижа байнабта?",
  "rockbox_step2_connect_usb": "USB кабель {model}-даа хабсаруулха",
+ "rockbox_step2_connect_usb_storage": "{model}-ээ USB дамжуулгын горимоор холбожо үгыт",
  "rockbox_step_usb_storage_mode": "Түхеэрэлгэ дээрээ USB хадагалха горимые нээжэ, Удаадахи дээрэ дараарайгты",
  "rockbox_step_usb_storage_folder": "{model} дээрээ USB хадагалха горимые нээжэ, удаань бии болоһон диск шэлэхэ хэрэгтэй",
  "rockbox_step_select_player_folder": "Тоглогшо өөрөө гү, али тэрээн дээрэхи папкануудай нэгыень шэлэжэ абагты",

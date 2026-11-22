@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Fili ewe Rockbox .",
  "rockbox_select_device_prompt": "Ifa ewe chon fiti ka fiti ekkewe itelap Rockbox?",
  "rockbox_step2_connect_usb": "Kopwe apacha ewe USB ngeni noumw we {model} .",
+ "rockbox_step2_connect_usb_storage": "Kopwe riri ngeni om {model} ren ewe napanapen siwinin USB .",
  "rockbox_step_usb_storage_mode": "Kopwe suki ewe napanap USB won noumw we pisek me kopwe suki Next .",
  "rockbox_step_usb_storage_folder": "Kopwe suki ewe napanap USB won noumw we {model}, iwe kopwe finata ewe drive epwe pwa .",
  "rockbox_step_select_player_folder": "Kopwe pwisin filatá ewe chón fiti are eú me lein ekkewe folder mi nóm wóón .",

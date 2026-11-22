@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Xijtlapejpeni Rockbox Device",
  "rockbox_select_device_prompt": "¿Ajkia tlatsotsonani tijtlalis nopa tlajtoli tlen Rockbox?",
  "rockbox_step2_connect_usb": "Xijtlali nopa cable USB ipan mo {model}",
+ "rockbox_step2_connect_usb_storage": "Xijtlali mo {model} ika USB transferencia",
  "rockbox_step_usb_storage_mode": "Xijtlali nopa modo de almacenamiento USB ipan mocelular uan xijtsonpechili Next",
  "rockbox_step_usb_storage_folder": "Xijtlali nopa modo de almacenamiento USB ipan mo {model}, teipa xijtlapejpeni nopa unidad tlen nesi",
  "rockbox_step_select_player_folder": "Xijtlapejpeni nopa tlatsotsonali iselti o se tlen nopa carpetas tlen eltok ipani",

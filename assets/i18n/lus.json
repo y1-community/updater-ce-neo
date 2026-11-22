@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Device tih kha thlang rawh",
  "rockbox_select_device_prompt": "Eng player tan nge Rockbox theme i install?",
  "rockbox_step2_connect_usb": "USB cable chu i {model} ah dah rawh.",
+ "rockbox_step2_connect_usb_storage": "Khawngaihin i {model} chu USB transfer mode hmangin connect rawh",
  "rockbox_step_usb_storage_mode": "I device ah USB storage mode kha enable la, Next kha click rawh",
  "rockbox_step_usb_storage_folder": "Khawngaihin i {model} ah USB storage mode kha enable la, a rawn lang tur drive kha thlang rawh",
  "rockbox_step_select_player_folder": "Player ngei emaw a chunga folder pakhat emaw kha thlang la",

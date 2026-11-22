@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "የሮክቦክስ መሣሪያን ይምረጡ",
  "rockbox_select_device_prompt": "የሮክቦክስ ገጽታዎችን የምትጭነው ለየትኛው ተጫዋች ነው?",
  "rockbox_step2_connect_usb": "የዩኤስቢ ገመዱን ከእርስዎ {model} ጋር ያያይዙ",
+ "rockbox_step2_connect_usb_storage": "እባክዎ የእርስዎን {model} በዩኤስቢ ማስተላለፊያ ሁነታ ያገናኙ",
  "rockbox_step_usb_storage_mode": "እባክዎን የዩኤስቢ ማከማቻ ሁነታን በመሳሪያዎ ላይ ያንቁ እና ቀጣይ የሚለውን ጠቅ ያድርጉ",
  "rockbox_step_usb_storage_folder": "እባክዎ የዩኤስቢ ማከማቻ ሁነታን በእርስዎ {model} ላይ ያንቁ እና የሚታየውን ድራይቭ ይምረጡ",
  "rockbox_step_select_player_folder": "እባክዎን ተጫዋቹን ራሱ ወይም በእሱ ላይ ካሉት አቃፊዎች ውስጥ አንዱን ይምረጡ",

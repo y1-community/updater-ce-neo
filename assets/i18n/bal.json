@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "راک باکس ڈیوائس ءَ گچین کن اِت",
  "rockbox_select_device_prompt": "تو کجام پلیئر ءِ ھاترا راک باکس ءِ تھیماں انسٹال کنگ ءَ ئے؟",
  "rockbox_step2_connect_usb": "یو ایس بی کیبل ءَ وتی {model} ءَ گوں بندوک کن اِت",
+ "rockbox_step2_connect_usb_storage": "وتی {model} ءَ یو ایس بی ٹرانسفر موڈ ءِ وسیلہ ءَ جوڑ کن اِت",
  "rockbox_step_usb_storage_mode": "وتی ڈیوائس ءِ سرا یو ایس بی اسٹوریج موڈ ءَ فعال کن ءُ دیم ءَ کلک کن",
  "rockbox_step_usb_storage_folder": "وتی {model} ءِ سرا USB اسٹوریج موڈ ءَ فعال کن اِت، پدا ہما ڈرائیو ءَ گچین کن اِت کہ دیم ءَ کیت",
  "rockbox_step_select_player_folder": "پلیئر ءَ وت یا ایشی ءِ سرا فولڈراں چہ یکے ءَ گچین کن اِت",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Khethani tshishumiswa tsha Rockbox",
  "rockbox_select_device_prompt": "Ndi player ifhio ine na khou i panga theme dza Rockbox?",
  "rockbox_step2_connect_usb": "Kha vha nambatedze thambo ya USB kha {model} yavho .",
+ "rockbox_step2_connect_usb_storage": "Kha vha ṱume {model} yavho nga moudu wa u fhirisela wa USB",
  "rockbox_step_usb_storage_mode": "Kha vha vule moudu wa u vhulunga USB kha tshishumiswa tshavho vha puṱedze Zwi tevhelaho",
  "rockbox_step_usb_storage_folder": "Kha vha vule moudu wa u vhulunga USB kha {model} yavho, vha kone u nanga drive ine ya ḓo bvelela .",
  "rockbox_step_select_player_folder": "Kha vha khethe mutambi ene mune kana inwe ya dzi foldara dzi re khayo .",

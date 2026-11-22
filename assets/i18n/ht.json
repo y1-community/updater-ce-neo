@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Chwazi Rockbox Aparèy",
  "rockbox_select_device_prompt": "Pou ki jwè w ap enstale tèm Rockbox?",
  "rockbox_step2_connect_usb": "Tache kab USB a sou {model} ou.",
+ "rockbox_step2_connect_usb_storage": "Tanpri konekte {model} ou pa mòd transfè USB",
  "rockbox_step_usb_storage_mode": "Tanpri aktive mòd depo USB sou aparèy ou an epi klike sou Next",
  "rockbox_step_usb_storage_folder": "Tanpri aktive mòd depo USB sou {model} ou a, epi chwazi kondwi ki parèt la",
  "rockbox_step_select_player_folder": "Tanpri chwazi jwè a li menm oswa youn nan dosye ki sou li",

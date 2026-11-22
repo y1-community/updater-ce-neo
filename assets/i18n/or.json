@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ରକବକ୍ସ ଉପକରଣ ଚୟନ କରନ୍ତୁ |",
  "rockbox_select_device_prompt": "ଆପଣ କେଉଁ ପ୍ଲେୟାର ପାଇଁ ରକ୍ବକ୍ସ ଥିମ୍ ସଂସ୍ଥାପନ କରୁଛନ୍ତି?",
  "rockbox_step2_connect_usb": "Attach the USB cable to your {model}",
+ "rockbox_step2_connect_usb_storage": "Please connect your {model} by USB transfer mode",
  "rockbox_step_usb_storage_mode": "ଦୟାକରି ଆପଣଙ୍କର ଡିଭାଇସରେ USB ଷ୍ଟୋରେଜ୍ ମୋଡ୍ ସକ୍ଷମ କରନ୍ତୁ ଏବଂ ପରବର୍ତ୍ତୀ କ୍ଲିକ୍ କରନ୍ତୁ |",
  "rockbox_step_usb_storage_folder": "ଦୟାକରି ଆପଣଙ୍କର {model} ରେ USB ଷ୍ଟୋରେଜ୍ ମୋଡ୍ ସକ୍ଷମ କରନ୍ତୁ, ତାପରେ ଦେଖାଯାଉଥିବା ଡ୍ରାଇଭକୁ ବାଛନ୍ତୁ |",
  "rockbox_step_select_player_folder": "ଦୟାକରି ପ୍ଲେୟାର୍ ନିଜେ କିମ୍ବା ଏଥିରେ ଥିବା ଫୋଲ୍ଡରଗୁଡିକ ମଧ୍ୟରୁ ଗୋଟିଏ ଚୟନ କରନ୍ତୁ |",

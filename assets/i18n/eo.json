@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Elektu Rockbox-Aparaton",
  "rockbox_select_device_prompt": "Por kiu ludanto vi instalas Rockbox-temojn?",
  "rockbox_step2_connect_usb": "Aligu la USB-kablon al via {model}",
+ "rockbox_step2_connect_usb_storage": "Bonvolu konekti vian {model} per USB-transiga reĝimo",
  "rockbox_step_usb_storage_mode": "Bonvolu ebligi USB-stokan reĝimon en via aparato kaj alklaku Poste",
  "rockbox_step_usb_storage_folder": "Bonvolu ebligi USB-stokan reĝimon sur via {model}, tiam elektu la diskon kiu aperas",
  "rockbox_step_select_player_folder": "Bonvolu elekti la ludanton mem aŭ unu el la dosierujoj sur ĝi",

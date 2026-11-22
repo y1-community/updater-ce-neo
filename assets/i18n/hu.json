@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Válassza a Rockbox eszközt",
  "rockbox_select_device_prompt": "Melyik lejátszóhoz telepíted a Rockbox témákat?",
  "rockbox_step2_connect_usb": "Csatlakoztassa az USB-kábelt a {model}",
+ "rockbox_step2_connect_usb_storage": "Kérjük, csatlakoztassa a {model} készüléket USB átviteli móddal",
  "rockbox_step_usb_storage_mode": "Kérjük, engedélyezze eszközén az USB-tároló módot, majd kattintson a Tovább gombra",
  "rockbox_step_usb_storage_folder": "Kérjük, engedélyezze az USB-tároló módot a {model} eszközön, majd válassza ki a megjelenő meghajtót",
  "rockbox_step_select_player_folder": "Kérjük, válassza ki magát a lejátszót vagy a rajta lévő mappák egyikét",

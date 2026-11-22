@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilei Rockbox Device",
  "rockbox_select_device_prompt": "Pemain apa nu install tema rockbox untuk?",
  "rockbox_step2_connect_usb": "Pasangi kabel USB ri {model}nu",
+ "rockbox_step2_connect_usb_storage": "Pa'sambungi {model}nu siagang mode transfer USB",
  "rockbox_step_usb_storage_mode": "Pa'jari mode pammolikang USB ri perangkatnu nampa nu klik ri bokoangna",
  "rockbox_step_usb_storage_folder": "Pa'jari mode pammolikang USB ri {model}nu, nampa ammile drive nu ammumba",
  "rockbox_step_select_player_folder": "Pilei anjo pa'maina kalenna iareka sala se're folder niaka irateanna",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Hitamwo igikoresho ca Rockbox",
  "rockbox_select_device_prompt": "Ni uwuhe mukinyi uriko urashiramwo insanganyamatsiko za Rockbox?",
  "rockbox_step2_connect_usb": "Fata umugozi wa USB kuri {model} yawe",
+ "rockbox_step2_connect_usb_storage": "Urasabwe gufatanya {model} yawe ukoresheje uburyo bwo gutanga amakuru kuri USB",
  "rockbox_step_usb_storage_mode": "Urasabwe gufungura uburyo bwo kubika USB ku gikoresho cawe hanyuma ukande Ibikurikira",
  "rockbox_step_usb_storage_folder": "Urasabwa gufungura uburyo bwo kubika USB kuri {model} yawe, hanyuma uhitemwo umuduga uboneka",
  "rockbox_step_select_player_folder": "Hitamwo umukinyi ubwawo canke imwe mu madosiye ari kuri yo",

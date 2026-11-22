@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Равзарут Rockbox-ы кусæнгарз",
  "rockbox_select_device_prompt": "Цавæр хъазæгæн æвæрыс Rockbox-ы темæтæ?",
  "rockbox_step2_connect_usb": "Баиу кæнут USB-тел уæ {model}-мæ",
+ "rockbox_step2_connect_usb_storage": "Дæ хорзæхæй, баиу кæн дæ {model} USB-йы æрвитæн режимы фæрцы",
  "rockbox_step_usb_storage_mode": "Дæ хорзæхæй, дæ кусæнгарзы æрбакæн USB-æвæрæн режим æмæ бакæс Дарддæр",
  "rockbox_step_usb_storage_folder": "Дæ хорзæхæй, дæ {model}-ыл æрæвæр USB-æвæрæн режим, стæй равзар, цы диск фæзыны, уый",
  "rockbox_step_select_player_folder": "Дæ хорзæхæй, равзар хъазæг йæхæдæг кæнæ йыл цы папкæтæ ис, уыдонæй иу",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Fa Rockbox Appareil .",
  "rockbox_select_device_prompt": "?Player benin yɛ amun su fa Rockbox i su ndɛ’m be sie i su ɔ?",
  "rockbox_step2_connect_usb": "Fa USB ɲanman’n fa sie ɔ {model} .",
+ "rockbox_step2_connect_usb_storage": "Yaki, fa ɔ {model} fa sie i USB su",
  "rockbox_step_usb_storage_mode": "Yaci USB su ɔ aparɛyi’n su naan tin su .",
  "rockbox_step_usb_storage_folder": "Yaci USB storage mode ɔ {model} su, kpɛkun fa drive ng’ɔ́ fíte’n .",
  "rockbox_step_select_player_folder": "Fa jue tofuɛ’n bɔbɔ annzɛ dossier nga be o su’n be nun kun .",

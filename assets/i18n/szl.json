@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Wybierz Urzōndzynie Rockbox",
  "rockbox_select_device_prompt": "Do jakigo gracza instalujesz motywy Rockbox?",
  "rockbox_step2_connect_usb": "Prziłōncz kabel USB do swojigo {model}",
+ "rockbox_step2_connect_usb_storage": "Proszōm podłōnczyć swoje {model} bez tryb przenoszynio USB",
  "rockbox_step_usb_storage_mode": "Proszymy włōncz tryb przechowowanio USB na swojim urzōndzyniu i kliknij Dalij",
  "rockbox_step_usb_storage_folder": "Proszymy włōnczyć tryb przechowowanio USB na {model}, a potym ôbiyraj dysk, co sie ukazuje",
  "rockbox_step_select_player_folder": "Proszōm wybrać sōm ôdtworzak abo jedyn z folderōw na nim",

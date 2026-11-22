@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Piliah Perangkat Kotak Batu",
  "rockbox_select_device_prompt": "Untuak pemain mano sanak mamasang tema Rockbox?",
  "rockbox_step2_connect_usb": "Lakekkan kabel USB ka {model} sanak .",
+ "rockbox_step2_connect_usb_storage": "Tolong sambuangkan {model} Sanak jo mode pamindahan USB",
  "rockbox_step_usb_storage_mode": "Silakan aktifkan mode panyimpanan USB pado parangkat Sanak dan klik Salanjuiknyo .",
  "rockbox_step_usb_storage_folder": "Silakan aktifkan mode panyimpanan USB pado {model} Sanak, kamudian piliah drive nan muncua",
  "rockbox_step_select_player_folder": "Silakan piliah pamain itu surang atau salah satu folder nan ado di atehnyo .",

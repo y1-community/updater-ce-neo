@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "راک باکس ڈیوائس کو منتخب کریں۔",
  "rockbox_select_device_prompt": "آپ کس کھلاڑی کے لیے راک باکس تھیمز انسٹال کر رہے ہیں؟",
  "rockbox_step2_connect_usb": "USB کیبل کو اپنے {model} سے منسلک کریں",
+ "rockbox_step2_connect_usb_storage": "براہ کرم اپنے {model} کو USB ٹرانسفر موڈ سے جوڑیں۔",
  "rockbox_step_usb_storage_mode": "براہ کرم اپنے آلے پر USB اسٹوریج موڈ کو فعال کریں اور اگلا پر کلک کریں۔",
  "rockbox_step_usb_storage_folder": "براہ کرم اپنے {model} پر USB اسٹوریج موڈ کو فعال کریں، پھر ظاہر ہونے والی ڈرائیو کا انتخاب کریں۔",
  "rockbox_step_select_player_folder": "براہ کرم خود پلیئر یا اس پر موجود فولڈرز میں سے ایک کو منتخب کریں۔",

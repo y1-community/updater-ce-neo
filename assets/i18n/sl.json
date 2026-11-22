@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Izberite napravo Rockbox",
  "rockbox_select_device_prompt": "Za kateri predvajalnik nameščate Rockbox teme?",
  "rockbox_step2_connect_usb": "Priključite kabel USB na vaš {model}",
+ "rockbox_step2_connect_usb_storage": "Povežite svoj {model} z načinom prenosa USB",
  "rockbox_step_usb_storage_mode": "V napravi omogočite način shranjevanja USB in kliknite Naprej",
  "rockbox_step_usb_storage_folder": "Omogočite način shranjevanja USB na vašem {model}, nato izberite pogon, ki se prikaže",
  "rockbox_step_select_player_folder": "Izberite sam predvajalnik ali eno od map v njem",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Meeshaa Rockbox filadhu",
  "rockbox_select_device_prompt": "Taphataan kamif themes Rockbox install gochaa jirtu?",
  "rockbox_step2_connect_usb": "Keebilii USB {model} keessan irratti maxxansi.",
+ "rockbox_step2_connect_usb_storage": "Mee {model} keessan haala dabarsuu USB tiin wal qunnamsiisaa",
  "rockbox_step_usb_storage_mode": "Maaloo haala kuusaa USB meeshaa keessan irratti dandeessisuun Itti Aanu cuqaasaa",
  "rockbox_step_usb_storage_folder": "Maaloo {model} keessan irratti haala kuusaa USB dandeessisi, sana booda diraayivii mul'atu filadhaa",
  "rockbox_step_select_player_folder": "Maaloo taphaticha ofii isaatii ykn galmeewwan isa irratti argaman keessaa tokko filadhu",

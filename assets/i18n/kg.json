@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pona kisadilu ya Rockbox",
  "rockbox_select_device_prompt": "Inki player nge ke tula ba theme ya Rockbox sambu na yo?",
  "rockbox_step2_connect_usb": "Kanga nsinga ya USB na {model} na nge .",
+ "rockbox_step2_connect_usb_storage": "Pardo vukisa {model} na nge na nzila ya mode ya transfert ya USB",
  "rockbox_step_usb_storage_mode": "Pardo, kangula mode ya kubumba bima na USB na apareyi na nge mpi niema Na nima .",
  "rockbox_step_usb_storage_folder": "Pardo, kangula mode ya kubumba bima na USB na {model} na nge, na nima pona disque dur yina ke monana .",
  "rockbox_step_select_player_folder": "Pona lecteur yo mosi to mosi ya ba dossier yina kele na zulu na yo .",

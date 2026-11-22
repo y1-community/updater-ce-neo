@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Izvēlētīs Rockbox īreici .",
  "rockbox_select_device_prompt": "Kuram spālātuojam tu instalej Rockbox temys?",
  "rockbox_step2_connect_usb": "100 doc#1159 Pīvīnojit USB kabeli sovam {model} .",
+ "rockbox_step2_connect_usb_storage": "Lyudzu, pīvīnojit sovu {model} ar USB puornesšonys režimu .",
  "rockbox_step_usb_storage_mode": "100 doc#1167 Lyudzu , īreicē īspējoj USB atmiņas režimu un nūklikšķini iz Tōļōk .",
  "rockbox_step_usb_storage_folder": "Lyudzu, īspējoj USB atmiņas režimu sovā {model}, tod izavielej disku, kas pasaruoda .",
  "rockbox_step_select_player_folder": "100 doc#1159 Lyudzu , atlasiet pošu atskaņuotuoju voi kaidu nu mapeitem iz juo .",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Velg Rockbox-enhet",
  "rockbox_select_device_prompt": "Hvilken spiller installerer du Rockbox-temaer for?",
  "rockbox_step2_connect_usb": "Koble USB-kabelen til {model}",
+ "rockbox_step2_connect_usb_storage": "Koble til {model} med USB-overføringsmodus",
  "rockbox_step_usb_storage_mode": "Aktiver USB-lagringsmodus på enheten din og klikk på Neste",
  "rockbox_step_usb_storage_folder": "Aktiver USB-lagringsmodus på {model}, og velg deretter stasjonen som vises",
  "rockbox_step_select_player_folder": "Velg selve spilleren eller en av mappene på den",

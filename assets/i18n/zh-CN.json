@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "选择 Rockbox 设备",
  "rockbox_select_device_prompt": "您要为哪台播放器安装 Rockbox 主题？",
  "rockbox_step2_connect_usb": "请将 USB 线连接到您的 {model}",
+ "rockbox_step2_connect_usb_storage": "请通过 USB 传输模式连接您的 {model}",
  "rockbox_step_usb_storage_mode": "请在设备上开启 USB 存储模式，然后点击下一步",
  "rockbox_step_usb_storage_folder": "请在您的 {model} 上开启 USB 存储模式，然后选择出现的磁盘",
  "rockbox_step_select_player_folder": "请选择播放器磁盘本身或其上的任一文件夹",

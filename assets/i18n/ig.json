@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Họrọ Ngwa Rockbox",
  "rockbox_select_device_prompt": "Kedu onye ọkpụkpọ ị na-etinye maka isiokwu Rockbox?",
  "rockbox_step2_connect_usb": "Jikọọ eriri USB na gị {model}",
+ "rockbox_step2_connect_usb_storage": "Biko jikọọ {model} gị site na ọnọdụ mbufe USB",
  "rockbox_step_usb_storage_mode": "Biko gbanye ọnọdụ nchekwa USB na ngwaọrụ gị wee pịa Ọzọ",
  "rockbox_step_usb_storage_folder": "Biko mee ka ọnọdụ nchekwa USB dị na {model} gị, wee họrọ mbanye na-egosi",
  "rockbox_step_select_player_folder": "Biko họrọ onye ọkpụkpọ n'onwe ya ma ọ bụ otu n'ime nchekwa dị na ya",

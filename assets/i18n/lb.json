@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Wielt Rockbox Apparat",
  "rockbox_select_device_prompt": "Fir wéi ee Spiller installéiert Dir Rockbox Themen?",
  "rockbox_step2_connect_usb": "Befestegt den USB Kabel op Är {model}",
+ "rockbox_step2_connect_usb_storage": "Verbënnt w.e.g. Ären {model} mam USB Transfermodus",
  "rockbox_step_usb_storage_mode": "Aktivéiert w.e.g. USB Späichermodus op Ärem Apparat a klickt op Next",
  "rockbox_step_usb_storage_folder": "Aktivéiert w.e.g. USB-Späichermodus op Ärem {model}, wielt dann den Drive deen erschéngt",
  "rockbox_step_select_player_folder": "Wielt w.e.g. de Spiller selwer oder ee vun den Ordner op",

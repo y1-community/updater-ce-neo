@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Fren Aselkim n Rockbox",
  "rockbox_select_device_prompt": "Anwa amyurar i tesbeddeḍ isentalen n Rockbox?",
  "rockbox_step2_connect_usb": "Qqen lxiḍ USB ɣer {model}-ik",
+ "rockbox_step2_connect_usb_storage": "Ttxil qqen {model}-inek s talɣa n usiweḍ USB",
  "rockbox_step_usb_storage_mode": "Ttxil sbedd aḍris n uḥezzeb USB deg wallal-ik u ssin akin ttekseḍ I d-iteddun",
  "rockbox_step_usb_storage_folder": "Ttxil sbedd aḥric n uḥezzeb USB deg {model}-ik, syen fren aḍris ara d-yeffɣen",
  "rockbox_step_select_player_folder": "Ttxil-k fren amyurar s timmad-is neɣ yiwen seg yiḍebsiyen yellan fell-as",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Selesiona el dispositivo Rockbox",
  "rockbox_select_device_prompt": "Par che xogador te stà instałando i temi de Rockbox?",
  "rockbox_step2_connect_usb": "Taca el cavo USB al tuo {model}",
+ "rockbox_step2_connect_usb_storage": "Par piaser, conete el vostro {model} co ła modałità de trasferimento USB",
  "rockbox_step_usb_storage_mode": "Par piaser, ativa el modo de archiviasion USB sul dispoxitivo e clica su Avanti",
  "rockbox_step_usb_storage_folder": "Par piaser, ativa el modo de memoria USB sul {model}, dopo scegli l’unità che vien fora",
  "rockbox_step_select_player_folder": "Selesiona el letore steso o una dełe cartełe che ghe xe drento",

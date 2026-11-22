@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ᱨᱚᱠᱵᱚᱠᱥ ᱰᱤᱵᱷᱟᱭᱤᱥ ᱵᱟᱪᱷᱟᱣ ᱢᱮ",
  "rockbox_select_device_prompt": "ᱟᱢ ᱚᱠᱚᱭ ᱠᱷᱤᱞᱟᱲᱤᱭᱟᱹ ᱞᱟᱹᱜᱤᱫ ᱨᱚᱠᱵᱚᱠᱥ ᱛᱷᱤᱢ ᱮᱢ ᱤᱱᱥᱴᱚᱞ ᱮᱫᱟ?",
  "rockbox_step2_connect_usb": "ᱟᱢᱟᱜ {model} ᱨᱮ USB ᱠᱮᱵᱩᱞ ᱡᱚᱯᱲᱟᱣ ᱢᱮ",
+ "rockbox_step2_connect_usb_storage": "ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱟᱢᱟᱜ {model} ᱭᱩᱮᱥᱵᱤ ᱴᱨᱟᱱᱥᱯᱷᱟᱨ ᱢᱚᱰ ᱛᱮ ᱡᱚᱯᱲᱟᱣ ᱢᱮ",
  "rockbox_step_usb_storage_mode": "ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱟᱢᱟᱜ ᱰᱤᱵᱷᱟᱭᱤᱥ ᱨᱮ ᱭᱩᱮᱥᱵᱤ ᱥᱴᱚᱨᱮᱡᱽ ᱢᱚᱰ ᱪᱟᱹᱞᱩᱭ ᱢᱮ ᱟᱨ ᱛᱟᱭᱚᱢ ᱨᱮ ᱚᱛᱟᱭ ᱢᱮ",
  "rockbox_step_usb_storage_folder": "ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱟᱢᱟᱜ {model} ᱨᱮ USB ᱥᱴᱚᱨᱮᱡᱽ ᱢᱚᱰ ᱪᱟᱹᱞᱩᱭ ᱢᱮ, ᱚᱱᱟ ᱛᱟᱭᱚᱢ ᱰᱨᱟᱭᱤᱵᱷ ᱵᱟᱪᱷᱟᱣ ᱢᱮ ᱚᱠᱟ ᱧᱮᱞᱚᱜ ᱠᱟᱱᱟ",
  "rockbox_step_select_player_folder": "ᱫᱟᱭᱟ ᱠᱟᱛᱮ ᱯᱞᱮᱭᱟᱨ ᱵᱟᱪᱷᱟᱣ ᱢᱮ ᱵᱟᱝᱠᱷᱟᱱ ᱱᱚᱣᱟ ᱨᱮᱱᱟᱜ ᱢᱤᱫ ᱯᱷᱚᱞᱰᱟᱨ ᱵᱟᱪᱷᱟᱣ ᱢᱮ",

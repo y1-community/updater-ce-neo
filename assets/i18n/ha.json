@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Zaɓi Na'urar Rockbox",
  "rockbox_select_device_prompt": "Wane dan wasa kuke girka jigogin Rockbox?",
  "rockbox_step2_connect_usb": "Haɗa kebul na USB zuwa ga {model}",
+ "rockbox_step2_connect_usb_storage": "Da fatan za a haɗa {model} naku ta yanayin canja wurin USB",
  "rockbox_step_usb_storage_mode": "Da fatan za a kunna yanayin ajiyar USB akan na'urar ku kuma danna Na gaba",
  "rockbox_step_usb_storage_folder": "Da fatan za a kunna yanayin ajiya na USB akan {model}, sannan zaɓi drive ɗin da ya bayyana",
  "rockbox_step_select_player_folder": "Da fatan za a zaɓi ɗan wasan da kansa ko ɗaya daga cikin manyan fayilolin da ke cikinsa",

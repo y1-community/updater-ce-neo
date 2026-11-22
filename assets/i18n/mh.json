@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Kālet Rockbox Device",
  "rockbox_select_device_prompt": "Ta player eo kwoj install Rockbox themes ñan e?",
  "rockbox_step2_connect_usb": "Likūt USB cable eo ñan {model} eo am",
+ "rockbox_step2_connect_usb_storage": "Jouj im kobaik {model} eo am ilo USB transfer mode",
  "rockbox_step_usb_storage_mode": "Jouj im kōtlok USB storage mode ilo device eo am im click Next",
  "rockbox_step_usb_storage_folder": "Jouj im kōtlok USB storage mode ilo {model} eo am, innem kãlet drive eo ej walok",
  "rockbox_step_select_player_folder": "Jouj im kālet player eo make ak juon ian folder ko ion",

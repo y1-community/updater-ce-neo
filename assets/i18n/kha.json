@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Jied ia ka tiar Rockbox",
  "rockbox_select_device_prompt": "Ha kano ka player phi buh ia ki theme jong ka Rockbox?",
  "rockbox_step2_connect_usb": "Pyndait ia u USB ha ka {model} jong phi .",
+ "rockbox_step2_connect_usb_storage": "Sngewbha pyniasoh ia ka {model} jong phi da ka rukom pynkylla USB .",
  "rockbox_step_usb_storage_mode": "Sngewbha pyntreikam ia ka USB ha ka tiar jong phi bad nion Next .",
  "rockbox_step_usb_storage_folder": "Sngewbha pyntreikam ia ka rukom buh USB ha ka {model} jong phi, nangta jied ia ka drive kaba paw .",
  "rockbox_step_select_player_folder": "Sngewbha jied ia u player hi lane ia kawei na ki folder ba don ha u .",

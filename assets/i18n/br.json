@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Dibabit ardivink Rockbox",
  "rockbox_select_device_prompt": "Evit peseurt c'hoarier emaoc'h o staliañ temoù Rockbox ?",
  "rockbox_step2_connect_usb": "Stagañ ar c'habel USB ouzh ho {model}",
+ "rockbox_step2_connect_usb_storage": "Mar plij, kevreit ho {model} dre ar mod treuzkas USB",
  "rockbox_step_usb_storage_mode": "Gweredekait ar mod stokañ USB war ho trevnad ha klikit war Da heul",
  "rockbox_step_usb_storage_folder": "Gweredekait ar mod stokañ USB war ho {model}, ha dibabit ar gantenn a zeu war wel",
  "rockbox_step_select_player_folder": "Dibabit ar c'hoarier e-unan pe unan eus an teuliadoù a zo warnañ mar plij",

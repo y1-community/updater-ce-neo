@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox jinis bachao me",
  "rockbox_select_device_prompt": "Rockbox theme ko oka khelạḍiạ lạgit́ ko install eda?",
  "rockbox_step2_connect_usb": "USB kebul amak’ {model} re̱ jọpọṛao me̱",
+ "rockbox_step2_connect_usb_storage": "Daya kate̱ amak’ {model} USB ucạṛ mod darae te̱ jọṛao me̱",
  "rockbox_step_usb_storage_mode": "Daya kate amak’ ḍivais re USB sṭorej mod kạmi me ar Next re click me",
  "rockbox_step_usb_storage_folder": "Daya kate {model} re USB sṭorej mod kạmi ocoe me, ona tayom oka drive ńelok̕kan ona bachao me",
  "rockbox_step_select_player_folder": "Daya kate ona khelạḍiạ se ona reaḱ mit́ṭen folder bachao me",

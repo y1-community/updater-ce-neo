@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Odaberite Rockbox uređaj",
  "rockbox_select_device_prompt": "Za koji plejer instalirate Rockbox teme?",
  "rockbox_step2_connect_usb": "Priključite USB kabl na svoj {model}",
+ "rockbox_step2_connect_usb_storage": "Povežite svoj {model} putem USB načina prijenosa",
  "rockbox_step_usb_storage_mode": "Omogućite način USB memorije na svom uređaju i kliknite na Next",
  "rockbox_step_usb_storage_folder": "Omogućite način USB memorije na svom {model}, a zatim odaberite disk koji se pojavljuje",
  "rockbox_step_select_player_folder": "Odaberite sam plejer ili jedan od foldera na njemu",

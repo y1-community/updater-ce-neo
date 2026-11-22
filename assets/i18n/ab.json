@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Иалшәх Рокбокс Аиқәыршәага",
  "rockbox_select_device_prompt": "Иарбан плееру Рокбокс атемақәа ззышьақәышәҵо?",
  "rockbox_step2_connect_usb": "USB кабель шә {model} иацҵа",
+ "rockbox_step2_connect_usb_storage": "Ҳаҳәоит, шә{model} USB аиагаратә режим ала иаҿактәуп",
  "rockbox_step_usb_storage_mode": "Ҳаҳәоит, шәхыхәҭаҿы USB аҵәахырҭа режим аус арутәуп, насгьы Анаҩс шәақәыӷәӷәа",
  "rockbox_step_usb_storage_folder": "Ҳаҳәоит, USB аҭаҵәахырҭа режим аус арутәуп шә{model} аҟны, нас иалышәх иааԥшуа адрайв",
  "rockbox_step_select_player_folder": "Ҳаҳәоит, иалышәх арҳәага ахаҭа ма иқәу апапкақәа руак",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sélectionner l'appareil Rockbox",
  "rockbox_select_device_prompt": "Pour quel lecteur installez-vous des thèmes Rockbox ?",
  "rockbox_step2_connect_usb": "Branchez le câble USB à votre {model}",
+ "rockbox_step2_connect_usb_storage": "Veuillez connecter votre {model} en mode transfert USB",
  "rockbox_step_usb_storage_mode": "Veuillez activer le mode stockage USB sur votre appareil et cliquer sur Suivant",
  "rockbox_step_usb_storage_folder": "Veuillez activer le mode stockage USB sur votre {model}, puis choisissez le disque qui apparaît",
  "rockbox_step_select_player_folder": "Veuillez sélectionner le lecteur lui-même ou l'un de ses dossiers",

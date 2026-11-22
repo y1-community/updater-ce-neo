@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Valitse Rockbox-laite",
  "rockbox_select_device_prompt": "Mille soittimelle asennat Rockbox-teemoja?",
  "rockbox_step2_connect_usb": "Liitä USB-kaapeli {model}-laitteeseen",
+ "rockbox_step2_connect_usb_storage": "Liitä {model} USB-siirtotilassa",
  "rockbox_step_usb_storage_mode": "Ota USB-tallennustila käyttöön laitteessasi ja napsauta Seuraava",
  "rockbox_step_usb_storage_folder": "Ota USB-tallennustila käyttöön laitteessa {model} ja valitse sitten näkyviin tuleva asema",
  "rockbox_step_select_player_folder": "Valitse itse soitin tai jokin sen kansioista",

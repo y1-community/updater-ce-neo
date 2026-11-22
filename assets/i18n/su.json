@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Alat Rockbox",
  "rockbox_select_device_prompt": "Pamuter mana anu anjeun pasang téma Rockbox?",
  "rockbox_step2_connect_usb": "Gantelkeun kabel USB ka {model} Anjeun",
+ "rockbox_step2_connect_usb_storage": "Mangga sambungkeun {model} anjeun ku mode transfer USB",
  "rockbox_step_usb_storage_mode": "Punten aktipkeun modeu panyimpenan USB dina alat anjeun teras klik Salajengna",
  "rockbox_step_usb_storage_folder": "Punten aktipkeun mode panyimpenan USB dina {model} anjeun, teras pilih drive anu muncul",
  "rockbox_step_select_player_folder": "Mangga pilih pamuter sorangan atawa salah sahiji polder di dinya",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Mifidiana Rockbox Device",
  "rockbox_select_device_prompt": "Iza amin'ireo mpilalao no ametrahanao lohahevitra Rockbox?",
  "rockbox_step2_connect_usb": "Ampifandraiso amin'ny {model} ny tariby USB",
+ "rockbox_step2_connect_usb_storage": "Ampifandraiso amin'ny fomba famindrana USB ny {model} anao azafady",
  "rockbox_step_usb_storage_mode": "Alefaso azafady ny maody fitahirizana USB amin'ny fitaovanao ary tsindrio ny Next",
  "rockbox_step_usb_storage_folder": "Alefaso azafady ny maody fitahirizana USB amin'ny {model} anao, dia fidio ny fiara izay miseho",
  "rockbox_step_select_player_folder": "Fidio azafady ny mpilalao na ny iray amin'ireo lahatahiry eo aminy",

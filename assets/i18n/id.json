@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Perangkat Rockbox",
  "rockbox_select_device_prompt": "Untuk pemain manakah Anda memasang tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang kabel USB ke {model} Anda",
+ "rockbox_step2_connect_usb_storage": "Silakan sambungkan {model} Anda dengan mode transfer USB",
  "rockbox_step_usb_storage_mode": "Silakan aktifkan mode penyimpanan USB di perangkat Anda dan klik Berikutnya",
  "rockbox_step_usb_storage_folder": "Harap aktifkan mode penyimpanan USB di {model} Anda, lalu pilih drive yang muncul",
  "rockbox_step_select_player_folder": "Silakan pilih pemutar itu sendiri atau salah satu folder di dalamnya",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Ընտրեք Rockbox սարքը",
  "rockbox_select_device_prompt": "Ո՞ր նվագարկչի համար եք տեղադրում Rockbox թեմաները:",
  "rockbox_step2_connect_usb": "Միացրեք USB մալուխը ձեր {model}-ին",
+ "rockbox_step2_connect_usb_storage": "Խնդրում ենք միացնել ձեր {model} USB փոխանցման ռեժիմը",
  "rockbox_step_usb_storage_mode": "Խնդրում ենք միացնել USB պահեստավորման ռեժիմը ձեր սարքում և սեղմել «Հաջորդ»:",
  "rockbox_step_usb_storage_folder": "Խնդրում ենք միացնել USB պահեստավորման ռեժիմը ձեր {model}-ում, այնուհետև ընտրեք ցուցադրվող սկավառակը",
  "rockbox_step_select_player_folder": "Խնդրում ենք ընտրել նվագարկիչը կամ դրա վրա գտնվող թղթապանակներից մեկը",

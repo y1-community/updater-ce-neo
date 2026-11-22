@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Kies Rockbox-apparaat",
  "rockbox_select_device_prompt": "Veur welke speuler installeert geer Rockbox-thema’s?",
  "rockbox_step2_connect_usb": "Maak de USB-kabel aan eur {model}",
+ "rockbox_step2_connect_usb_storage": "Verbind eur {model} in de USB-euverdrachsmodus",
  "rockbox_step_usb_storage_mode": "Sjakel de USB-opsjlaagmodus op eur apparaat in en klik op Volgende",
  "rockbox_step_usb_storage_folder": "Sjakel de USB-opsjlaagmodus op eur {model} in, en kies daonao de station dee versjient",
  "rockbox_step_select_player_folder": "Selecteer de speuler zelf of ein vaan de mappe d’rop",

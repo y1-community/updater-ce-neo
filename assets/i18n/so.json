@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Dooro Aaladda Rockbox",
  "rockbox_select_device_prompt": "Ciyaartoyga aad ku rakibayso mawduucyada Rockbox?",
  "rockbox_step2_connect_usb": "Ku dheji fiilada USB-ga {model}",
+ "rockbox_step2_connect_usb_storage": "Fadlan ku xidh {model} qaabka wareejinta USB",
  "rockbox_step_usb_storage_mode": "Fadlan awood habka kaydinta USB ee qalabkaaga oo guji Next",
  "rockbox_step_usb_storage_folder": "Fadlan awood u geli qaabka kaydinta USB-ga {model}kaaga, ka dib dooro wadeeyaha soo muuqda",
  "rockbox_step_select_player_folder": "Fadlan dooro ciyaaryahanka laftiisa ama mid ka mid ah faylalka ku yaal",

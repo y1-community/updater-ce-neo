@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Valige Rockboxi seade",
  "rockbox_select_device_prompt": "Millisele mängijale te Rockboxi teemasid installite?",
  "rockbox_step2_connect_usb": "Ühendage USB-kaabel seadmega {model}",
+ "rockbox_step2_connect_usb_storage": "Ühendage oma {model} USB-edastusrežiimi kaudu",
  "rockbox_step_usb_storage_mode": "Lubage oma seadmes USB-salvestusrežiim ja klõpsake nuppu Edasi",
  "rockbox_step_usb_storage_folder": "Lubage oma {model} USB-salvestusrežiim ja seejärel valige kuvatav draiv",
  "rockbox_step_select_player_folder": "Valige pleier ise või üks sellel olevatest kaustadest",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Hautatu Rockbox gailua",
  "rockbox_select_device_prompt": "Zein jokalarirentzat instalatzen ari zara Rockbox gaiak?",
  "rockbox_step2_connect_usb": "Lotu USB kablea zure {model}",
+ "rockbox_step2_connect_usb_storage": "Mesedez, konektatu zure {model} USB transferentzia moduaren bidez",
  "rockbox_step_usb_storage_mode": "Mesedez, gaitu USB biltegiratze modua zure gailuan eta egin klik Hurrengoa",
  "rockbox_step_usb_storage_folder": "Mesedez, gaitu USB biltegiratze modua zure {model}-n, eta hautatu agertzen den unitatea",
  "rockbox_step_select_player_folder": "Hautatu erreproduzitzailea bera edo bertako karpetetako bat",

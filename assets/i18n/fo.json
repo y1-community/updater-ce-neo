@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Vel Rockbox tól",
  "rockbox_select_device_prompt": "Hvønn spælara setur tú Rockbox tema upp til?",
  "rockbox_step2_connect_usb": "Fest USB-kaðalin á tín {model} .",
+ "rockbox_step2_connect_usb_storage": "Vinarliga sett tín {model} saman við USB flytihátti",
  "rockbox_step_usb_storage_mode": "Vinarliga virkja USB goymslustilling á tínari eind og trýst á Næsta",
  "rockbox_step_usb_storage_folder": "Vinarliga virkja USB goymslustilling á tínum {model}, og vel síðani drivið, sum kemur fram",
  "rockbox_step_select_player_folder": "Vinarliga vel sjálvan spælaran ella eina av mappunum á honum",

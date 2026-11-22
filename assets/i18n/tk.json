@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "“Rockbox” enjamyny saýlaň",
  "rockbox_select_device_prompt": "Haýsy oýunçy üçin “Rockbox” mowzuklaryny gurýarsyňyz?",
  "rockbox_step2_connect_usb": "USB kabelini {model} dakyň",
+ "rockbox_step2_connect_usb_storage": "{model} USB geçiriş tertibi bilen birikdirmegiňizi haýyş edýäris",
  "rockbox_step_usb_storage_mode": "Enjamyňyzda USB saklaýyş re modeimini açyň we \"Indiki\" düwmesine basyň",
  "rockbox_step_usb_storage_folder": "{model}-da USB saklaýyş re modeimini açyň, soňra peýda bolan sürüjini saýlaň",
  "rockbox_step_select_player_folder": "Oýnaýjynyň özüni ýa-da üstündäki bukjalardan birini saýlaň",

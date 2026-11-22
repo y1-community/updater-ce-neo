@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleziona Dispositif Rockbox",
  "rockbox_select_device_prompt": "Per che giucadur stee instaland i temi Rockbox?",
  "rockbox_step2_connect_usb": "Collega el cavo USB al {model}",
+ "rockbox_step2_connect_usb_storage": "Culegà el {model} en modalità de trasferiment USB",
  "rockbox_step_usb_storage_mode": "Abilita la modalità de memorizaziun USB sul dispositif e clica su Avanti",
  "rockbox_step_usb_storage_folder": "Abilita la modalità de memorizaziun USB sül {model}, e dopu scegli l’unità che cumparirà",
  "rockbox_step_select_player_folder": "Per piasé seleziuna el letur stess o una di cartell che g’he sun",

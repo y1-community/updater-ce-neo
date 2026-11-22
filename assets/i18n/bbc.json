@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pillit ma Perangkat Kotak Batu .",
  "rockbox_select_device_prompt": "Pemain na dia do na dipasang hamu tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang ma kabel USB tu {model} .",
+ "rockbox_step2_connect_usb_storage": "Tolong ma sambunghon {model} muna marhite mode pemindahan USB .",
  "rockbox_step_usb_storage_mode": "Aktifhon ma mode penyimpanan USB di perangkatmuna jala klik ma Selanjutna .",
  "rockbox_step_usb_storage_folder": "Aktifhon ma mode penyimpanan USB di {model} muna, dung i pilih ma drive na tarida .",
  "rockbox_step_select_player_folder": "Pillit ma pemain i sandiri manang salah satu map na adong disi .",

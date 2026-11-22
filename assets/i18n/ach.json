@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Yer Rockbox Device",
  "rockbox_select_device_prompt": "Latuku mene ma itye ka keto Rockbox themes pire?",
  "rockbox_step2_connect_usb": "Ket waya me USB i {model} ni",
+ "rockbox_step2_connect_usb_storage": "Wakwayi ni i ket {model} ni ki kit me cwalo USB",
  "rockbox_step_usb_storage_mode": "Wakwayi ni iket yoo me gwoko USB i cim ni ki dii Next",
  "rockbox_step_usb_storage_folder": "Wakwayi ni iket kit me gwoko USB i {model} ni, ki dong iyero gin ma obi nen",
  "rockbox_step_select_player_folder": "Wakwayi ni iyer gin ma tuku ni kikome onyo acel i kin folda ma tye iye",

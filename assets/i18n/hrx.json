@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Apparat raus suuche .",
  "rockbox_select_device_prompt": "Fer was fer xpiiler tuust tuu Rockbox theeme instaliire?",
  "rockbox_step2_connect_usb": "Tuu tas USB-kabel an tayn {model} .",
+ "rockbox_step2_connect_usb_storage": "Bitte ferklaycht ayre {model} torich USB-Transfer-Modus",
  "rockbox_step_usb_storage_mode": "Tuu te USB-Storage-Modus uf tayn apteelung in richte un klik uf Next .",
  "rockbox_step_usb_storage_folder": "Tuu te USB-Storage-Modus uf tayn {model} aktiviire, tan suuch te xrit woo khomt",
  "rockbox_step_select_player_folder": "Tuu te xpiiler selepst raus suuche orer een fon te folter woo tat sin .",

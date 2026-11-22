@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ТӀаса бище Rockbox аппарат .",
  "rockbox_select_device_prompt": "Кинаб плеералъухъ дуца Rockbox темаби лъолел ругел?",
  "rockbox_step2_connect_usb": "Прикрепите USB-кабель к вашему {model} .",
+ "rockbox_step2_connect_usb_storage": "Пожалуйста, подключите свой {model} через режим передачи USB",
  "rockbox_step_usb_storage_mode": "Пожалуйста, включите режим хранения USB на вашем устройстве и нажмите Далее .",
  "rockbox_step_usb_storage_folder": "Пожалуйста, включите режим хранения USB на вашем {model}, затем выберите диск, который появится",
  "rockbox_step_select_player_folder": "Пожалуйста, выберите сам плеер или одну из папок на нем",

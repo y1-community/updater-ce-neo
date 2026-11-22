@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Chagua Kifaa cha Rockbox",
  "rockbox_select_device_prompt": "Je, unasakinisha mandhari ya Rockbox kwa ajili ya mchezaji gani?",
  "rockbox_step2_connect_usb": "Ambatisha kebo ya USB kwenye {model} yako",
+ "rockbox_step2_connect_usb_storage": "Tafadhali unganisha {model} yako kwa hali ya uhamishaji ya USB",
  "rockbox_step_usb_storage_mode": "Tafadhali wezesha hali ya hifadhi ya USB kwenye kifaa chako na ubofye Inayofuata",
  "rockbox_step_usb_storage_folder": "Tafadhali washa hali ya hifadhi ya USB kwenye {model} yako, kisha uchague hifadhi inayoonekana",
  "rockbox_step_select_player_folder": "Tafadhali chagua kichezaji chenyewe au mojawapo ya folda zilizo juu yake",

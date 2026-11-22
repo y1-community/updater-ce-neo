@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Dispositivo nisqapi akllay",
  "rockbox_select_device_prompt": "¿Mayqin pukllaqpaqtaq Rockbox temakunata churachkanki?",
  "rockbox_step2_connect_usb": "USB cableta {model} nisqaykiman watay.",
+ "rockbox_step2_connect_usb_storage": "Ama hina kaspa, {model} nisqayki USB transferencia modowan tinkiy",
  "rockbox_step_usb_storage_mode": "Ama hina kaspa, dispositivoykipi USB waqaychay ruwayta atichiy chaymanta Qatiq ñit'iy",
  "rockbox_step_usb_storage_folder": "Ama hina kaspa, USB waqaychay ñanta {model} kaqpi atichiy, chaymanta rikukuq unidadta akllay",
  "rockbox_step_select_player_folder": "Ama hina kaspa, kikin pukllaqta icha chaypi kaq qillqana mayt'ukunamanta hukninta akllay",

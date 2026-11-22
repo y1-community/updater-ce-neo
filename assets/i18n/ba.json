@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Рокбокс ҡоролмаһын һайлағыҙ",
  "rockbox_select_device_prompt": "Ниндәй уйынсы өсөн Rockbox темаларын ҡуяһығыҙ?",
  "rockbox_step2_connect_usb": "Һеҙҙең {model} USB кабелен беркетергә",
+ "rockbox_step2_connect_usb_storage": "Зинһар, һеҙҙең {model} USB тапшырыу режимы аша тоташтырығыҙ",
  "rockbox_step_usb_storage_mode": "Зинһар, ҡоролмағыҙҙа USB һаҡлау режимын асығыҙ һәм Киләһе баҫығыҙ",
  "rockbox_step_usb_storage_folder": "Зинһар, һеҙҙең {model} USB һаҡлау режимын асыу, һуңынан диск һайлау, тип күренә .",
  "rockbox_step_select_player_folder": "Зинһар, плеер үҙе йәки уның өҫтөндәге папкаларҙың береһен һайлағыҙ .",

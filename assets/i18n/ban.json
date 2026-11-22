@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Piranti Rockbox",
  "rockbox_select_device_prompt": "Pemain napi sané kaanggén Sameton masang tema Rockbox?",
  "rockbox_step2_connect_usb": "Nempelin kabel USB ring {model} Sametoné",
+ "rockbox_step2_connect_usb_storage": "Sambungang {model} nganggén mode transfer USB",
  "rockbox_step_usb_storage_mode": "Aktipang mode panyimpenan USB ring piranti Sametoné lan klik Selanturnyané",
  "rockbox_step_usb_storage_folder": "Aktipang mode penyimpanan USB ring {model} Sametoné, raris pilih drive sané medal",
  "rockbox_step_select_player_folder": "Pilih pamuter punika utawi silih tunggil folder sané wénten ring duurnyané",

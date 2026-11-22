@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox thilri kha thim",
  "rockbox_select_device_prompt": "Zei player caah dah Rockbox themes na install?",
  "rockbox_step2_connect_usb": "USB cable kha na {model} ah peh",
+ "rockbox_step2_connect_usb_storage": "Na {model} kha USB thlennak mode in peh",
  "rockbox_step_usb_storage_mode": "Na thilri ah USB chiahnak mode kha on law A hnu kha hmet",
  "rockbox_step_usb_storage_folder": "Na {model} ah USB chiahnak mode kha on law, a langmi drive kha thim",
  "rockbox_step_select_player_folder": "Player hrimhrim asiloah a cung i a ummi folder pakhatkhat kha thim",

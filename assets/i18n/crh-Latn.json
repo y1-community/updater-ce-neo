@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rokboks mahsulatını seçip alıñız",
  "rockbox_select_device_prompt": "Rockbox mevzularını qaysı oyuncı içün yerleştiresiñiz?",
  "rockbox_step2_connect_usb": "USB kabelni öz {model} .",
+ "rockbox_step2_connect_usb_storage": "Lütfen, öz {model} telefonıñıznı USB yollav rejimi yardımınen bağlamaq kereksiñiz",
  "rockbox_step_usb_storage_mode": "Lütfen, öz mahsulatıñızda USB saqlav rejimini çalıştırıñız ve «İleri» nı basıñız",
  "rockbox_step_usb_storage_folder": "Lütfen, {model} diskiñizde USB saqlav rejimini çalıştırıñız, soñra peyda olğan diskni seçip alıñız",
  "rockbox_step_select_player_folder": "Lütfen, oynatqıçnıñ özüni ya da onıñ üstündeki papkalardan birini seçip alıñız",

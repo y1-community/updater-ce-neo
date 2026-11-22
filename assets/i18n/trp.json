@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox manwi chongdi",
  "rockbox_select_device_prompt": "Rockbox ni theme rok nwng saboni bagwi install khlai tong?",
  "rockbox_step2_connect_usb": "USB kebul no nini {model} bai chapdi",
+ "rockbox_step2_connect_usb_storage": "Khapang srangwi nini {model} no USB bai swlai di",
  "rockbox_step_usb_storage_mode": "Khapang srangwi nini manwi o USB narwkmani mode no swnamdi tei Next no click khaidi",
  "rockbox_step_usb_storage_folder": "Khapang srangwi nini {model} o USB narwkmani mode no swnamdi, aboni ulo nukjaknai drive no chongdi",
  "rockbox_step_select_player_folder": "Khapang srangwi player no sak bai sak eba aboni sakao tongnai folder ni kaisa no chongdi",

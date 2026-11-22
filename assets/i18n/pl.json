@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Wybierz Urządzenie Rockbox",
  "rockbox_select_device_prompt": "Dla jakiego odtwarzacza instalujesz motywy Rockbox?",
  "rockbox_step2_connect_usb": "Podłącz kabel USB do {model}",
+ "rockbox_step2_connect_usb_storage": "Proszę podłączyć {model} w trybie transferu USB",
  "rockbox_step_usb_storage_mode": "Włącz tryb pamięci USB w swoim urządzeniu i kliknij Dalej",
  "rockbox_step_usb_storage_folder": "Włącz tryb pamięci USB na swoim {model}, a następnie wybierz dysk, który się pojawi",
  "rockbox_step_select_player_folder": "Wybierz sam odtwarzacz lub jeden z znajdujących się na nim folderów",

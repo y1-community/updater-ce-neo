@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox ئۈسكۈنىسىنى تاللاڭ",
  "rockbox_select_device_prompt": "سىز قايسى قويغۇچقا Rockbox باشتېمىسىنى ئورنىتىسىز؟",
  "rockbox_step2_connect_usb": "USB سىمىنى {model} غا ئۇلاڭ",
+ "rockbox_step2_connect_usb_storage": "USB يوللاش ھالىتى ئارقىلىق {model} نى ئۇلاڭ",
  "rockbox_step_usb_storage_mode": "ئۈسكۈنىڭىزدە USB ساقلاش ھالىتىنى قوزغىتىپ «كېيىنكى» نى چېكىڭ",
  "rockbox_step_usb_storage_folder": "Please enable USB storage mode on your {model}, then choose the drive that appears",
  "rockbox_step_select_player_folder": "قويغۇچنىڭ ئۆزى ياكى ئۇنىڭدىكى ھۆججەت قىسقۇچتىن بىرنى تاللاڭ",

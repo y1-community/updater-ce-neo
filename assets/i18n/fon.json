@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Hɛn Rockbox sín nǔ .",
  "rockbox_select_device_prompt": "Player tɛ a ka ɖò Rockbox sín xota lɛ sɔ́ ɖó jí wɛ?",
  "rockbox_step2_connect_usb": "Sɔ́ kàn USB ɔ dó {model} towe jí .",
+ "rockbox_step2_connect_usb_storage": "Mi kɛnklɛn bo cá {model} mitɔn gbɔn USB ji",
  "rockbox_step_usb_storage_mode": "Mi kɛnklɛn bo hun nǔhɛ́ntɛn USB tɔn ɖò alokan mitɔn jí bo zín Enɛ gudo .",
  "rockbox_step_usb_storage_folder": "Mi kɛnklɛn bo hun USB storage mode ɖò {model} mitɔn jí, enɛ gudo hǔn, mi sɔ́ mɔ̌to e na tɔ́n é .",
  "rockbox_step_select_player_folder": "Mi kɛnklɛn bo sɔ́ nǔxixo ɔ ɖesu alǒ wema e ɖò jí lɛ é ɖokpo .",

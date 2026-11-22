@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ராக்பாக்ஸ் சாதனத்தைத் தேர்ந்தெடுக்கவும்",
  "rockbox_select_device_prompt": "எந்த பிளேயருக்கு ராக்பாக்ஸ் தீம்களை நிறுவுகிறீர்கள்?",
  "rockbox_step2_connect_usb": "உங்கள் {model} உடன் USB கேபிளை இணைக்கவும்",
+ "rockbox_step2_connect_usb_storage": "{model}ஐ USB பரிமாற்ற பயன்முறை மூலம் இணைக்கவும்",
  "rockbox_step_usb_storage_mode": "உங்கள் சாதனத்தில் USB சேமிப்பக பயன்முறையை இயக்கி அடுத்து என்பதைக் கிளிக் செய்யவும்",
  "rockbox_step_usb_storage_folder": "உங்கள் {model} இல் USB சேமிப்பக பயன்முறையை இயக்கவும், பின்னர் தோன்றும் இயக்ககத்தைத் தேர்வு செய்யவும்",
  "rockbox_step_select_player_folder": "பிளேயரையே அல்லது அதில் உள்ள கோப்புறைகளில் ஒன்றைத் தேர்ந்தெடுக்கவும்",

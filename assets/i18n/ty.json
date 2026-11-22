@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Ma'iti i te rave'a Rockbox",
  "rockbox_select_device_prompt": "O vai te taata hauti ta outou e haamau ra i te mau tumu parau Rockbox?",
  "rockbox_step2_connect_usb": "A tapiri i te taura USB i to outou {model}",
+ "rockbox_step2_connect_usb_storage": "A taati'a na i to outou {model} na roto i te huru faahororaa USB",
  "rockbox_step_usb_storage_mode": "A faati'a i te huru tape'araa USB i ni'a i to outou mauhaa e a hi'o i muri iho",
  "rockbox_step_usb_storage_folder": "A faati'a i te huru tape'araa USB i ni'a i to outou {model}, e i muri iho a maiti i te pu'e parau e itehia mai",
  "rockbox_step_select_player_folder": "A maiti i te taata hauti iho aore ra te hoê o te mau tauihaa i ni'a i te reira",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Saleni Icibombelo ca Rockbox",
  "rockbox_select_device_prompt": "Ni shani fintu mulebika imitwe ya Rockbox?",
  "rockbox_step2_connect_usb": "Ukubika intambo ya USB ku {model} yenu",
+ "rockbox_step2_connect_usb_storage": "Mukwai lunganika {model} yenu ukupitila mu nshila ya kutwalamo iya USB",
  "rockbox_step_usb_storage_mode": "Mukwai suminisheni inshila ya kusungilamo ifya USB pa cibombelo cenu no kutinika Icakonkapo .",
  "rockbox_step_usb_storage_folder": "Mukwai suminisheni inshila ya kusungilamo USB pa {model} yenu, lyena saleni drive iyo ilemoneka",
  "rockbox_step_select_player_folder": "Mukwai saleni icakutambisha cene nangu cimo ica fipe pali ci",

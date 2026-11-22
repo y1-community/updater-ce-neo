@@ -194,6 +194,56 @@ def test_rockbox_240p_detected_from_package_name_and_path():
         app.processEvents()
 
 
+def test_manifest_240p_rockbox_skips_360p_label_and_warning():
+    from PySide6.QtWidgets import QApplication
+    from src import manifest
+    from src.ui.main_window import MainWindow
+
+    xml = (
+        '<slidia><package name="Nugget (Rockbox 240p)" '
+        'repo="norocoral/nugget-y1" device="Y1" type="img" '
+        'handler="Custom Firmware" is_240p_rockbox="true" /></slidia>'
+    )
+    pkg = manifest.parse_manifest_xml(xml)[0]
+    assert pkg.is_240p_rockbox is True
+    assert catalog.package_supports_hw_type(pkg, "A") is True
+    assert catalog.package_supports_hw_type(pkg, "B") is False
+
+    # The archive is plain rom.zip; the manifest flag, not its name, makes the
+    # row 240p and suppresses the 360p-only label.
+    rows = _client([_rel("2.1.2", ["rom.zip"], repo=pkg.repo)]).releases_for_package(
+        pkg, "Y1"
+    )
+    assert rows and rows[0]["is_240p_rockbox"] is True
+    assert rows[0]["selected_resolution"] == "240p"
+    label = catalog.parse_clean_release_tag_label(rows[0])
+    assert "240p" in label
+    assert "360p" not in label.lower()
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    try:
+        class _Page:
+            _current_selected_rel = rows[0]
+            _fw_package = None
+            _local_rockbox_themes_cb = None
+
+            def current_installed_release_info(self):
+                return {}
+
+            def current_package(self):
+                return pkg
+
+        w._package_name = pkg.name
+        w._package_model = "Y1"
+        w._select_page = _Page()
+        assert w._rockbox_240p_detected() is True
+        assert w._rockbox_360p_themes_notice_needed() is False
+    finally:
+        w.close()
+        app.processEvents()
+
+
 def test_bundled_240p_done_quits_app():
     from PySide6.QtWidgets import QApplication
     from src.ui.main_window import MainWindow

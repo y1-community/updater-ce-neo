@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox хатӗрне суйласа илӗр",
  "rockbox_select_device_prompt": "Rockbox темисене хӑш вылякан валли лартатӑр?",
  "rockbox_step2_connect_usb": "USB кабеле хӑвӑрӑн {model} ҫумне ҫыхӑнтарӑр",
+ "rockbox_step2_connect_usb_storage": "Хӑвӑрӑн {model}-а USB куҫармалли режимпа ҫыхӑнтарӑр",
  "rockbox_step_usb_storage_mode": "Хӑвӑрӑн устройствӑра USB упрамалли режима ӗҫлеттерӗр те «Малалла» ҫине пусӑр",
  "rockbox_step_usb_storage_folder": "{model} ҫинче USB упрамалли режима ӗҫлеттерӗр, унтан курӑнакан диска суйласа илӗр",
  "rockbox_step_select_player_folder": "Тархасшӑн, плеера хӑйне е ун ҫинчи папкӑсенчен пӗрне суйласа илӗр",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "रॉकबॉक्स डिव्हाइस निवडा",
  "rockbox_select_device_prompt": "तुम्ही कोणत्या खेळाडूसाठी रॉकबॉक्स थीम स्थापित करत आहात?",
  "rockbox_step2_connect_usb": "तुमच्या {model} ला USB केबल संलग्न करा",
+ "rockbox_step2_connect_usb_storage": "कृपया तुमचा {model} USB ट्रान्सफर मोडने कनेक्ट करा",
  "rockbox_step_usb_storage_mode": "कृपया तुमच्या डिव्हाइसवर USB स्टोरेज मोड सक्षम करा आणि पुढील क्लिक करा",
  "rockbox_step_usb_storage_folder": "कृपया तुमच्या {model} वर USB स्टोरेज मोड सक्षम करा, त्यानंतर दिसणारा ड्राइव्ह निवडा",
  "rockbox_step_select_player_folder": "कृपया स्वतःच प्लेअर किंवा त्यावरील फोल्डरपैकी एक निवडा",

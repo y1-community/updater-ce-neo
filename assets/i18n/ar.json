@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "حدد جهاز Rockbox",
  "rockbox_select_device_prompt": "ما هو اللاعب الذي تقوم بتثبيت سمات Rockbox له؟",
  "rockbox_step2_connect_usb": "قم بتوصيل كابل USB بجهازك {model}",
+ "rockbox_step2_connect_usb_storage": "يرجى توصيل {model} الخاص بك عن طريق وضع نقل USB",
  "rockbox_step_usb_storage_mode": "يرجى تمكين وضع تخزين USB على جهازك وانقر فوق \"التالي\".",
  "rockbox_step_usb_storage_folder": "الرجاء تمكين وضع تخزين USB على {model}، ثم اختر محرك الأقراص الذي يظهر",
  "rockbox_step_select_player_folder": "الرجاء تحديد المشغل نفسه أو أحد المجلدات الموجودة عليه",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pona Dispositif ya Rockbox",
  "rockbox_select_device_prompt": "Ozali ko installer ba thèmes ya Rockbox pona joueur nini?",
  "rockbox_step2_connect_usb": "Kangisa câble USB na {model} na yo .",
+ "rockbox_step2_connect_usb_storage": "Svp connecter {model} na yo na mode ya transfert USB",
  "rockbox_step_usb_storage_mode": "Svp activer mode ya stockage USB na appareil na yo pe finga Suivant",
  "rockbox_step_usb_storage_folder": "Svp activer mode ya stockage USB na {model} na yo, sima pona disque oyo ekobima",
  "rockbox_step_select_player_folder": "Svp pona lecteur yango moko to moko ya ba dossiers oyo ezali na yango",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Select Rockbox Device",
  "rockbox_select_device_prompt": "Which player yuh a install Rockbox themes fi?",
  "rockbox_step2_connect_usb": "Attach di USB cable to yuh {model}",
+ "rockbox_step2_connect_usb_storage": "Please connect yuh {model} by USB transfer mode",
  "rockbox_step_usb_storage_mode": "Please enable USB storage mode pan yuh device an click Next",
  "rockbox_step_usb_storage_folder": "Please enable USB storage mode pan yuh {model}, den choose di drive weh appear",
  "rockbox_step_select_player_folder": "Please select di player itself or one a di folders dem pan it",

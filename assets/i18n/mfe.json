@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleksionn laparey Rockbox",
  "rockbox_select_device_prompt": "Pou ki zwer ou pe instal bann tem Rockbox?",
  "rockbox_step2_connect_usb": "Atas kab USB-la ar ou {model}",
+ "rockbox_step2_connect_usb_storage": "Silvouple konekte ou {model} par mod transfer USB",
  "rockbox_step_usb_storage_mode": "Aktiv mod stokaz USB lor ou laparey silvouple e klik lor Prosin",
  "rockbox_step_usb_storage_folder": "Silvouple, aktiv mod stokaz USB lor ou {model}, apre swazir lekipman ki aparet",
  "rockbox_step_select_player_folder": "Silvouple swazir zwer-la limem ouswa enn bann dosye ki ena lor la",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ರಾಕ್‌ಬಾಕ್ಸ್ ಸಾಧನವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
  "rockbox_select_device_prompt": "ನೀವು ಯಾವ ಆಟಗಾರನಿಗೆ ರಾಕ್‌ಬಾಕ್ಸ್ ಥೀಮ್‌ಗಳನ್ನು ಸ್ಥಾಪಿಸುತ್ತಿದ್ದೀರಿ?",
  "rockbox_step2_connect_usb": "ನಿಮ್ಮ {model} ಗೆ USB ಕೇಬಲ್ ಅನ್ನು ಲಗತ್ತಿಸಿ",
+ "rockbox_step2_connect_usb_storage": "USB ವರ್ಗಾವಣೆ ಮೋಡ್ ಮೂಲಕ ನಿಮ್ಮ {model} ಅನ್ನು ಸಂಪರ್ಕಿಸಿ",
  "rockbox_step_usb_storage_mode": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ USB ಶೇಖರಣಾ ಮೋಡ್ ಅನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ ಮತ್ತು ಮುಂದೆ ಕ್ಲಿಕ್ ಮಾಡಿ",
  "rockbox_step_usb_storage_folder": "ದಯವಿಟ್ಟು ನಿಮ್ಮ {model} ನಲ್ಲಿ USB ಶೇಖರಣಾ ಮೋಡ್ ಅನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ, ನಂತರ ಕಾಣಿಸಿಕೊಳ್ಳುವ ಡ್ರೈವ್ ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ",
  "rockbox_step_select_player_folder": "ದಯವಿಟ್ಟು ಪ್ಲೇಯರ್ ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ಅದರಲ್ಲಿರುವ ಫೋಲ್ಡರ್‌ಗಳಲ್ಲಿ ಒಂದನ್ನು ಆಯ್ಕೆಮಾಡಿ",

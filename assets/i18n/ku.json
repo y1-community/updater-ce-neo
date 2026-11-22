@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Amûra Rockbox hilbijêrin",
  "rockbox_select_device_prompt": "Hûn ji bo kîjan lîstikvan mijarên Rockbox saz dikin?",
  "rockbox_step2_connect_usb": "Kabloya USB bi {model}-ya xwe ve girêdin",
+ "rockbox_step2_connect_usb_storage": "Ji kerema xwe {model} xwe bi moda veguheztina USB ve girêdin",
  "rockbox_step_usb_storage_mode": "Ji kerema xwe moda hilanînê USB-yê li ser cîhaza xwe çalak bikin û Next bikirtînin",
  "rockbox_step_usb_storage_folder": "Ji kerema xwe moda hilanînê USB li ser {model}-ya xwe çalak bike, dûv re ajokera ku xuya dike hilbijêrin",
  "rockbox_step_select_player_folder": "Ji kerema xwe lîstikvanê xwe an yek ji peldankên li ser wê hilbijêrin",

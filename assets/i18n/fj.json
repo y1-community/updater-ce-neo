@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Digitaka na misini ni Rockbox",
  "rockbox_select_device_prompt": "Na dauqito cava o sa vakacuruma tiko na ulutaga ni Rockbox me baleta?",
  "rockbox_step2_connect_usb": "Vakacuruma na wa ni USB ki na nomu {model} .",
+ "rockbox_step2_connect_usb_storage": "Kerekere mo semati na nomu {model} ena ivakarau ni veisautaki ni USB .",
  "rockbox_step_usb_storage_mode": "Yalovinaka vakatara na ivakarau ni maroroi ni USB ena nomu misini ka kiliki Tarava .",
  "rockbox_step_usb_storage_folder": "Yalovinaka vakatara na ivakarau ni maroroi ni USB ena nomu {model}, qai digitaka na draiva e basika mai .",
  "rockbox_step_select_player_folder": "Yalovinaka digitaka na dauqito vakataki koya se dua vei ira na folda ena kena .",

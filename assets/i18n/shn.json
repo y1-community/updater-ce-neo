@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "လိူၵ်ႈဢဝ်ၶိူင်ႈ Rockbox",
  "rockbox_select_device_prompt": "ၸဝ်ႈၵဝ်ႇ တေတၢင်ႇပၼ် Theme Rockbox တႃႇၽူႈလဵၼ်ႈဢၼ်လႂ်?",
  "rockbox_step2_connect_usb": "ဢဝ်သၢႆ USB ၼၼ်ႉ သႂ်ႇတီႈ {model} ၸဝ်ႈၵဝ်ႇ",
+ "rockbox_step2_connect_usb_storage": "ၶႅၼ်းတေႃႈ ၵွင်ႉသၢၼ် {model} ၸဝ်ႈၵဝ်ႇ လူၺ်ႈလၢႆးသူင်ႇၶၢဝ်ႇ USB",
  "rockbox_step_usb_storage_mode": "ၶႅၼ်းတေႃႈ ပိုတ်ႇပၼ် USB တီႈၼႂ်းၶိူင်ႈၸဝ်ႈၵဝ်ႇသေ ၼဵၵ်း Next ။",
  "rockbox_step_usb_storage_folder": "ၶႅၼ်းတေႃႈ ပိုတ်ႇပၼ် USB storage mode တီႈ {model} ၸဝ်ႈၵဝ်ႇၼၼ်ႉသေ လိူၵ်ႈဢဝ် Drive ဢၼ်ဢွၵ်ႇမႃးၼၼ်ႉ",
  "rockbox_step_select_player_folder": "လိူၵ်ႈဢဝ် Player မၼ်း ဢမ်ႇၼၼ် Folder ဢၼ်မီးၼိူဝ်မၼ်းၼၼ်ႉ ဢၼ်ၼိုင်ႈသေၵမ်း",

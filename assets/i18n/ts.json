@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Hlawula Xitirhisiwa xa Rockbox",
  "rockbox_select_device_prompt": "Xana u nghenisa ti theme ta Rockbox eka mutlangi wihi?",
  "rockbox_step2_connect_usb": "Khomanisa khebulu ya USB eka {model} ya wena .",
+ "rockbox_step2_connect_usb_storage": "Hi kombela u hlanganisa {model} ya wena hi movha wo hundzisela wa USB",
  "rockbox_step_usb_storage_mode": "Hi kombela u pfumelela movha wa vuhlayiselo bya USB eka xitirhisiwa xa wena ivi u tikhoma Next",
  "rockbox_step_usb_storage_folder": "Hi kombela u pfumelela movha wa vuhlayiselo bya USB eka {model} ya wena, kutani u hlawula drive leyi humelelaka",
  "rockbox_step_select_player_folder": "Hi kombela u hlawula xichayachayani hi xoxe kumbe yin’wana ya tifolda leti nga eka xona",

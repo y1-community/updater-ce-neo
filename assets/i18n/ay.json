@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Dispositivo Rockbox ukar ajlliñamawa",
  "rockbox_select_device_prompt": "¿Kawkïr anatirinakatakis Rockbox temas ukanakax utt’ayasi?",
  "rockbox_step2_connect_usb": "Uka cable USB ukaxa {model} .",
+ "rockbox_step2_connect_usb_storage": "Ukhamaraki {model} ukaxa USB transferencia ukampi chikt’atawa",
  "rockbox_step_usb_storage_mode": "Ukhamaraki, dispositivo ukan USB almacenamiento modalidad ukar ch’amanchaña ukat Next ukar ch’iqt’aña",
  "rockbox_step_usb_storage_folder": "Ukhamaraki, USB almacenamiento modalidad ukaxa {model} ukaru ch’amanchañawa, ukatxa uñstki uka unidad ukarux ajlliñamawa",
  "rockbox_step_select_player_folder": "Ukhamaraki, pachpa anatiriru jan ukaxa mä carpeta ukarux ajlliñamawa",

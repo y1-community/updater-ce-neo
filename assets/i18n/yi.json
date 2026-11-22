@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "אויסקלייַבן Rockbox Device",
  "rockbox_select_device_prompt": "פֿאַר וואָס שפּילער איר ינסטאַלירן ראָקקבאָקס טעמעס?",
  "rockbox_step2_connect_usb": "צוטשעפּען די וסב קאַבלע צו דיין {model}",
+ "rockbox_step2_connect_usb_storage": "ביטע פאַרבינדן דיין {model} דורך וסב אַריבערפירן מאָדע",
  "rockbox_step_usb_storage_mode": "ביטע געבן וסב סטאָרידזש מאָדע אויף דיין מיטל און גיט ווייַטער",
  "rockbox_step_usb_storage_folder": "ביטע געבן וסב סטאָרידזש מאָדע אויף דיין {model}, און סעלעקטירן דעם פאָר וואָס איז געוויזן",
  "rockbox_step_select_player_folder": "ביטע אויסקלייַבן די שפּילער זיך אָדער איינער פון די פאָלדערס אויף עס",

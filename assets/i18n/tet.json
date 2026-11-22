@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Hili Dispozitivu Rockbox",
  "rockbox_select_device_prompt": "Ita-boot instala tema Rockbox ba jogadór ida-ne'ebé?",
  "rockbox_step2_connect_usb": "Liga kabel USB ba ita-boot nia {model}",
+ "rockbox_step2_connect_usb_storage": "Favor liga ita-boot nia {model} liuhosi modo transferénsia USB",
  "rockbox_step_usb_storage_mode": "Favor ida, ativa modo armazenamentu USB iha ita-boot nia dispozitivu no klik Tuirmai",
  "rockbox_step_usb_storage_folder": "Favor ida, ativa modo armazenamentu USB iha ita-boot nia {model}, hafoin hili unidade ne'ebé mosu",
  "rockbox_step_select_player_folder": "Favor hili player ne'e rasik ka pasta ida iha nia leten",

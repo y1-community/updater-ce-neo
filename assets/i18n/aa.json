@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox yahaaz meexa",
  "rockbox_select_device_prompt": "Atu Rockbox themes kah kibtam anni digir abeynaay?",
  "rockbox_step2_connect_usb": "USB akat isik {model} fan ibbix",
+ "rockbox_step2_connect_usb_storage": "Ku maganak isi {model} USB tatrussoh caalatat osgoorow",
  "rockbox_step_usb_storage_mode": "Ku maganak USB kobxiseenah caalat isi yahaazal ugtam kee Ciggiilak mukunna hay",
  "rockbox_step_usb_storage_folder": "kumaganak USB kobxissoh caalat kok {model}, lakal kokkobise door yanbulle",
  "rockbox_step_select_player_folder": "Ku maganak digir abe isih akkek amol tan cibtittek tiya door",

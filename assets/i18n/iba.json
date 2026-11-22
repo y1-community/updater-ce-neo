@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Peranti Rockbox .",
  "rockbox_select_device_prompt": "Ni bagi pemain ke dipasang nuan tema Rockbox?",
  "rockbox_step2_connect_usb": "Lekatka kabel USB ngagai {model} nuan .",
+ "rockbox_step2_connect_usb_storage": "Sila sambung {model} nuan ngena mod pemindah USB .",
  "rockbox_step_usb_storage_mode": "Minta nuan ngasuh mod nyimpan USB ba perengka nuan lalu klik Next .",
  "rockbox_step_usb_storage_folder": "Sila aktifka mod nyimpan USB ba {model} nuan, udah nya pilih drive ti bisi ayan .",
  "rockbox_step_select_player_folder": "Sila pilih pemain nya empu tauka siti ari folder ba atas nya .",

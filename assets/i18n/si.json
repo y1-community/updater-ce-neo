@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox උපාංගය තෝරන්න",
  "rockbox_select_device_prompt": "ඔබ රොක්බොක්ස් තේමා ස්ථාපනය කරන්නේ කුමන ක්‍රීඩකයා සඳහාද?",
  "rockbox_step2_connect_usb": "ඔබගේ {model} වෙත USB කේබලය අමුණන්න",
+ "rockbox_step2_connect_usb_storage": "කරුණාකර ඔබගේ {model} USB හුවමාරු ප්‍රකාරය මගින් සම්බන්ධ කරන්න",
  "rockbox_step_usb_storage_mode": "කරුණාකර ඔබගේ උපාංගයේ USB ආචයන ප්‍රකාරය සබල කර ඊළඟ ක්ලික් කරන්න",
  "rockbox_step_usb_storage_folder": "කරුණාකර ඔබගේ {model} මත USB ආචයන ප්‍රකාරය සබල කරන්න, ඉන්පසු දිස්වන ධාවකය තෝරන්න",
  "rockbox_step_select_player_folder": "කරුණාකර ක්‍රීඩකයා ම හෝ එහි ඇති ෆෝල්ඩරවලින් එකක් තෝරන්න",

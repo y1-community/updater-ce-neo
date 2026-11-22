@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox qurilmasini tanlang",
  "rockbox_select_device_prompt": "Qaysi o'yinchi uchun Rockbox mavzularini o'rnatyapsiz?",
  "rockbox_step2_connect_usb": "USB kabelni {model} qurilmangizga ulang",
+ "rockbox_step2_connect_usb_storage": "Iltimos, {model}-ni USB uzatish rejimi orqali ulang",
  "rockbox_step_usb_storage_mode": "Iltimos, qurilmangizda USB xotira rejimini yoqing va Keyingiga bosing",
  "rockbox_step_usb_storage_folder": "Iltimos, {model} qurilmangizda USB xotira rejimini yoqing, so‘ngra paydo bo‘ladigan drayverni tanlang",
  "rockbox_step_select_player_folder": "Iltimos, pleerning o'zini yoki undagi papkalardan birini tanlang",

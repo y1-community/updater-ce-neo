@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Khetsa Idivayisi yeRockbox",
  "rockbox_select_device_prompt": "Ngumuphi umdlali lowufaka tihloko teRockbox?",
  "rockbox_step2_connect_usb": "Namatsisela intsambo ye-USB ku {model} yakho .",
+ "rockbox_step2_connect_usb_storage": "Ucelwa kutsi uxhume {model} yakho ngemodi yekudlulisa ye-USB",
  "rockbox_step_usb_storage_mode": "Sicela unikete emandla imodi yekugcina i-USB kudivayisi yakho bese uchafata Lokulandzelako",
  "rockbox_step_usb_storage_folder": "Sicela unikete emandla imodi yekugcina i-USB ku {model} yakho, bese ukhetsa idrayivu levelako .",
  "rockbox_step_select_player_folder": "Sicela ukhetse umdlali yena noma lenye yemafolda lakuwo .",

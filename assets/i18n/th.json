@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "เลือกอุปกรณ์ Rockbox",
  "rockbox_select_device_prompt": "คุณกำลังติดตั้งธีม Rockbox สำหรับเครื่องเล่นใด",
  "rockbox_step2_connect_usb": "ต่อสาย USB เข้ากับ {model} ของคุณ",
+ "rockbox_step2_connect_usb_storage": "โปรดเชื่อมต่อ {model} ของคุณโดยใช้โหมดการถ่ายโอน USB",
  "rockbox_step_usb_storage_mode": "โปรดเปิดใช้งานโหมดที่เก็บข้อมูล USB บนอุปกรณ์ของคุณแล้วคลิกถัดไป",
  "rockbox_step_usb_storage_folder": "โปรดเปิดใช้งานโหมดที่เก็บข้อมูล USB บน {model} ของคุณ จากนั้นเลือกไดรฟ์ที่ปรากฏขึ้น",
  "rockbox_step_select_player_folder": "โปรดเลือกเครื่องเล่นหรือโฟลเดอร์ใดโฟลเดอร์หนึ่ง",

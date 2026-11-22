@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pili i Rockbox Device",
  "rockbox_select_device_prompt": "Para håyi na atmas un inestotba i Rockbox na tema siha?",
  "rockbox_step2_connect_usb": "Na'daña' i USB cable gi i {model}-mu",
+ "rockbox_step2_connect_usb_storage": "På'go, na'daña' i {model}-mu gi i USB transfer mode",
  "rockbox_step_usb_storage_mode": "På'go, na'setbe i USB storage mode gi i dipattamenton-mu ya un ågang i Next",
  "rockbox_step_usb_storage_folder": "På'go, na'setbe i USB storage mode gi i {model}-mu, pues cho'gue i drive ni' para u fanhuyong",
  "rockbox_step_select_player_folder": "På'go, na'i i player mismo pat unu gi i folder siha gi hilo'-ña",

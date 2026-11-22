@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Kuany kë ye cɔl Rockbox",
  "rockbox_select_device_prompt": "Ye raan yïndë yen ye yïn tääu në Rockbox yic?",
  "rockbox_step2_connect_usb": "Tääu ë USB ë {model} du yic.",
+ "rockbox_step2_connect_usb_storage": "Yïn thiëcku ba {model} du rek në dhöl de gɛ̈ɛ̈r de USB",
  "rockbox_step_usb_storage_mode": "Yïn thiëcku ba dhöl de tɔ̈ɔ̈u de USB puɔ̈l në këdu yic ku cök piny Next .",
  "rockbox_step_usb_storage_folder": "Tääu ë dhöl ë tɔ̈ɔ̈u de USB në {model} du yic, ku kuany dhöl ë tɔ̈ɔ̈u ë käŋ ë tɔ̈u thïn .",
  "rockbox_step_select_player_folder": "Kuany kë ye pol yetök wala töŋ de kä cïke tääu thïn .",

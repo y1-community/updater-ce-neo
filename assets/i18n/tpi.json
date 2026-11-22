@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Yu mas makim Rockbox Device",
  "rockbox_select_device_prompt": "Yu wok long putim ol Rockbox tim bilong wanem pilaia?",
  "rockbox_step2_connect_usb": "Pasim USB kebol long {model} bilong yu",
+ "rockbox_step2_connect_usb_storage": "Plis konektim {model} bilong yu long USB trensfer mod",
  "rockbox_step_usb_storage_mode": "Plis opim USB storage mode long divais bilong yu na klikim Neks",
  "rockbox_step_usb_storage_folder": "Plis opim USB storage mode long {model} bilong yu, na bihain makim draiv we i kamap",
  "rockbox_step_select_player_folder": "Plis makim pilaia yet o wanpela bilong ol folda i stap long en",

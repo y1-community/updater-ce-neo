@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Cihazını seçin",
  "rockbox_select_device_prompt": "Rockbox mövzularını hansı oyunçu üçün quraşdırırsınız?",
  "rockbox_step2_connect_usb": "USB kabeli {model} cihazınıza qoşun",
+ "rockbox_step2_connect_usb_storage": "Lütfən, {model} cihazınızı USB ötürmə rejimi ilə qoşun",
  "rockbox_step_usb_storage_mode": "Zəhmət olmasa cihazınızda USB yaddaş rejimini aktiv edin və Next düyməsini basın",
  "rockbox_step_usb_storage_folder": "Lütfən, {model}-da USB yaddaş rejimini aktiv edin, sonra görünən diski seçin",
  "rockbox_step_select_player_folder": "Zəhmət olmasa pleyerin özünü və ya onun üzərindəki qovluqlardan birini seçin",

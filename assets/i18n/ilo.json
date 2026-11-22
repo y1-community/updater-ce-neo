@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilien ti Rockbox Device",
  "rockbox_select_device_prompt": "Ania a player ti pangikabilam kadagiti tema ti Rockbox?",
  "rockbox_step2_connect_usb": "Ikabil ti USB cable iti {model} .",
+ "rockbox_step2_connect_usb_storage": "Pangngaasiyo ta ikonekta ti {model}-yo babaen ti USB transfer mode",
  "rockbox_step_usb_storage_mode": "Pangngaasiyo ta i-enable ti USB storage mode iti device-yo ken i-click-yo ti Next",
  "rockbox_step_usb_storage_folder": "Pangngaasiyo ta i-enable ti USB storage mode iti {model}-yo, kalpasanna pilien ti drive nga agparang",
  "rockbox_step_select_player_folder": "Pangngaasiyo ta pilien ti player a mismo wenno ti maysa kadagiti folder iti dayta",

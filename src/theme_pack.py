@@ -117,10 +117,10 @@ def theme_pack_refresh_stamp_path() -> Path:
 
 
 def is_theme_pack_cached() -> bool:
-    """True when a usable theme pack zip is already cached on disk."""
+    """True when a usable theme pack zip (carrying actual themes) is cached on disk."""
     cached = downloads_dir() / THEME_PACK_ZIP_NAME
     try:
-        return cached.is_file() and cached.stat().st_size > 1024
+        return cached.is_file() and cached.stat().st_size > 1024 and theme_zip_has_themes(cached)
     except OSError:
         return False
 
@@ -490,15 +490,22 @@ def get_mount_root(path: Path) -> Path:
     return curr
 
 
-def find_or_create_rockbox_dir(selected_path: str | Path) -> Path:
+def find_or_create_rockbox_dir(
+    selected_path: str | Path,
+    rockbox_folder_path: str = "",
+) -> Path:
     """Resolve or create the .rockbox directory from any folder on the device.
 
     Because operating systems like macOS and Linux hide dotfiles (.rockbox)
     by default in system file dialogs, users can select ANY directory or the
     root drive of their connected player. This helper traverses the directory
-    tree upward and across siblings to locate an existing .rockbox folder, or
-    creates one at the volume root.
+    tree upward and across siblings/subdirectories (honouring an optional
+    ``rockbox_folder_path`` hint from ``slidia_manifest.xml``, such as
+    ``rockbox_sdcard`` or ``rockbox_sdcard/.rockbox``) to locate an existing
+    ``.rockbox`` folder, or creates one at the expected location.
     """
+    from .theme_sync import normalize_rockbox_folder_path
+
     p = Path(selected_path).resolve()
     if not p.is_dir():
         p = p.parent
@@ -507,10 +514,24 @@ def find_or_create_rockbox_dir(selected_path: str | Path) -> Path:
     if p.name.lower() == ".rockbox":
         return p
 
+    hint_rel = normalize_rockbox_folder_path(rockbox_folder_path)
+    if hint_rel:
+        for base in (p, get_mount_root(p)):
+            if base is None:
+                continue
+            cand = base / hint_rel
+            if cand.is_dir():
+                return cand
+
     # 2. .rockbox directory is directly inside selected directory
     candidate = p / ".rockbox"
     if candidate.is_dir():
         return candidate
+
+    # 2b. Well-known rockbox_sdcard/.rockbox layout directly inside p
+    sdcard_cand = p / "rockbox_sdcard" / ".rockbox"
+    if sdcard_cand.is_dir():
+        return sdcard_cand
 
     # 3. Check parents up the tree to the volume/filesystem root
     for parent in p.parents:
@@ -529,17 +550,23 @@ def find_or_create_rockbox_dir(selected_path: str | Path) -> Path:
     except (OSError, PermissionError):
         pass
 
-    # 5. Check immediate subdirectories of p
+    # 5. Check immediate subdirectories of p (both child named .rockbox and child/.rockbox)
     try:
         for child in p.iterdir():
-            if child.is_dir() and child.name.lower() == ".rockbox":
+            if not child.is_dir():
+                continue
+            if child.name.lower() == ".rockbox":
                 return child
+            nested = child / ".rockbox"
+            if nested.is_dir():
+                return nested
     except (OSError, PermissionError):
         pass
 
-    # 6. Fallback: create .rockbox at the volume root, or within p
+    # 6. Fallback: create .rockbox at the hinted path / volume root, or within p
     mount_root = get_mount_root(p)
-    target = mount_root / ".rockbox" if mount_root else p / ".rockbox"
+    base_root = mount_root if mount_root else p
+    target = (base_root / hint_rel) if hint_rel else (base_root / ".rockbox")
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -1811,12 +1838,13 @@ class AdbApkInstallWorker(QThread):
 
 
 class DirMergeWorker(QThread):
-    """Merge the combined theme payload into a USB-storage ``.rockbox`` folder.
+    """Merge the combined theme payload into one or more USB-storage ``.rockbox`` folders.
 
     Give it either a prepared directory (``src_dir``) or the normalized
     themes+fonts archive (``zip_path``). The archive is the same payload the
-    ADB transfer pushes, so a manual USB-storage install places exactly what an
-    ADB install would.
+    ADB transfer pushes, so a USB-storage install places exactly what an
+    ADB install would — across every ``.rockbox`` folder given in ``dst_dirs``
+    (or ``dst_dir``).
     """
 
     progress = Signal(int, int)
@@ -1831,11 +1859,24 @@ class DirMergeWorker(QThread):
         zip_path=None,
         ensure_full: bool = False,
         apply_path_fix: bool = False,
+        dst_dirs=None,
     ):
         super().__init__(parent)
         self._src = Path(src_dir) if src_dir else None
         self._zip = Path(zip_path) if zip_path else None
-        self._dst = Path(dst_dir)
+        targets: list[Path] = []
+        if dst_dirs:
+            for d in dst_dirs:
+                if d:
+                    p = Path(d)
+                    if p not in targets:
+                        targets.append(p)
+        if dst_dir:
+            p = Path(dst_dir)
+            if p not in targets:
+                targets.append(p)
+        self._dsts = targets
+        self._dst = targets[0] if targets else None
         self._ensure_full = ensure_full
         self._apply_path_fix = apply_path_fix
 
@@ -1844,6 +1885,9 @@ class DirMergeWorker(QThread):
 
         unpacked = None
         try:
+            if not self._dsts:
+                self.finished.emit(False, "No destination .rockbox folder to copy into", 0)
+                return
             src = self._src
             if src is None:
                 payload_zip = self._zip
@@ -1867,14 +1911,31 @@ class DirMergeWorker(QThread):
             if src is None:
                 self.finished.emit(False, "No theme payload to copy", 0)
                 return
-            count = merge_dirs(
-                src,
-                self._dst,
-                progress_cb=self._on_progress,
-                cancel_cb=self.isInterruptionRequested,
-                log_cb=self.log.emit,
-            )
-            self.finished.emit(True, "", count)
+            total_targets = len(self._dsts)
+            total_count = 0
+            for idx, target_dir in enumerate(self._dsts):
+                if self.isInterruptionRequested():
+                    self.finished.emit(False, "Theme transfer cancelled", total_count)
+                    return
+                if total_targets > 1:
+                    self.log.emit(
+                        f"[Rockbox Themes] Copying themes to {target_dir} ({idx + 1} of {total_targets})..."
+                    )
+
+                def _target_progress(curr: int, total: int, _idx: int = idx) -> None:
+                    if total > 0:
+                        self._on_progress(_idx * total + curr, total_targets * total)
+                    else:
+                        self._on_progress(curr, total)
+
+                total_count += merge_dirs(
+                    src,
+                    target_dir,
+                    progress_cb=_target_progress,
+                    cancel_cb=self.isInterruptionRequested,
+                    log_cb=self.log.emit,
+                )
+            self.finished.emit(True, "", total_count)
         except Exception as e:
             logger.exception("Theme merge failed: %s", e)
             self.finished.emit(False, str(e), 0)

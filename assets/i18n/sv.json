@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Välj Rockbox-enhet",
  "rockbox_select_device_prompt": "Vilken spelare installerar du Rockbox-teman för?",
  "rockbox_step2_connect_usb": "Anslut USB-kabeln till din {model}",
+ "rockbox_step2_connect_usb_storage": "Anslut din {model} med USB-överföringsläge",
  "rockbox_step_usb_storage_mode": "Aktivera USB-lagringsläge på din enhet och klicka på Nästa",
  "rockbox_step_usb_storage_folder": "Aktivera USB-lagringsläge på din {model} och välj sedan den enhet som visas",
  "rockbox_step_select_player_folder": "Välj själva spelaren eller en av mapparna på den",

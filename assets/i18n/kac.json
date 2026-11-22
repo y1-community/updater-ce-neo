@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox jak hpe lata la u",
  "rockbox_select_device_prompt": "Gara player a matu Rockbox theme ni hpe install galaw nga ai kun?",
  "rockbox_step2_connect_usb": "USB cable hpe na a {model} kaw bang da u.",
+ "rockbox_step2_connect_usb_storage": "Chyeju hte na a {model} hpe USB htawt sit ai ladat hte matut da u",
  "rockbox_step_usb_storage_mode": "Na a device kaw USB hpe hpaw nna Next hpe dip dat u .",
  "rockbox_step_usb_storage_folder": "Chyeju hte na a {model} kaw USB storage mode hpe hpaw dat u, dai hpang pru wa ai drive hpe lata u .",
  "rockbox_step_select_player_folder": "Chyeju hte player hpe shi nan (sh) dai kaw na folder langai ngai hpe lata la u .",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Device ကို ရွေးပါ။",
  "rockbox_select_device_prompt": "သင် Rockbox အပြင်အဆင်များအတွက် မည်သည့်ကစားသမားကို ထည့်သွင်းသနည်း။",
  "rockbox_step2_connect_usb": "USB ကြိုးကို သင်၏ {model} တွင် ချိတ်ပါ",
+ "rockbox_step2_connect_usb_storage": "ကျေးဇူးပြု၍ သင်၏ {model} ကို USB လွှဲပြောင်းမုဒ်ဖြင့် ချိတ်ဆက်ပါ။",
  "rockbox_step_usb_storage_mode": "သင့်စက်တွင် USB သိုလှောင်မှုမုဒ်ကို ဖွင့်ပြီး Next ကိုနှိပ်ပါ။",
  "rockbox_step_usb_storage_folder": "သင်၏ {model}တွင် USB သိုလှောင်မှုမုဒ်ကို ဖွင့်ပါ၊ ထို့နောက် ပေါ်လာသည့် ဒရိုက်ကို ရွေးပါ။",
  "rockbox_step_select_player_folder": "ကစားသမားကိုယ်တိုင် သို့မဟုတ် ၎င်းပေါ်ရှိ ဖိုင်တွဲများထဲမှ တစ်ခုကို ရွေးချယ်ပါ။",

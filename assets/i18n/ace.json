@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pileh Alat Rockbox .",
  "rockbox_select_device_prompt": "Peumaen pat nyang neupasang tema Rockbox?",
  "rockbox_step2_connect_usb": "Neupasang kabel USB bak {model} droeneuh .",
+ "rockbox_step2_connect_usb_storage": "Neusambong {model} droeneuh ngon mode transfer USB .",
  "rockbox_step_usb_storage_mode": "Neu aktifkan mode teumpat simpan USB bak alat droeneuh dan neukliek Next .",
  "rockbox_step_usb_storage_folder": "Neu aktifkan mode teumpat simpan USB bak {model} droeneuh, lheuh nyan neupileh drive nyang deuh .",
  "rockbox_step_select_player_folder": "Neupileh player nyan keudroe atawa salah saboh folder nyang na di ateuh jih .",

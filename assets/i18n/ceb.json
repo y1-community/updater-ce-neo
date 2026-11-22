@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilia ang Rockbox Device",
  "rockbox_select_device_prompt": "Kinsa nga magdudula ang imong gi-install nga mga tema sa Rockbox?",
  "rockbox_step2_connect_usb": "Ibutang ang USB cable sa imong {model}",
+ "rockbox_step2_connect_usb_storage": "Palihug ikonektar ang imong {model} pinaagi sa USB transfer mode",
  "rockbox_step_usb_storage_mode": "Palihug i-enable ang USB storage mode sa imong device ug i-klik ang Next",
  "rockbox_step_usb_storage_folder": "Palihug i-enable ang USB storage mode sa imong {model}, unya pilia ang drive nga makita",
  "rockbox_step_select_player_folder": "Palihug pilia ang player mismo o usa sa mga folder niini",

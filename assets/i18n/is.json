@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Veldu Rockbox tæki",
  "rockbox_select_device_prompt": "Fyrir hvaða spilara ertu að setja upp Rockbox þemu?",
  "rockbox_step2_connect_usb": "Tengdu USB snúruna við {model}",
+ "rockbox_step2_connect_usb_storage": "Vinsamlegast tengdu {model} þinn með USB-flutningsham",
  "rockbox_step_usb_storage_mode": "Vinsamlega virkjaðu USB-geymsluham á tækinu þínu og smelltu á Next",
  "rockbox_step_usb_storage_folder": "Vinsamlega virkjaðu USB-geymsluham á {model}, veldu síðan drifið sem birtist",
  "rockbox_step_select_player_folder": "Vinsamlegast veldu spilarann ​​sjálfan eða eina af möppunum á honum",

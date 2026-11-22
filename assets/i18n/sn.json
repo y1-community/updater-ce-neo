@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sarudza Rockbox Device",
  "rockbox_select_device_prompt": "Ndeupi mutambi wauri kuisa Rockbox themes?",
  "rockbox_step2_connect_usb": "Batanidza tambo ye USB kune yako {model}",
+ "rockbox_step2_connect_usb_storage": "Ndokumbira ubatanidze yako {model} ne USB yekufambisa modhi",
  "rockbox_step_usb_storage_mode": "Ndokumbirawo gonesa USB modhi yekuchengetera pane chako kifaa uye tinya Next",
  "rockbox_step_usb_storage_folder": "Ndokumbirawo gonesa USB modhi yekuchengetera pane yako {model}, wobva wasarudza drive inoratidzika",
  "rockbox_step_select_player_folder": "Ndapota sarudza mutambi wacho kana rimwe remaforodha ari pairi",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Изаберите Роцкбок уређај",
  "rockbox_select_device_prompt": "За који плејер инсталирате Роцкбок теме?",
  "rockbox_step2_connect_usb": "Прикључите УСБ кабл на свој {model}",
+ "rockbox_step2_connect_usb_storage": "Повежите свој {model} путем УСБ режима преноса",
  "rockbox_step_usb_storage_mode": "Омогућите УСБ режим складиштења на свом уређају и кликните на Даље",
  "rockbox_step_usb_storage_folder": "Омогућите УСБ режим складиштења на свом {model}, а затим изаберите диск који се појављује",
  "rockbox_step_select_player_folder": "Изаберите сам плејер или једну од фасцикли на њему",

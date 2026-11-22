@@ -261,19 +261,45 @@ def ensure_combined_payload(apply_path_fix: bool = False) -> Optional[Path]:
 def _patch_dir_for_y2(dest: Path, _pack) -> None:
     try:
         for p in dest.rglob("*"):
-            if p.is_file() and (p.suffix.lower() in (".cfg", ".txt") or p.name.lower() == "config.ini"):
+            if p.is_file() and (
+                p.suffix.lower() in (".cfg", ".txt", ".wps", ".sbs")
+                or p.name.lower() == "config.ini"
+            ):
                 try:
                     data = p.read_bytes()
-                    if b"/sdcard" in data:
-                        p.write_bytes(_pack.patch_theme_content_for_y2(data))
+                    if b"sdcard" in data or b".rockbox" in data:
+                        patched = _pack.patch_theme_content_for_y2(data)
+                        if patched != data:
+                            p.write_bytes(patched)
                 except OSError:
                     pass
     except Exception:
         pass
 
 
-def find_removable_rockbox_dirs() -> list[Path]:
-    """Existing ``.rockbox`` dirs on non-internal drives (no creation, no internal)."""
+def normalize_rockbox_folder_path(raw: str) -> str:
+    """Normalize a manifest ``rockbox_folder_path`` to a relative ``…/.rockbox`` path.
+
+    Accepts Unix forward-slash relative paths without drive letters, such as
+    ``rockbox_sdcard`` (meaning ``rockbox_sdcard/.rockbox``) or
+    ``rockbox_sdcard/.rockbox``. Returns ``""`` when unset or unsafe.
+    """
+    text = str(raw or "").strip().replace("\\", "/")
+    if not text:
+        return ""
+    # Strip any accidental Windows drive prefix (e.g. "F:/rockbox_sdcard").
+    if len(text) >= 2 and text[1] == ":" and text[0].isalpha():
+        text = text[2:]
+    parts = [part.strip() for part in text.strip("/").split("/") if part.strip()]
+    if not parts or any(part in (".", "..") for part in parts):
+        return ""
+    if parts[-1].lower() != ".rockbox":
+        parts.append(".rockbox")
+    return "/".join(parts)
+
+
+def _removable_drive_roots() -> list[Path]:
+    """Mounted non-system / external drive roots on this host."""
     roots: list[Path] = []
     try:
         if sys.platform == "darwin":
@@ -287,17 +313,24 @@ def find_removable_rockbox_dirs() -> list[Path]:
                     except OSError:
                         pass
         elif os.name == "nt":
-            system = os.environ.get("SystemDrive", "C:").upper()
+            system_letter = os.environ.get("SystemDrive", "C:").strip().upper()[:1]
             for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+                if letter == system_letter:
+                    continue
                 drive = Path(f"{letter}:\\")
                 try:
-                    if drive.exists() and f"{letter}:" != system.rstrip(":"):
+                    if drive.exists():
                         roots.append(drive)
                 except OSError:
                     continue
         else:
             user = os.environ.get("USER", "")
-            for base in (Path(f"/run/media/{user}") if user else None, Path("/media"), Path("/mnt")):
+            for base in (
+                Path(f"/run/media/{user}") if user else None,
+                Path(f"/media/{user}") if user else None,
+                Path("/media"),
+                Path("/mnt"),
+            ):
                 if base is not None and base.is_dir():
                     try:
                         roots.extend(p for p in base.iterdir() if p.is_dir())
@@ -305,29 +338,60 @@ def find_removable_rockbox_dirs() -> list[Path]:
                         continue
     except Exception:
         return []
+    return roots
+
+
+def find_removable_rockbox_dirs(
+    rockbox_folder_path: str = "",
+    *,
+    roots: Optional[list[Path]] = None,
+) -> list[Path]:
+    """Every existing ``.rockbox`` dir on non-system / external drives.
+
+    Discovers ``.rockbox`` at the drive root, inside ``rockbox_folder_path``
+    (optional hint from ``slidia_manifest.xml``, e.g. ``rockbox_sdcard`` or
+    ``rockbox_sdcard/.rockbox``), inside ``rockbox_sdcard/.rockbox``, and one
+    level down inside immediate subdirectories. Never creates directories and
+    never scans the internal system drive.
+    """
+    drive_roots = list(roots) if roots is not None else _removable_drive_roots()
+    hint_rel = normalize_rockbox_folder_path(rockbox_folder_path)
     found: list[Path] = []
-    for root in roots:
+    seen: set[str] = set()
+
+    def _add(candidate: Path) -> None:
         try:
-            if not root.is_dir():
+            if not candidate.is_dir():
+                return
+            key = os.path.normcase(os.path.realpath(str(candidate)))
+        except OSError:
+            return
+        if key not in seen:
+            seen.add(key)
+            found.append(candidate)
+
+    for root in drive_roots:
+        try:
+            root_path = Path(root)
+            if not root_path.is_dir():
                 continue
-            direct = root / ".rockbox"
-            if direct.is_dir():
-                found.append(direct)
-                continue
-            # Players often expose storage with the data one level down.
+            # 1. Explicit manifest hint (e.g. rockbox_sdcard/.rockbox)
+            if hint_rel:
+                _add(root_path / hint_rel)
+            # 2. Root-level .rockbox on the drive
+            _add(root_path / ".rockbox")
+            # 3. Well-known rockbox_sdcard/.rockbox layout (e.g. Nugget)
+            _add(root_path / "rockbox_sdcard" / ".rockbox")
+            # 4. Players often expose storage with .rockbox one level down.
             try:
-                children = [c for c in root.iterdir() if c.is_dir()]
+                children = sorted(
+                    (c for c in root_path.iterdir() if c.is_dir() and not c.name.startswith(".")),
+                    key=lambda p: p.name.casefold(),
+                )
             except OSError:
                 continue
-            if len(children) > 32:
-                continue
-            for child in children:
-                candidate = child / ".rockbox"
-                try:
-                    if candidate.is_dir():
-                        found.append(candidate)
-                except OSError:
-                    continue
+            for child in children[:256]:
+                _add(child / ".rockbox")
         except OSError:
             continue
     return found

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleccionatz lo periferic Rockbox",
  "rockbox_select_device_prompt": "Per quin jogaire installatz de tèmas Rockbox?",
  "rockbox_step2_connect_usb": "Connectatz lo cable USB a vòstre {model}",
+ "rockbox_step2_connect_usb_storage": "Mercés de connectar vòstre {model} per mòde de transferiment USB",
  "rockbox_step_usb_storage_mode": "Activatz lo mòde d'emmagazinatge USB sus vòstre periferic e clicatz sus Seguent",
  "rockbox_step_usb_storage_folder": "Mercés d'activar lo mòde d'emmagazinatge USB sus vòstre {model}, puèi causissètz l'unitat qu'apareis",
  "rockbox_step_select_player_folder": "Seleccionatz lo lector meteis o un dels dorsièrs que i a",

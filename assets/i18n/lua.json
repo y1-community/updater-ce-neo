@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sungula tshiamu tshia Rockbox",
  "rockbox_select_device_prompt": "Udi uteka bintu bia Rockbox kudi muena manaya kayi?",
  "rockbox_step2_connect_usb": "Lamakaja tshiamu tshia USB ku {model} webe",
+ "rockbox_step2_connect_usb_storage": "Suaku ulamakaja {model} webe ku diambuluisha dia USB",
  "rockbox_step_usb_storage_mode": "Suaku wenzeja mushindu wa kulama USB mu tshiamu tshieba ne tuaku pa Next",
  "rockbox_step_usb_storage_folder": "Tudi tukulomba bua kuenza mudimu ne tshiamu tshia USB pa {model} webe, pashishe usungula tshiamu tshidi tshimueneka",
  "rockbox_step_select_player_folder": "Suaku usungula tshiamu tshia kuteleja natshi anyi tshimue tshia ku bipese bidipu",

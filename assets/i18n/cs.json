@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Vyberte Rockbox Device",
  "rockbox_select_device_prompt": "Pro kterého přehrávače instalujete témata Rockbox?",
  "rockbox_step2_connect_usb": "Připojte kabel USB k {model}",
+ "rockbox_step2_connect_usb_storage": "Připojte prosím svůj {model} pomocí režimu přenosu USB",
  "rockbox_step_usb_storage_mode": "Povolte na svém zařízení režim úložiště USB a klikněte na tlačítko Další",
  "rockbox_step_usb_storage_folder": "Povolte na svém {model} režim úložiště USB a poté vyberte jednotku, která se zobrazí",
  "rockbox_step_select_player_folder": "Vyberte prosím samotný přehrávač nebo jednu ze složek v něm",

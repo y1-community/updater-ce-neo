@@ -3670,12 +3670,44 @@ class MainWindow(QMainWindow):
             return "", ""
         return apk_path, apk_url
 
+    def _active_firmware_package(self):
+        """Return the active manifest/local FirmwarePackage for the current install."""
+        page = getattr(self, "_select_page", None)
+        if page is not None:
+            pkg = getattr(page, "_details_package", None)
+            if pkg is not None:
+                return pkg
+            getter = getattr(page, "current_package", None)
+            if callable(getter):
+                try:
+                    pkg = getter()
+                    if pkg is not None:
+                        return pkg
+                except Exception:
+                    pass
+        return getattr(self, "_keep_data_pkg", None)
+
+    def _apply_themes_manifest_options(self) -> None:
+        """Copy Rockbox manifest transport/layout options onto ``self.themes``."""
+        from ..catalog import is_rockbox_android_port
+
+        pkg = self._active_firmware_package()
+        pkg_name = str(getattr(self, "_package_name", "") or "")
+        android_port = is_rockbox_android_port(package=pkg, name=pkg_name)
+        self.themes.set_manifest_options(
+            mass_storage=not android_port,
+            rockbox_folder_path=str(getattr(pkg, "rockbox_folder_path", "") or ""),
+            rockbox_no_themes=bool(getattr(pkg, "rockbox_no_themes", False)),
+        )
+        if pkg is not None and getattr(pkg, "rb_themes_path_fix", None) is not None:
+            self.themes.rb_themes_path_fix = bool(pkg.rb_themes_path_fix)
+
     def _rockbox_themes_required(self) -> tuple[bool, str]:
         """Whether the selected Y1/Y2 Rockbox build needs bundled 360p assets.
 
         Y2 catalogue assets use ``rom_y2.zip`` and commonly have no ``360p``
         suffix; they are the native 360p Rockbox build. Explicit 240p assets
-        must remain excluded for either model.
+        and ``rockbox_no_themes="true"`` entries are excluded.
         """
         if is_mediatek_installer():
             return False, ""
@@ -3701,9 +3733,18 @@ class MainWindow(QMainWindow):
             model = "Y1"
         else:
             return False, model
+        package = self._active_firmware_package()
+        if bool(getattr(package, "rockbox_no_themes", False)):
+            return False, model
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
+        manifest_240p = bool(getattr(package, "is_240p_rockbox", False))
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
-        is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
+        is_240p = (
+            manifest_240p
+            or is_240p
+            or str(info.get("selected_resolution", "")).lower() == "240p"
+            or bool((selected_rel or {}).get("is_240p_rockbox"))
+        )
         # Themes installation is for Y1 and Y2 (Rockbox-named, non-240p).
         wanted = bool(model in ("Y1", "Y2") and is_rockbox and not is_240p)
         # The per-install tickbox is an opt-out: checked by default, cleared by
@@ -3716,6 +3757,9 @@ class MainWindow(QMainWindow):
 
     def _rockbox_360p_themes_notice_needed(self) -> bool:
         """True for a Y1 Rockbox build that cannot use the 240p theme catalogue."""
+        package = self._active_firmware_package()
+        if bool(getattr(package, "rockbox_no_themes", False)):
+            return False
         _needs_themes, model = self._rockbox_themes_required()
         if (model or "").upper() != "Y1":
             return False
@@ -3767,6 +3811,11 @@ class MainWindow(QMainWindow):
         if selected_rel:
             asset_name = str(selected_rel.get("asset_name", asset_name) or asset_name)
             release_label = str(selected_rel.get("release_label", release_label) or release_label)
+        package = self._active_firmware_package()
+        if getattr(package, "is_240p_rockbox", False):
+            return True
+        if bool((selected_rel or {}).get("is_240p_rockbox")):
+            return True
         fw_names: list[str] = []
         fw_pkg = getattr(page, "_fw_package", None)
         if fw_pkg is not None:
@@ -7314,9 +7363,12 @@ class MainWindow(QMainWindow):
         if req_model:
             eff_model = req_model
         is_240p_rockbox = self._rockbox_240p_detected()
+        active_pkg = self._active_firmware_package()
+        rockbox_no_themes = bool(getattr(active_pkg, "rockbox_no_themes", False))
         apk_path, apk_url = self._apk_install_info()
         wants_apk = bool(apk_path or apk_url)
         self.themes.set_apk(apk_path, apk_url)
+        self._apply_themes_manifest_options()
 
         self._is_360p_rockbox = is_360p_rockbox
         self._is_240p_rockbox = is_240p_rockbox
@@ -7330,7 +7382,7 @@ class MainWindow(QMainWindow):
         from ..theme_sync import themes_auto_install_enabled
 
         themes_auto = themes_auto_install_enabled(self.settings)
-        wants_themes = is_360p_rockbox
+        wants_themes = is_360p_rockbox and not rockbox_no_themes
         if wants_apk or (wants_themes and themes_auto):
             logger.info("Completion block: entering themes/apk flow")
             self._nav_to_page(_PAGE_FLASH)
@@ -7349,10 +7401,16 @@ class MainWindow(QMainWindow):
             )
             rebooted_via_cleanup = getattr(self, "_rockbox_cleanup_started", False)
             if is_sp_install or rebooted_via_cleanup:
-                self._append_log(
-                    "Notice: Automated Rockbox themes flow "
-                    "(waiting for the player to appear over ADB, no user interaction required)..."
-                )
+                if self.themes.mass_storage:
+                    self._append_log(
+                        "Notice: Non-Android Rockbox port detected: using USB mass "
+                        "storage mode to locate .rockbox on external drives..."
+                    )
+                else:
+                    self._append_log(
+                        "Notice: Automated Rockbox themes flow "
+                        "(waiting for the player to appear over ADB, no user interaction required)..."
+                    )
                 self._start_themes_stage(
                     eff_model,
                     donation_disabled,
@@ -7380,7 +7438,9 @@ class MainWindow(QMainWindow):
             self._flash_page.show_flashing()
             self._flash_page.set_device_done(donations_shown=not donation_disabled)
             self._apply_post_install_urls()
-            self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
+            self._flash_page.set_rockbox_site_themes(
+                is_240p_rockbox and not rockbox_no_themes
+            )
             self._flash_page.show_completion_appeal(False)
             post_install_once = self._post_install_once
 
@@ -7449,6 +7509,18 @@ class MainWindow(QMainWindow):
             self._append_log(reason)
             return
         self.themes.reset_completion()
+        if after_firmware:
+            self._apply_themes_manifest_options()
+        # Start downloading the full themes pack in the background if not yet
+        # cached, including on automatic SP Flash runs that bypass the prompt.
+        if (
+            not getattr(self.themes, "is_custom_theme", False)
+            and not self.themes.is_apk_stage
+        ):
+            from .. import config as _cfg
+            from ..theme_pack import is_theme_pack_cached
+            if not _cfg.is_offline_mode() and not is_theme_pack_cached():
+                self._start_theme_pack_refresh()
         # The window owns the entry to the stage, and a custom wizard never
         # reaches the card's own begin(): mark the run from here.
         self.themes.begin(model, automatic=automatic)
@@ -7523,6 +7595,9 @@ class MainWindow(QMainWindow):
 
         if getattr(self, "_rockbox_cleanup_started", False):
             return False
+        active_pkg = self._active_firmware_package()
+        if bool(getattr(active_pkg, "rockbox_no_themes", False)):
+            return False
         if not rockbox_install_needs_cleanup(
             is_rockbox=self._is_rockbox_install(),
             keep_data=bool(getattr(self, "_keep_data", False)),
@@ -7531,6 +7606,7 @@ class MainWindow(QMainWindow):
         apk_path, apk_url = self._apk_install_info()
         if apk_path or apk_url:
             return False
+        self._apply_themes_manifest_options()
 
         eff_model = (self._package_model or "").upper()
         pkg_low = (getattr(self, "_package_name", "") or "").lower()

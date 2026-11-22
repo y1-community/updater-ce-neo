@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox тэрилин талыҥ",
  "rockbox_select_device_prompt": "Ханнык оонньооччуга Rockbox темаларын туруораҕын?",
  "rockbox_step2_connect_usb": "USB кабелы {model}-гар холбоо",
+ "rockbox_step2_connect_usb_storage": "Баһаалыста, {model}-гытын USB көһөрүү режиминэн холбоон кэбиһиҥ",
  "rockbox_step_usb_storage_mode": "Баһаалыста, тэрилгитигэр USB-хранилище режимин холбоон баран, Салгыы баттааҥ",
  "rockbox_step_usb_storage_folder": "Баһаалыста, {model}-гар USB-хранилище режимин холбоон баран, тахсар диски талыаххын сөп",
  "rockbox_step_select_player_folder": "Баһаалыста, оонньооччу бэйэтин эбэтэр онно баар папкалартан биирдэстэрин талыҥ",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "रॉकबॉक्स डिव्हायस निवडात",
  "rockbox_select_device_prompt": "तुमी खंयच्या खेळगड्या खातीर रॉकबॉक्स थीम स्थापन करतात?",
  "rockbox_step2_connect_usb": "तुमच्या {model} 1000 कडेन USB केबल जोडचें.",
+ "rockbox_step2_connect_usb_storage": "उपकार करून तुमचो {model} USB हस्तांतरण मोडा वरवीं जोडचो",
  "rockbox_step_usb_storage_mode": "उपकार करून तुमच्या डिव्हायसाचेर USB साठवण मोड सक्षम करात आनी फुडें क्लिक करात",
  "rockbox_step_usb_storage_folder": "उपकार करून तुमच्या {model} चेर USB साठवण मोड सक्षम करात, मागीर दिसपी ड्रायव्ह निवडात",
  "rockbox_step_select_player_folder": "उपकार करून प्लेयर स्वता वा ताचेर आशिल्लो एक फोल्डर निवडात",

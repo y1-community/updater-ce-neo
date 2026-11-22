@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Agħżel Rockbox Device",
  "rockbox_select_device_prompt": "Għal liema player qed tinstalla temi Rockbox?",
  "rockbox_step2_connect_usb": "Waħħal il-kejbil USB mal-{model} tiegħek",
+ "rockbox_step2_connect_usb_storage": "Jekk jogħġbok qabbad {model} tiegħek bil-mod ta 'trasferiment USB",
  "rockbox_step_usb_storage_mode": "Jekk jogħġbok ippermetti l-modalità tal-ħażna USB fuq it-tagħmir tiegħek u kklikkja Li jmiss",
  "rockbox_step_usb_storage_folder": "Jekk jogħġbok ippermetti l-modalità tal-ħażna USB fuq {model} tiegħek, imbagħad agħżel id-drajv li jidher",
  "rockbox_step_select_player_folder": "Jekk jogħġbok agħżel il-plejer innifsu jew wieħed mill-folders fuqu",

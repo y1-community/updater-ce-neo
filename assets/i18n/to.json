@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Fili ʻa e Meʻangāue Rockbox .",
  "rockbox_select_device_prompt": "Ko e tokotaha va'inga fē 'okú ke fokotu'u 'a e ngaahi kaveinga Rockbox ki ai?",
  "rockbox_step2_connect_usb": "Fakapipiki 'a e uaea USB ki ho'o {model} .",
+ "rockbox_step2_connect_usb_storage": "Kataki 'o fakafehokotaki ho'o {model} 'e he founga fe'ave'aki USB .",
  "rockbox_step_usb_storage_mode": "Kataki 'o faka'ata 'a e founga tanaki'anga USB 'i ho'o device pea lomi'i Hoko atu .",
  "rockbox_step_usb_storage_folder": "Kataki 'o faka'ata 'a e founga tanaki'anga USB 'i ho'o {model}, pea fili 'a e drive 'oku 'asi mai .",
  "rockbox_step_select_player_folder": "Kataki 'o fili 'a e player 'iate ia pe ko e taha 'o e ngaahi folder 'i ai .",

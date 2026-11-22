@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Khetha Sesebelisoa sa Rockbox",
  "rockbox_select_device_prompt": "Ke sebapali sefe seo u se kenyetsang lihlooho tsa Rockbox?",
  "rockbox_step2_connect_usb": "Hokela thapo ea USB ho {model} ea hau",
+ "rockbox_step2_connect_usb_storage": "Ka kopo, hokela {model} ea hau ka mokhoa oa ho fetisa oa USB",
  "rockbox_step_usb_storage_mode": "Ka kopo lumella mokhoa oa ho boloka USB sesebelisoa sa hau ebe o tobetsa E 'ngoe",
  "rockbox_step_usb_storage_folder": "Ka kopo lumella mokhoa oa ho boloka USB ho {model} ea hau, ebe u khetha drive e hlahang",
  "rockbox_step_select_player_folder": "Ka kopo, khetha sebapali kapa se seng sa lifoldara tse ho sona",

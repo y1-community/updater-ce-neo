@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Niruarlugu raakpaaks qaritaujaq",
  "rockbox_select_device_prompt": "Naliannut pinnguaqtimut aaqqiksiniaqpit raakpaaks taiguusinginnik?",
  "rockbox_step2_connect_usb": "Aaqqiksilutit USB savirajangmik ilingnut {model}",
+ "rockbox_step2_connect_usb_storage": "Atii kasurlugu {model} USB-kut nuttirijjutikkut",
  "rockbox_step_usb_storage_mode": "Atii pijunnaqtillugu USB tuqquivik qaritaujarnut naqillugulu kingulliq",
  "rockbox_step_usb_storage_folder": "Atii pijunnaqtillugu USB tuqquivik aaqqiksimaninga {model}-mi, taimali niruarlugu qaritaujaq saqqittuq",
  "rockbox_step_select_player_folder": "Atii niruarlugu pinnguaruti nangminiq uvvaluunniit ilangat paippaaqutiup iluani",

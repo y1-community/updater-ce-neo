@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ሮክቦክስ መሳርሒ ምረጽ",
  "rockbox_select_device_prompt": "ንኣየናይ ተጻዋታይ ኢኻ ሮክቦክስ ቴም ትተክል ዘለኻ?",
  "rockbox_step2_connect_usb": "ነቲ ናይ USB ገመድ ኣብ {model} .",
+ "rockbox_step2_connect_usb_storage": "በጃኹም {model} ናትኩም ብUSB transfer mode ኣራኽብዎ።",
  "rockbox_step_usb_storage_mode": "በጃኹም ኣብ መሳርሒኹም USB storage mode ኣኽእሉ እሞ Next ጠውቑ",
  "rockbox_step_usb_storage_folder": "በጃኹም ኣብ {model} ናትኩም USB storage mode ኣንቅሕዎ፣ ድሕሪኡ ዝረአ ድራይቭ ምረጽ",
  "rockbox_step_select_player_folder": "በጃኹም እቲ መጻወቲ ባዕሉ ወይ ሓደ ካብቶም ኣብኡ ዘለዉ ፎልደራት ምረጹ",

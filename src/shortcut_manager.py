@@ -323,10 +323,12 @@ def _linux_desktop_root() -> Optional[Path]:
 
 def _roots(kind: str) -> List[Path]:
     """Every folder a shortcut of this kind lives in, writable location first."""
+    if paths.IS_MAC:
+        # macOS does not manage desktop/menu shortcuts, and touching ~/Desktop
+        # triggers a TCC Desktop-folder permission prompt for no reason.
+        return []
     if paths.IS_WINDOWS:
         roots = _windows_menu_roots() if kind == "menu" else [_user_desktop(), _common_desktop()]
-    elif paths.IS_MAC:
-        roots = [Path.home() / "Applications", Path("/Applications")] if kind == "menu" else [Path.home() / "Desktop"]
     else:
         roots = [_linux_menu_root()] if kind == "menu" else [_linux_desktop_root()]
     unique: List[Path] = []
@@ -686,8 +688,12 @@ def get_state(skip: Iterable[str] = ()) -> Dict[str, Dict[str, bool]]:
     """Return {shortcut_id: {"desktop": bool, "menu": bool}} from real files.
 
     ``skip`` leaves an id out: its switches are not on screen, so nothing has
-    to be read for them.
+    to be read for them. macOS has no shortcut management, and its Desktop is
+    protected by TCC; scanning it at startup would ask for folder access for
+    no reason.
     """
+    if not supported():
+        return {}
     skipped = set(skip)
     return {
         shortcut_id: {

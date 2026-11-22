@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Scegghi Dispusitivi Rockbox",
  "rockbox_select_device_prompt": "Pi quali jucaturi stai stallannu li temi Rockbox?",
  "rockbox_step2_connect_usb": "Attaccari lu cavu USB ô vostru {model}",
+ "rockbox_step2_connect_usb_storage": "Si prega di cunnetti lu vostru {model} nnâ modalità di trasfirimentu USB",
  "rockbox_step_usb_storage_mode": "Attiva la modalità di archiviazzioni USB nnô dispusitivu e clica Avanti",
  "rockbox_step_usb_storage_folder": "Attiva la modalità di archiviazzioni USB ncapu lu {model}, poi scegghi l'unità ca cumpari",
  "rockbox_step_select_player_folder": "Si prega di scègghiri lu jucaturi stissu o una dî cartelli ca ci sunnu",

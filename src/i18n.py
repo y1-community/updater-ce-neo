@@ -7577,6 +7577,14 @@ _STRINGS: dict = {
         "es": "Conecta el cable USB a tu {model}",
         "ja": "USB ケーブルを {model} に接続してください",
     },
+    "rockbox_step2_connect_usb_storage": {
+        "en": "Please connect your {model} by USB transfer mode",
+        "zh-CN": "请通过 USB 传输模式连接您的 {model}",
+        "de": "Bitte verbinden Sie Ihr {model} im USB-Übertragungsmodus",
+        "fr": "Veuillez connecter votre {model} en mode transfert USB",
+        "es": "Conecta tu {model} en modo de transferencia USB",
+        "ja": "{model} を USB 転送モードで接続してください",
+    },
     "rockbox_step_usb_storage_mode": {
         "en": "Please enable USB storage mode on your device and click Next",
         "zh-CN": "请在设备上开启 USB 存储模式，然后点击下一步",

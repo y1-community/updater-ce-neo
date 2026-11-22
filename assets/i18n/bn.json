@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "রকবক্স ডিভাইস নির্বাচন করুন",
  "rockbox_select_device_prompt": "আপনি কোন প্লেয়ারের জন্য রকবক্স থিম ইনস্টল করছেন?",
  "rockbox_step2_connect_usb": "আপনার {model} এর সাথে USB তার সংযুক্ত করুন",
+ "rockbox_step2_connect_usb_storage": "অনুগ্রহ করে USB স্থানান্তর মোডের মাধ্যমে আপনার {model} সংযোগ করুন৷",
  "rockbox_step_usb_storage_mode": "অনুগ্রহ করে আপনার ডিভাইসে USB স্টোরেজ মোড সক্ষম করুন এবং পরবর্তী ক্লিক করুন৷",
  "rockbox_step_usb_storage_folder": "অনুগ্রহ করে আপনার {model}-এ USB স্টোরেজ মোড সক্ষম করুন, তারপর প্রদর্শিত ড্রাইভটি বেছে নিন",
  "rockbox_step_select_player_folder": "দয়া করে নিজেই প্লেয়ার বা এটিতে থাকা ফোল্ডারগুলির মধ্যে একটি নির্বাচন করুন৷",

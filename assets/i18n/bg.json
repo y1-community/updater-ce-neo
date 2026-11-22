@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Изберете устройство Rockbox",
  "rockbox_select_device_prompt": "За кой плеър инсталирате темите на Rockbox?",
  "rockbox_step2_connect_usb": "Свържете USB кабела към вашия {model}",
+ "rockbox_step2_connect_usb_storage": "Моля, свържете своя {model} чрез USB режим на прехвърляне",
  "rockbox_step_usb_storage_mode": "Моля, активирайте режима за USB съхранение на вашето устройство и щракнете върху Напред",
  "rockbox_step_usb_storage_folder": "Моля, активирайте USB режима за съхранение на вашия {model}, след което изберете устройството, което се показва",
  "rockbox_step_select_player_folder": "Моля, изберете самия плейър или една от папките в него",

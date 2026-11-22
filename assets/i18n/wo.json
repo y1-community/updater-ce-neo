@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Tannal aparey Rockbox",
  "rockbox_select_device_prompt": "Ban joueur ngay samp theme Rockbox?",
  "rockbox_step2_connect_usb": "Takkal fiil USB bi ci sa {model}",
+ "rockbox_step2_connect_usb_storage": "Baalnu nga boole sa {model} ci mode transfert USB",
  "rockbox_step_usb_storage_mode": "Baalnu nga amaale mode dencukaay USB ci sa aparey te nga bës ci topp",
  "rockbox_step_usb_storage_folder": "Baalnu nga amaale mode dencukaay USB ci sa {model}, nga daal di tànn disk bi feeñ",
  "rockbox_step_select_player_folder": "Tannal lecteur bi ci boppam wala benn ci dosiye yi ci kaw",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Atlasiet Rockbox ierīci",
  "rockbox_select_device_prompt": "Kuram atskaņotājam jūs instalējat Rockbox motīvus?",
  "rockbox_step2_connect_usb": "Pievienojiet USB kabeli savai ierīcei {model}",
+ "rockbox_step2_connect_usb_storage": "Lūdzu, pievienojiet {model}, izmantojot USB pārsūtīšanas režīmu",
  "rockbox_step_usb_storage_mode": "Lūdzu, iespējojiet USB atmiņas režīmu savā ierīcē un noklikšķiniet uz Tālāk",
  "rockbox_step_usb_storage_folder": "Lūdzu, iespējojiet USB atmiņas režīmu savā {model}, pēc tam izvēlieties parādīto disku",
  "rockbox_step_select_player_folder": "Lūdzu, atlasiet pašu atskaņotāju vai kādu no tajā esošajām mapēm",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Device sugandi",
  "rockbox_select_device_prompt": "I bɛ Rockbox barokunw sigi fɔlikɛla jumɛn de kama?",
  "rockbox_step2_connect_usb": "USB kabɔri siri i ka {model} .",
+ "rockbox_step2_connect_usb_storage": "Aw ye aw ka {model} siri ni USB transfer mode ye",
  "rockbox_step_usb_storage_mode": "Aw ye USB maracogo daminɛ aw ka minɛn kɔnɔ ani ka Next digi",
  "rockbox_step_usb_storage_folder": "Aw ye USB maracogo daminɛ aw ka {model} kan, o kɔ aw bɛ disiki min bɛ jira, aw bɛ o sugandi",
  "rockbox_step_select_player_folder": "Aw ye fɔlikɛla yɛrɛ sugandi walima foli minnu bɛ a kan, olu dɔ sugandi",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Perangkat Rockbox .",
  "rockbox_select_device_prompt": "Pemain si apai si ipasangndu tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang kabel USB ku {model} .",
+ "rockbox_step2_connect_usb_storage": "Silahken hubungken {model}ndu alu mode transfer USB .",
  "rockbox_step_usb_storage_mode": "Aktifken mode penyimpanan USB bas perangkatndu janah klik Selanjutna .",
  "rockbox_step_usb_storage_folder": "Silahken aktifken mode penyimpanan USB i bas {model}ndu, kenca si e pilih drive si muncul .",
  "rockbox_step_select_player_folder": "Pilihlah pemain e sendiri ntah pe salah sada folder si lit i datasna .",

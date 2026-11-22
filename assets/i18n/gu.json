@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "રોકબોક્સ ઉપકરણ પસંદ કરો",
  "rockbox_select_device_prompt": "તમે કયા ખેલાડી માટે રોકબોક્સ થીમ્સ ઇન્સ્ટોલ કરી રહ્યાં છો?",
  "rockbox_step2_connect_usb": "તમારા {model} સાથે USB કેબલ જોડો",
+ "rockbox_step2_connect_usb_storage": "કૃપા કરીને તમારા {model}ને USB ટ્રાન્સફર મોડ દ્વારા કનેક્ટ કરો",
  "rockbox_step_usb_storage_mode": "કૃપા કરીને તમારા ઉપકરણ પર USB સ્ટોરેજ મોડને સક્ષમ કરો અને આગળ ક્લિક કરો",
  "rockbox_step_usb_storage_folder": "કૃપા કરીને તમારા {model} પર USB સ્ટોરેજ મોડને સક્ષમ કરો, પછી દેખાતી ડ્રાઇવ પસંદ કરો",
  "rockbox_step_select_player_folder": "કૃપા કરીને પ્લેયર પોતે અથવા તેના પરના ફોલ્ડર્સમાંથી એક પસંદ કરો",

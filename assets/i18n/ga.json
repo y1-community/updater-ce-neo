@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Roghnaigh Gléas Rockbox",
  "rockbox_select_device_prompt": "Cén t-imreoir a bhfuil téamaí Rockbox á shuiteáil agat dó?",
  "rockbox_step2_connect_usb": "Ceangail an cábla USB le do {model}",
+ "rockbox_step2_connect_usb_storage": "Ceangail do {model} trí mhodh aistrithe USB",
  "rockbox_step_usb_storage_mode": "Cumasaigh mód stórála USB ar do ghléas agus cliceáil Ar Aghaidh",
  "rockbox_step_usb_storage_folder": "Cumasaigh mód stórála USB ar do {model}, ansin roghnaigh an tiomántán atá le feiceáil",
  "rockbox_step_select_player_folder": "Roghnaigh an t-imreoir é féin nó ceann de na fillteáin air",

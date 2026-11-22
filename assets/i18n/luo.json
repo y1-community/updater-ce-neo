@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Yier masin mar Rockbox",
  "rockbox_select_device_prompt": "En jatugo mane ma iketoe theme mag Rockbox?",
  "rockbox_step2_connect_usb": "Ket kebo mar USB e {model} mari",
+ "rockbox_step2_connect_usb_storage": "Yie mondo itud {model} mari kokalo kuom USB",
  "rockbox_step_usb_storage_mode": "Yie mondo oket mode mar kano mwandu e USB e masin mari kendo idi Maluwo",
  "rockbox_step_usb_storage_folder": "Yie mondo oket mode mar kano mwandu mag USB e {model} mari, kae to iyier draiva ma nenore",
  "rockbox_step_select_player_folder": "Yier player owuon kata achiel kuom folda ma ni e iye",

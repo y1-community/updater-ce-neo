@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "रॉकबॉक्स डिवाइस के चयन करीं",
  "rockbox_select_device_prompt": "रउआ कवना प्लेयर खातिर रॉकबॉक्स थीम इंस्टॉल कर रहल बानी?",
  "rockbox_step2_connect_usb": "यूएसबी केबल के अपना {model}",
+ "rockbox_step2_connect_usb_storage": "कृपया आपन {model} के यूएसबी ट्रांसफर मोड से कनेक्ट करीं",
  "rockbox_step_usb_storage_mode": "कृपया अपना डिवाइस प यूएसबी स्टोरेज मोड सक्षम करीं अवुरी आगे प क्लिक करीं",
  "rockbox_step_usb_storage_folder": "कृपया अपना {model} पर USB स्टोरेज मोड सक्षम करीं, ओकरा बाद जवन ड्राइव लउकी ओकरा के चुनीं",
  "rockbox_step_select_player_folder": "कृपया खुद प्लेयर या ओकरा पर मौजूद कवनो फोल्डर के चुनीं",

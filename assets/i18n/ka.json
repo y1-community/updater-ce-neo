@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "აირჩიეთ Rockbox მოწყობილობა",
  "rockbox_select_device_prompt": "რომელ მოთამაშეს აყენებთ Rockbox თემებს?",
  "rockbox_step2_connect_usb": "მიამაგრეთ USB კაბელი თქვენს {model}-ზე",
+ "rockbox_step2_connect_usb_storage": "გთხოვთ, დააკავშიროთ თქვენი {model} USB გადაცემის რეჟიმით",
  "rockbox_step_usb_storage_mode": "გთხოვთ, ჩართოთ USB შენახვის რეჟიმი თქვენს მოწყობილობაზე და დააწკაპუნეთ შემდეგი",
  "rockbox_step_usb_storage_folder": "გთხოვთ, ჩართოთ USB მეხსიერების რეჟიმი თქვენს {model}-ზე, შემდეგ აირჩიეთ დისკი, რომელიც გამოჩნდება",
  "rockbox_step_select_player_folder": "გთხოვთ, აირჩიოთ თავად მოთამაშე ან მასზე არსებული ერთ-ერთი საქაღალდე",

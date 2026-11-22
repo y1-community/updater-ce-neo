@@ -79,6 +79,16 @@ def _slug_for(name: str, device: str) -> str:
     return f"{base}-{device.lower()}" if base else f"pkg-{device.lower()}"
 
 
+def _normalize_hw_types(value) -> str:
+    """Read A/B hardware revisions from a manifest support field.
+
+    Accepts ``A``, ``Type A``, ``A,B`` and similar spellings. Empty means
+    the package is offered for every revision of its model.
+    """
+    labels = re.findall(r"(?<![A-Za-z])([AB])(?![A-Za-z])", str(value or "").upper())
+    return ",".join(dict.fromkeys(labels))
+
+
 _START_TAG_RE = re.compile(r"<([A-Za-z_][\w:.-]*)([^<>]*?)(/?)>", re.DOTALL)
 _ATTRIBUTE_RE = re.compile(r"""([A-Za-z_][\w:.-]*)\s*=\s*("[^"]*"|'[^']*')""", re.DOTALL)
 
@@ -307,6 +317,11 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 rb_themes_path_fix = None
 
         raw_rap = mapping.get("is_rockbox_android_port")
+        if raw_rap is None and str(
+            mapping.get("is_rockbox_android_false") or ""
+        ).strip().lower() in ("true", "1", "yes"):
+            # Older/alternative spelling: "this is not an Android ADB port".
+            raw_rap = False
         if raw_rap is None:
             is_rockbox_android_port = None
         elif isinstance(raw_rap, bool):
@@ -333,6 +348,41 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 is_rockbox_port = False
             else:
                 is_rockbox_port = None
+
+        raw_rnt = mapping.get("rockbox_no_themes")
+        if isinstance(raw_rnt, bool):
+            rockbox_no_themes = raw_rnt
+        else:
+            rockbox_no_themes = str(raw_rnt or "").strip().lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        rockbox_folder_path = str(mapping.get("rockbox_folder_path") or "")
+        rockbox_folder_path = rockbox_folder_path.replace("\\", "/").strip().strip("/")
+
+        raw_240p_rockbox = mapping.get("is_240p_rockbox")
+        if isinstance(raw_240p_rockbox, bool):
+            is_240p_rockbox = raw_240p_rockbox
+        else:
+            is_240p_rockbox = str(raw_240p_rockbox or "").strip().lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        raw_hw_type = (
+            mapping.get("supported_types")
+            or mapping.get("supported_device_types")
+            or mapping.get("hardware_type")
+            or mapping.get("hw_type")
+            or mapping.get("device_types")
+            or ""
+        )
+        hw_type = _normalize_hw_types(raw_hw_type)
+        if str(mapping.get("type_a_only") or "").strip().lower() in ("true", "1", "yes"):
+            hw_type = "A"
+        elif str(mapping.get("type_b_only") or "").strip().lower() in ("true", "1", "yes"):
+            hw_type = "B"
         desc = str(mapping.get("description") or description or "").strip()
         type_a_asset = str(mapping.get("type_a_asset") or "").strip()
         type_b_asset = str(mapping.get("type_b_asset") or "").strip()
@@ -385,6 +435,10 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 pmt_format_needed=pmt_format_needed,
                 type_a_asset=type_a_asset,
                 type_b_asset=type_b_asset,
+                hw_type=hw_type,
+                is_240p_rockbox=is_240p_rockbox,
+                rockbox_folder_path=rockbox_folder_path,
+                rockbox_no_themes=rockbox_no_themes,
                 asset_pattern=asset_pattern,
                 portable_zips=portable_zips,
                 brand=brand,
@@ -486,6 +540,13 @@ def cache_manifest(entries):
              "asset_pattern": getattr(e, "asset_pattern", "") or "",
              "type_a_asset": getattr(e, "type_a_asset", "") or "",
              "type_b_asset": getattr(e, "type_b_asset", "") or "",
+             "hw_type": getattr(e, "hw_type", "") or "",
+             "is_240p_rockbox": bool(getattr(e, "is_240p_rockbox", False)),
+             "rb_themes_path_fix": getattr(e, "rb_themes_path_fix", None),
+             "is_rockbox_android_port": getattr(e, "is_rockbox_android_port", None),
+             "is_rockbox_port": getattr(e, "is_rockbox_port", None),
+             "rockbox_folder_path": getattr(e, "rockbox_folder_path", "") or "",
+             "rockbox_no_themes": bool(getattr(e, "rockbox_no_themes", False)),
              "icon": getattr(e, "icon", "") or "",
              "icon_dark": getattr(e, "icon_dark", "") or "",
              "image": getattr(e, "image", "") or "",
@@ -539,6 +600,13 @@ def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
                 asset_pattern=e.get("asset_pattern", "") or "",
                 type_a_asset=e.get("type_a_asset", "") or "",
                 type_b_asset=e.get("type_b_asset", "") or "",
+                hw_type=e.get("hw_type", "") or "",
+                is_240p_rockbox=bool(e.get("is_240p_rockbox", False)),
+                rb_themes_path_fix=e.get("rb_themes_path_fix", None),
+                is_rockbox_android_port=e.get("is_rockbox_android_port", None),
+                is_rockbox_port=e.get("is_rockbox_port", None),
+                rockbox_folder_path=e.get("rockbox_folder_path", "") or "",
+                rockbox_no_themes=bool(e.get("rockbox_no_themes", False)),
                 icon=e.get("icon", "") or "",
                 icon_dark=e.get("icon_dark", "") or "",
                 image=e.get("image", "") or "",

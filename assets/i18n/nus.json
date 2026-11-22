@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Kuɛn Rɔkbɔk Di̱bai̱",
  "rockbox_select_device_prompt": "Ɛ ŋa kä ŋar in lätdi Rockbox themes kɛ kui̱dɛ?",
  "rockbox_step2_connect_usb": "Kämni USB kɛbel kä {model} du",
+ "rockbox_step2_connect_usb_storage": "Ɣän göörä ɣöö bä {model}du mat kɛ USB tra̱ni̱thpɛr mödɛl",
  "rockbox_step_usb_storage_mode": "Ɣän göörä ɣöö bä USB la̱th kä di̱bai̱du kä rietdɛ Next .",
  "rockbox_step_usb_storage_folder": "Ɣän göörä ɣöö bä USB la̱th kä {model} du, kɛ kɔrɛ kuany drive min bi̱ jɔɔc",
  "rockbox_step_select_player_folder": "Ɣän göörä ɣöö bä ram min ŋar kulɛ kuany kärɔa kiɛ kɛl kä foldɛri̱ tin te rɛydɛ .",

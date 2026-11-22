@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sankhani Rockbox Chipangizo",
  "rockbox_select_device_prompt": "Ndi wosewera uti yemwe mukuyikira mitu ya Rockbox?",
  "rockbox_step2_connect_usb": "Gwirizanitsani chingwe cha USB ku {model} yanu",
+ "rockbox_step2_connect_usb_storage": "Chonde polumikizani {model} yanu ndi USB kusamutsa mode",
  "rockbox_step_usb_storage_mode": "Chonde yambitsani njira yosungiramo USB pa chipangizo chanu ndikudina Next",
  "rockbox_step_usb_storage_folder": "Chonde yambitsani kusungirako kwa USB pa {model} yanu, kenako sankhani galimoto yomwe ikuwoneka",
  "rockbox_step_select_player_folder": "Chonde sankhani wosewerayo kapena chimodzi mwa zikwatu zomwe zili pamenepo",

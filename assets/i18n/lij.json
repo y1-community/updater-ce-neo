@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleçionâ Dispoxitivo Rockbox .",
  "rockbox_select_device_prompt": "Pe che zugou installi i temi Rockbox?",
  "rockbox_step2_connect_usb": "Collegâ o cavo USB a-o vòstro {model} .",
+ "rockbox_step2_connect_usb_storage": "Pe favô, connette o seu {model} pe modalitæ de trasferimento USB",
  "rockbox_step_usb_storage_mode": "Pe favô, attiva a modalitæ de archiviaçion USB in sciô teu dispoxitivo e clicca in sce Avanti .",
  "rockbox_step_usb_storage_folder": "Pe favô, attiva a modalitæ de archiviaçion USB in sciô teu {model}, e dapeu çerne l'unitæ ch'a comparisce",
  "rockbox_step_select_player_folder": "Pe favô, seleçionâ o mæximo lettô ò uña de cartelle ch'a l'é in sce de lê",

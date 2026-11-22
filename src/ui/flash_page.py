@@ -3773,6 +3773,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         self._close_theme_folder_dialog()
+        self._stop_removable_drive_watch()
         sim_timer = getattr(self, "_sim_theme_timer", None)
         if sim_timer is not None:
             sim_timer.stop()
@@ -3799,8 +3800,11 @@ class FlashPage(QWidget):
         Runs for as long as the step does, including behind the modal folder
         picker, which starves Qt timers but not a thread. Starting it again on a
         repeated prompt replaces the old watcher, so only one ever polls.
+        Non-Android Rockbox ports never use ADB.
         """
         self._stop_adb_presence_watch()
+        if getattr(self.themes, "mass_storage", False):
+            return
         from ..adb import find_adb_binary
         from ..theme_pack import AdbPresencePoller
 
@@ -3812,6 +3816,86 @@ class FlashPage(QWidget):
         worker.multiple.connect(self._on_adb_multiple_devices)
         self.themes.attach_watch(worker)
         worker.start()
+
+    def _start_removable_drive_watch(self) -> None:
+        """Poll non-system / external drives for ``.rockbox`` during mass-storage steps."""
+        self._stop_removable_drive_watch()
+        timer = QTimer(self)
+        timer.setInterval(2000)
+        timer.timeout.connect(self._poll_removable_rockbox_dirs)
+        self._removable_watch_timer = timer
+        timer.start()
+
+    def _stop_removable_drive_watch(self) -> None:
+        timer = getattr(self, "_removable_watch_timer", None)
+        if timer is not None:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except Exception:
+                pass
+            self._removable_watch_timer = None
+
+    def _poll_removable_rockbox_dirs(self) -> None:
+        if not getattr(self.themes, "active", False) or not getattr(self.themes, "mass_storage", False):
+            self._stop_removable_drive_watch()
+            return
+        if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
+            self._stop_removable_drive_watch()
+
+    def _try_mass_storage_auto_transfer(self, *, fallback_to_picker: bool = False) -> bool:
+        """Scan external drives for ``.rockbox`` dirs and transfer to every one found."""
+        try:
+            from ..theme_sync import find_removable_rockbox_dirs
+
+            hint = str(getattr(self.themes, "rockbox_folder_path", "") or "")
+            removable = find_removable_rockbox_dirs(rockbox_folder_path=hint)
+        except Exception as e:
+            logger.debug("Error checking removable rockbox dirs: %s", e)
+            removable = []
+        if removable:
+            self._stop_removable_drive_watch()
+            joined = ", ".join(str(p) for p in removable)
+            self._log_theme(
+                f"[Rockbox Themes] Auto-detected {len(removable)} external .rockbox "
+                f"folder(s): {joined}"
+            )
+            if self._cleanup_stage:
+                self._start_local_cleanup(removable)
+            else:
+                self._start_mass_storage_merge(removable)
+            return True
+        if fallback_to_picker:
+            self._show_theme_fallback_usb_mode()
+        return False
+
+    def _active_firmware_package(self):
+        """Return the active manifest/local FirmwarePackage from the parent window."""
+        win = self.window()
+        if win is None:
+            return None
+        getter = getattr(win, "_active_firmware_package", None)
+        if callable(getter):
+            try:
+                pkg = getter()
+                if pkg is not None:
+                    return pkg
+            except Exception:
+                pass
+        page = getattr(win, "_select_page", None)
+        if page is not None:
+            pkg = getattr(page, "_details_package", None)
+            if pkg is not None:
+                return pkg
+            cur = getattr(page, "current_package", None)
+            if callable(cur):
+                try:
+                    pkg = cur()
+                    if pkg is not None:
+                        return pkg
+                except Exception:
+                    pass
+        return getattr(win, "_details_package", None) or getattr(win, "_keep_data_pkg", None)
 
     def _stop_adb_presence_watch(self) -> None:
         worker = self.themes.take_watch()
@@ -4005,6 +4089,9 @@ class FlashPage(QWidget):
             callback()
             return
         if self.themes.usb_asked:
+            if getattr(self.themes, "mass_storage", False):
+                self._try_mass_storage_auto_transfer(fallback_to_picker=True)
+                return
             # The cable is in: the watch, not the folder picker, is next.
             self._start_theme_step2_connect_usb()
             return
@@ -4032,6 +4119,8 @@ class FlashPage(QWidget):
 
         label = device_label_for_model(eff_model)
         if standalone:
+            if getattr(self.themes, "mass_storage", False):
+                return tr("rockbox_step2_connect_usb_storage").format(model=label)
             return tr("rockbox_step_standalone_power_on_usb").format(model=label)
 
         is_y1 = (eff_model == "Y1")
@@ -4094,12 +4183,24 @@ class FlashPage(QWidget):
         so a player that is already plugged in answers it for the user.
         """
         self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
         self.themes.ask_usb()
         model_str = self.themes.model.upper()
-        self._log_theme(
-            f"[Rockbox Themes] Step 2: Prompting user to connect {model_str} by USB."
-        )
-        self.show_flash_question(tr("rockbox_step2_connect_usb").format(model=model_str))
+        is_mass_storage = bool(getattr(self.themes, "mass_storage", False))
+        if is_mass_storage:
+            self._log_theme(
+                f"[Rockbox Themes] Step 2: Prompting user to connect {model_str} by USB transfer mode."
+            )
+            self.show_flash_question(
+                tr("rockbox_step2_connect_usb_storage").format(model=model_str)
+            )
+        else:
+            self._log_theme(
+                f"[Rockbox Themes] Step 2: Prompting user to connect {model_str} by USB."
+            )
+            self.show_flash_question(
+                tr("rockbox_step2_connect_usb").format(model=model_str)
+            )
         self._eta_label.setText("")
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
@@ -4122,7 +4223,10 @@ class FlashPage(QWidget):
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
-        self._ensure_adb_presence_watch()
+        if is_mass_storage:
+            self._start_removable_drive_watch()
+        else:
+            self._ensure_adb_presence_watch()
         self._request_user_attention()
 
     def start_rockbox_themes_stage(
@@ -4211,28 +4315,26 @@ class FlashPage(QWidget):
 
         from ..catalog import is_rockbox_android_port
         pkg_name = getattr(self, "_package_name", "") or ""
-        win = self.window()
-        pkg = getattr(win, "_details_package", None) if win else None
-        android_port = is_rockbox_android_port(package=pkg, name=pkg_name)
+        pkg = self._active_firmware_package()
+        android_port = (
+            not getattr(self.themes, "mass_storage", False)
+            and is_rockbox_android_port(package=pkg, name=pkg_name)
+        )
+        if pkg is not None and getattr(pkg, "rockbox_folder_path", "") and not getattr(self.themes, "rockbox_folder_path", ""):
+            self.themes.rockbox_folder_path = str(pkg.rockbox_folder_path)
 
         if not android_port:
+            self.themes.mass_storage = True
             self._log_theme(
                 f"[Rockbox Themes] Non-Android Rockbox port detected for {model_str}: "
-                "using USB storage mode."
+                "skipping ADB and using USB storage mode."
             )
+            if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
+                return
             if not already_powered_on and not automatic:
                 self._show_theme_step1_disconnect_power_on()
                 return
-            try:
-                from ..theme_sync import find_removable_rockbox_dirs
-                removable = find_removable_rockbox_dirs()
-                if len(removable) == 1:
-                    self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
-                    self._on_theme_folder_chosen(str(removable[0]))
-                    return
-            except Exception:
-                pass
-            self._show_theme_fallback_usb_mode()
+            self._show_theme_connect_usb_question()
             return
 
         from ..adb import find_adb_binary, adb_devices
@@ -4372,12 +4474,19 @@ class FlashPage(QWidget):
         )
         self._show_theme_fallback_usb_mode()
 
-    def _start_local_cleanup(self, chosen: str) -> None:
+    def _start_local_cleanup(self, chosen) -> None:
         from ..rockbox_cleanup import LocalRockboxCleanupWorker
 
         self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
+        self._close_theme_folder_dialog()
+        label = (
+            ", ".join(str(p) for p in chosen)
+            if isinstance(chosen, (list, tuple))
+            else str(chosen)
+        )
         self._log_theme(
-            f"[Rockbox Cleanup] Selected folder: {chosen}. Looking for .rockbox folders..."
+            f"[Rockbox Cleanup] Selected folder(s): {label}. Looking for .rockbox folders..."
         )
         self.dismiss_flash_question()
         if hasattr(self, "_theme_row"):
@@ -4392,7 +4501,12 @@ class FlashPage(QWidget):
         self.set_step(tr("rockbox_cleanup_step"))
         self._eta_label.setText(tr("rockbox_cleanup_deleting"))
         self.themes.reset_progress()
-        worker = LocalRockboxCleanupWorker(chosen, parent=self)
+        worker = LocalRockboxCleanupWorker(
+            chosen,
+            parent=self,
+            rockbox_folder_path=str(getattr(self.themes, "rockbox_folder_path", "") or ""),
+            skip_adb_reboot=bool(getattr(self.themes, "mass_storage", False)),
+        )
         self._rockbox_cleanup_worker = worker
         worker.progress.connect(self._on_cleanup_progress)
         worker.log.connect(self._log_theme)
@@ -4736,15 +4850,8 @@ class FlashPage(QWidget):
         else:
             self.themes.adb_attempted = True
             self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}. Falling back to USB storage guidance.")
-            try:
-                from ..theme_sync import find_removable_rockbox_dirs
-                removable = find_removable_rockbox_dirs()
-                if len(removable) == 1:
-                    self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
-                    self._on_theme_folder_chosen(str(removable[0]))
-                    return
-            except Exception:
-                pass
+            if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
+                return
             self._show_theme_fallback_usb_mode()
 
     def _show_theme_fallback_usb_mode(self) -> None:
@@ -4797,8 +4904,11 @@ class FlashPage(QWidget):
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
         # Keep looking for the player while the user is in USB storage mode and
-        # behind the folder picker: ADB can finish the job by itself.
-        self._ensure_adb_presence_watch()
+        # behind the folder picker: ADB (or removable mount) can finish by itself.
+        if getattr(self.themes, "mass_storage", False):
+            self._start_removable_drive_watch()
+        else:
+            self._ensure_adb_presence_watch()
         self._request_user_attention()
 
     def _show_theme_manual_prompt(self) -> None:
@@ -4816,15 +4926,8 @@ class FlashPage(QWidget):
         from PySide6.QtWidgets import QFileDialog
         from ..downloads import default_picker_dir
 
-        try:
-            from ..theme_sync import find_removable_rockbox_dirs
-            removable = find_removable_rockbox_dirs()
-            if len(removable) == 1:
-                self._log_theme(f"[Rockbox Themes] Auto-detected removable .rockbox directory at {removable[0]}")
-                self._on_theme_folder_chosen(str(removable[0]))
-                return
-        except Exception as e:
-            logger.debug("Error checking removable rockbox dirs: %s", e)
+        if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
+            return
 
         title = tr("rockbox_step_select_rockbox_folder") if sys.platform == "win32" else tr("rockbox_step_select_player_folder")
         if sys.platform == "win32":
@@ -4874,23 +4977,72 @@ class FlashPage(QWidget):
         except Exception:
             logger.debug("Could not dismiss the folder picker", exc_info=True)
 
+    def _start_mass_storage_merge(self, target_dirs: list[Path]) -> None:
+        """Merge themes & fonts into one or more external-storage ``.rockbox`` dirs."""
+        from ..theme_pack import DirMergeWorker, should_apply_theme_path_fix
+
+        self._close_theme_folder_dialog()
+        self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
+        self.dismiss_flash_question()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_theme_step1_widget"):
+            self._theme_step1_widget.setVisible(False)
+        if hasattr(self, "_theme_fallback_widget"):
+            self._theme_fallback_widget.setVisible(False)
+        if hasattr(self, "_theme_trouble_widget"):
+            self._theme_trouble_widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+
+        dests = [Path(d) for d in target_dirs if d]
+        dest_label = ", ".join(str(d) for d in dests)
+        model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
+        rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
+        apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
+        custom_zip = getattr(self.themes, "payload_zip_path", None)
+        payload_zip = Path(custom_zip) if custom_zip and Path(custom_zip).is_file() else None
+        if payload_zip is None:
+            # The worker downloads/validates the full pack itself: doing it here
+            # would freeze the page while the user waits in USB storage mode.
+            self._log_theme("[Rockbox Themes] Preparing the complete themes & fonts pack...")
+        self._log_theme(f"[Rockbox Themes] Merging themes & fonts payload into {dest_label}...")
+        self._eta_label.setText(tr("rockbox_stage_pushing"))
+        self.themes.reset_progress()
+
+        self._dir_merge_worker = DirMergeWorker(
+            dst_dirs=dests,
+            parent=self,
+            zip_path=payload_zip,
+            ensure_full=True,
+            apply_path_fix=apply_fix,
+        )
+        self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
+        self._dir_merge_worker.log.connect(self._log_theme)
+        self._dir_merge_worker.finished.connect(
+            lambda ok, err, count: self._on_dir_merge_finished(ok, err, count, dest_label)
+        )
+        self._dir_merge_worker.start()
+
     def _on_theme_folder_chosen(self, chosen: str) -> None:
         if not chosen:
             # Cancelled. The presence watcher keeps running, so the user can
             # retry or simply plug the player in.
             return
-        from ..adb import find_adb_binary, adb_devices
-        adb_bin = find_adb_binary()
-        if adb_bin:
-            try:
-                live_devices = adb_devices(adb_bin)
-            except Exception:
-                live_devices = []
-            if self.themes.prefer_player(len(live_devices)):
-                self._on_adb_device_found(live_devices[0])
-                return
+        if not getattr(self.themes, "mass_storage", False):
+            from ..adb import find_adb_binary, adb_devices
+            adb_bin = find_adb_binary()
+            if adb_bin:
+                try:
+                    live_devices = adb_devices(adb_bin)
+                except Exception:
+                    live_devices = []
+                if self.themes.prefer_player(len(live_devices)):
+                    self._on_adb_device_found(live_devices[0])
+                    return
         self._close_theme_folder_dialog()
         self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
         self.dismiss_flash_question()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
@@ -4918,46 +5070,12 @@ class FlashPage(QWidget):
             except Exception as e:
                 self._giveup_rockbox_themes_stage(str(e))
             return
-        from ..theme_pack import (
-            find_or_create_rockbox_dir,
-            DirMergeWorker,
-            should_apply_theme_path_fix,
-        )
-        dest_dir = find_or_create_rockbox_dir(chosen)
-        self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
-        model = getattr(self.themes, "model", "") or getattr(self, "_model", "")
-        rb_themes_path_fix = getattr(self.themes, "rb_themes_path_fix", None)
-        apply_fix = should_apply_theme_path_fix(model=model, rb_themes_path_fix=rb_themes_path_fix)
-        custom_zip = getattr(self.themes, "payload_zip_path", None)
-        payload_zip = Path(custom_zip) if custom_zip and Path(custom_zip).is_file() else None
-        if payload_zip is None:
-            # The worker downloads/validates the full pack itself: doing it here
-            # would freeze the page while the user waits in USB storage mode.
-            self._log_theme("[Rockbox Themes] Preparing the complete themes & fonts pack...")
-        self._log_theme(f"[Rockbox Themes] Merging themes & fonts payload into {dest_dir}...")
-        if hasattr(self, "_theme_fallback_widget"):
-            self._theme_fallback_widget.setVisible(False)
-        self._hide_theme_wizard_chips()
-        self._eta_label.setText(tr("rockbox_stage_pushing"))
-        self.themes.reset_progress()
-        # The folder choice is committed and the copy is about to run: a player
-        # appearing now must not start an ADB push into the same .rockbox. A
-        # failed merge re-enters USB guidance, which restarts the watcher.
-        self._stop_adb_presence_watch()
+        from ..theme_pack import find_or_create_rockbox_dir
 
-        self._dir_merge_worker = DirMergeWorker(
-            dst_dir=dest_dir,
-            parent=self,
-            zip_path=payload_zip,
-            ensure_full=True,
-            apply_path_fix=apply_fix,
-        )
-        self._dir_merge_worker.progress.connect(self._on_theme_push_progress)
-        self._dir_merge_worker.log.connect(self._log_theme)
-        self._dir_merge_worker.finished.connect(
-            lambda ok, err, count: self._on_dir_merge_finished(ok, err, count, str(dest_dir))
-        )
-        self._dir_merge_worker.start()
+        hint = str(getattr(self.themes, "rockbox_folder_path", "") or "")
+        dest_dir = find_or_create_rockbox_dir(chosen, rockbox_folder_path=hint)
+        self._log_theme(f"[Rockbox Themes] Selected folder: {chosen}. Resolved target .rockbox: {dest_dir}")
+        self._start_mass_storage_merge([dest_dir])
 
     def _on_dir_merge_finished(self, ok: bool, err: str, count: int, dest: str) -> None:
         """Only declare the theme stage complete once files were really copied."""
@@ -4981,6 +5099,7 @@ class FlashPage(QWidget):
             "Finishing with the completion screen."
         )
         self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
         self.themes.mark_placement_failed()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
@@ -5046,6 +5165,7 @@ class FlashPage(QWidget):
         else:
             self._log_theme("[Rockbox Themes] Rockbox 360p themes & fonts stage completed.")
         self._stop_adb_presence_watch()
+        self._stop_removable_drive_watch()
         self.themes.finish()
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()

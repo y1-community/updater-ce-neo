@@ -46,6 +46,11 @@ class ThemesJourney:
         self.custom_theme_count = 0
         self.custom_theme_name = ""
         self.rb_themes_path_fix = None
+        # USB mass-storage details from slidia_manifest.xml. Non-ADB Rockbox
+        # builds use the drive scan instead of the ADB watch.
+        self.rockbox_folder_path = ""
+        self.rockbox_no_themes = False
+        self.mass_storage = False
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
         # UI objects whose lifetime *is* journey state: the ADB presence
@@ -183,6 +188,18 @@ class ThemesJourney:
         self._apk_path = str(apk_path or "")
         self._apk_url = str(apk_url or "")
 
+    def set_manifest_options(
+        self,
+        *,
+        mass_storage: bool = False,
+        rockbox_folder_path: str = "",
+        rockbox_no_themes: bool = False,
+    ) -> None:
+        """Apply Rockbox manifest transport/layout options for this stage."""
+        self.mass_storage = bool(mass_storage)
+        self.rockbox_folder_path = str(rockbox_folder_path or "")
+        self.rockbox_no_themes = bool(rockbox_no_themes)
+
     def begin(
         self,
         model: str,
@@ -221,6 +238,9 @@ class ThemesJourney:
         self.custom_theme_count = 0
         self.custom_theme_name = ""
         self.rb_themes_path_fix = None
+        self.rockbox_folder_path = ""
+        self.rockbox_no_themes = False
+        self.mass_storage = False
 
     def mark_placement_failed(self) -> None:
         self._release_awake()

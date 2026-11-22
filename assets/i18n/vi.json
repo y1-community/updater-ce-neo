@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Chọn thiết bị Rockbox",
  "rockbox_select_device_prompt": "Bạn đang cài đặt chủ đề Rockbox cho máy nghe nhạc nào?",
  "rockbox_step2_connect_usb": "Gắn cáp USB vào {model} của bạn",
+ "rockbox_step2_connect_usb_storage": "Vui lòng kết nối {model} của bạn bằng chế độ truyền USB",
  "rockbox_step_usb_storage_mode": "Vui lòng bật chế độ lưu trữ USB trên thiết bị của bạn và nhấp vào Tiếp theo",
  "rockbox_step_usb_storage_folder": "Vui lòng bật chế độ lưu trữ USB trên {model} của bạn, sau đó chọn ổ đĩa xuất hiện",
  "rockbox_step_select_player_folder": "Vui lòng chọn chính trình phát hoặc một trong các thư mục trên đó",

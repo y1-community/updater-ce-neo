@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Toorana ekikwato kya Rockbox",
  "rockbox_select_device_prompt": "Ni muzaani ki ou orikuteekaho emitwe ya Rockbox?",
  "rockbox_step2_connect_usb": "Taho akasimu ka USB aha {model} yaawe .",
+ "rockbox_step2_connect_usb_storage": "Nyabura we kwatanisa {model} yaawe orikurabira omu muringo gw'okuhingisa USB",
  "rockbox_step_usb_storage_mode": "Nyabura we, taho omuringo gw'okubiika USB aha kikwato kyawe reero onyige Ekindi",
  "rockbox_step_usb_storage_folder": "Nyabura we, taho omuringo gw'okubiika USB aha {model} yaawe, reero otoore omuvugi orikureebeka .",
  "rockbox_step_select_player_folder": "Nyabura we toorana omuzaani wenka nari kimwe aha bihandiiko ebiriho .",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox түзмөктү тандаңыз",
  "rockbox_select_device_prompt": "Кайсы оюнчу үчүн Rockbox темаларын орнотуп жатасыз?",
  "rockbox_step2_connect_usb": "USB кабелин {model} түзмөгүңүзгө туташтырыңыз",
+ "rockbox_step2_connect_usb_storage": "Сураныч, {model} түзмөгүңүздү USB өткөрүү режими аркылуу туташтырыңыз",
  "rockbox_step_usb_storage_mode": "Сураныч, түзмөгүңүздө USB сактоо режимин иштетип, Кийинки баскычын басыңыз",
  "rockbox_step_usb_storage_folder": "Сураныч, {model} түзмөгүңүздө USB сактагыч режимин иштетип, андан кийин пайда болгон дискти тандаңыз",
  "rockbox_step_select_player_folder": "Сураныч, ойноткучтун өзүн же андагы папкалардын бирин тандаңыз",

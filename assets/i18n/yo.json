@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Yan Ẹrọ Rockbox",
  "rockbox_select_device_prompt": "Ewo ni o nfi awọn akori Rockbox sori ẹrọ fun?",
  "rockbox_step2_connect_usb": "So okun USB pọ si rẹ {model}",
+ "rockbox_step2_connect_usb_storage": "Jọwọ so {model} rẹ pọ nipasẹ ipo gbigbe USB",
  "rockbox_step_usb_storage_mode": "Jọwọ mu ipo ibi ipamọ USB ṣiṣẹ lori ẹrọ rẹ ki o tẹ Itele",
  "rockbox_step_usb_storage_folder": "Jọwọ mu ipo ibi ipamọ USB ṣiṣẹ lori {model} rẹ, lẹhinna yan kọnputa ti o han",
  "rockbox_step_select_player_folder": "Jọwọ yan ẹrọ orin funrararẹ tabi ọkan ninu awọn folda lori rẹ",

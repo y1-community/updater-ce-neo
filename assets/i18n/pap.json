@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Selektá Aparato di Rockbox",
  "rockbox_select_device_prompt": "Pa kua hungadó bo ta instalando temanan di Rockbox?",
  "rockbox_step2_connect_usb": "Konektá e kabel USB na bo {model}",
+ "rockbox_step2_connect_usb_storage": "Por fabor konektá bo {model} pa medio di e modo di transferensia USB",
  "rockbox_step_usb_storage_mode": "Por fabor aktivá e modo di almasenamentu USB riba bo aparato i klik Siguiente",
  "rockbox_step_usb_storage_folder": "Por fabor, aktivá e modo di almasenamentu USB riba bo {model}, despues skohe e drive ku ta aparesé",
  "rockbox_step_select_player_folder": "Por fabor selektá e hungadó mes òf un di e mapnan riba dje",

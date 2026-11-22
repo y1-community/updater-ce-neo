@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "रॉकबॉक्स डिवाइस चुनो",
  "rockbox_select_device_prompt": "तुस किस प्लेयर आस्तै रॉकबॉक्स थीम इंस्टॉल करा करदे ओ?",
  "rockbox_step2_connect_usb": "यूएसबी केबल गी अपने {model} कन्नै संलग्न करो",
+ "rockbox_step2_connect_usb_storage": "कृपया अपने {model} गी यूएसबी ट्रांसफर मोड कन्नै कनेक्ट करो",
  "rockbox_step_usb_storage_mode": "कृपा करियै अपने डिवाइस पर यूएसबी स्टोरेज मोड सक्षम करो ते अगला पर क्लिक करो",
  "rockbox_step_usb_storage_folder": "कृपा करियै अपने {model} पर यूएसबी स्टोरेज मोड सक्षम करो, फ्ही दिक्खने आह् ली ड्राइव गी चुनो",
  "rockbox_step_select_player_folder": "कृपा करियै प्लेयर गी गै चुनो जां इस पर दित्ते गेदे फोल्डरें च शा इक गी चुनो",

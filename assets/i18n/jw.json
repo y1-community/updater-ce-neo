@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilih Piranti Rockbox",
  "rockbox_select_device_prompt": "Kanggo pamuter apa sampeyan nginstal tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang kabel USB menyang {model} sampeyan",
+ "rockbox_step2_connect_usb_storage": "Sambungake {model} sampeyan nganggo mode transfer USB",
  "rockbox_step_usb_storage_mode": "Mangga aktifake mode panyimpenan USB ing piranti banjur klik Sabanjure",
  "rockbox_step_usb_storage_folder": "Mangga aktifake mode panyimpenan USB ing {model} sampeyan, banjur pilih drive sing katon",
  "rockbox_step_select_player_folder": "Mangga pilih pamuter dhewe utawa salah siji saka folder ing",

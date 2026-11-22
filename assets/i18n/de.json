@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox-Gerät auswählen",
  "rockbox_select_device_prompt": "Für welchen Player installieren Sie Rockbox-Designs?",
  "rockbox_step2_connect_usb": "Schließen Sie das USB-Kabel an Ihr {model} an",
+ "rockbox_step2_connect_usb_storage": "Bitte verbinden Sie Ihr {model} im USB-Übertragungsmodus",
  "rockbox_step_usb_storage_mode": "Bitte aktivieren Sie den USB-Speichermodus auf Ihrem Gerät und klicken Sie auf Weiter",
  "rockbox_step_usb_storage_folder": "Bitte aktivieren Sie den USB-Speichermodus auf Ihrem {model} und wählen Sie dann das angezeigte Laufwerk",
  "rockbox_step_select_player_folder": "Bitte wählen Sie den Player selbst oder einen Ordner darauf aus",

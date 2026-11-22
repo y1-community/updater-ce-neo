@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Tagh Inneal Rockbox",
  "rockbox_select_device_prompt": "Cò dha a tha thu a’ stàladh cuspairean Rockbox?",
  "rockbox_step2_connect_usb": "Ceangail an càball USB ris an {model} agad",
+ "rockbox_step2_connect_usb_storage": "Feuch an ceangail thu do {model} le modh gluasad USB",
  "rockbox_step_usb_storage_mode": "Feuch an leig thu le modh stòraidh USB air an inneal agad agus cliog An ath-",
  "rockbox_step_usb_storage_folder": "Feuch an cuir thu an comas modh stòraidh USB air do {model}, agus an uairsin tagh an draibhear a nochdas",
  "rockbox_step_select_player_folder": "Feuch an tagh thu an cluicheadair fhèin no aon de na pasganan air",

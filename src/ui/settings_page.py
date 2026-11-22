@@ -1632,7 +1632,7 @@ class SettingsPage(QWidget):
         files are only read once those rows are on screen: reading unrecognised
         shortcut targets starts a shell, which startup should not pay for.
         """
-        if not hasattr(self, "_shortcut_switches"):
+        if not hasattr(self, "_shortcut_switches") or not shortcut_manager.supported():
             return
         show_tools = bool(getattr(self, "_advanced_revealed", False))
         if hasattr(self, "_cb_advanced_settings"):
@@ -1995,7 +1995,7 @@ class SettingsPage(QWidget):
         self._add_device_workers = []
         self.destroyed.connect(lambda *_, ws=self._add_device_workers: _stop_add_device_workers(ws))
         self._add_device_model.currentIndexChanged.connect(self._on_add_device_model_changed)
-        self._add_device_type.currentIndexChanged.connect(self._on_add_device_software_changed)
+        self._add_device_type.currentIndexChanged.connect(self._on_add_device_type_changed)
         self._add_device_software.currentIndexChanged.connect(self._on_add_device_software_changed)
         self._add_device_version.currentIndexChanged.connect(
             self._on_add_device_version_changed
@@ -2164,6 +2164,7 @@ class SettingsPage(QWidget):
 
         for name in catalog.software_names_for_model(model):
             self._add_device_software.addItem(display_software_name(name), name)
+        self._add_device_software_filtered_type = ""
         self._add_device_software.blockSignals(False)
         self._on_add_device_software_changed()
 
@@ -2177,7 +2178,16 @@ class SettingsPage(QWidget):
     def _add_device_package(self):
         model = self._add_device_model.currentText().strip()
         software = self._selected_add_device_software()
-        packages = catalog.packages_for_model_software(model, software)
+        hw_type = ""
+        if (
+            len(hardware_types_for_model(model)) > 1
+            and not self._add_device_type.isHidden()
+            and not self._is_original_software(software)
+        ):
+            hw_type = self._add_device_type.currentData() or ""
+        packages = catalog.packages_for_model_software(
+            model, software, hw_type=hw_type
+        )
         return packages[0] if packages else None
 
     def _add_device_form_state(self):
@@ -2217,10 +2227,54 @@ class SettingsPage(QWidget):
             return
         self._add_device_cancel.setVisible(bool(self._tracked_installs()))
 
+    def _on_add_device_type_changed(self, *_):
+        """Refill Software when Type changes, hiding unsupported products."""
+        model = self._add_device_model.currentText().strip()
+        hw_type = self._add_device_type.currentData() or ""
+        current = self._selected_add_device_software()
+        names = catalog.software_names_for_model(model, hw_type=hw_type)
+        combo = self._add_device_software
+        combo.blockSignals(True)
+        combo.clear()
+        from .select_page import display_software_name
+
+        for name in names:
+            combo.addItem(display_software_name(name), name)
+        if current in names:
+            target = current
+        else:
+            # Keep Type visible after filtering by landing on a supported
+            # non-Original product rather than hiding the question behind
+            # Original Software.
+            target = next(
+                (name for name in names if not self._is_original_software(name)),
+                names[0] if names else "",
+            )
+        if target:
+            combo.setCurrentIndex(names.index(target))
+        self._add_device_software_filtered_type = hw_type
+        combo.blockSignals(False)
+        self._on_add_device_software_changed()
+
     def _on_add_device_software_changed(self, *_):
         """Fill Version from the live release list, fetched off the UI thread."""
-        model, _software, types, is_original = self._add_device_form_state()
+        model, software, types, is_original = self._add_device_form_state()
         self._sync_add_device_type_visibility()
+        if is_original and getattr(self, "_add_device_software_filtered_type", ""):
+            # Type is hidden while Original Software is chosen; restore the full
+            # model software list so Type A-only products are reachable again.
+            names = catalog.software_names_for_model(model)
+            combo = self._add_device_software
+            combo.blockSignals(True)
+            combo.clear()
+            from .select_page import display_software_name
+
+            for name in names:
+                combo.addItem(display_software_name(name), name)
+            if software in names:
+                combo.setCurrentIndex(names.index(software))
+            self._add_device_software_filtered_type = ""
+            combo.blockSignals(False)
         package = self._add_device_package()
         self._add_device_version.clear()
         if package is None:
@@ -2251,6 +2305,8 @@ class SettingsPage(QWidget):
     @staticmethod
     def _is_240p_release(rel) -> bool:
         """Whether a release row's own asset is the 240p variant."""
+        if bool((rel or {}).get("is_240p_rockbox")):
+            return True
         resolution = str((rel or {}).get("selected_resolution") or "").lower()
         asset = str((rel or {}).get("asset_name") or "").lower()
         return resolution == "240p" or "240p" in asset
@@ -2265,6 +2321,7 @@ class SettingsPage(QWidget):
         rockbox = bool(
             model in ("Y1", "Y2")
             and package is not None
+            and not getattr(package, "is_240p_rockbox", False)
             and "rockbox" in str(getattr(package, "name", "") or "").lower()
         )
         for rel in releases:

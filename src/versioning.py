@@ -724,7 +724,8 @@ def parse_clean_release_tag_label(
     # 240p / 360p. The suffix follows the row's own asset/resolution only: a
     # global prefer_240p flag must never mark 360p rows as 240p.
     is_240p = (
-        rel.get("selected_resolution") == "240p"
+        bool(rel.get("is_240p_rockbox"))
+        or rel.get("selected_resolution") == "240p"
         or "240p" in str(rel.get("asset_name", "")).lower()
         or "240p" in lower_raw
     )
@@ -745,6 +746,8 @@ def parse_clean_release_tag_label(
     )
 
     if is_240p:
+        if "360p" in verbs:
+            verbs.remove("360p")
         if "240p" not in verbs:
             verbs.append("240p")
     elif is_rockbox_y1_or_y2:

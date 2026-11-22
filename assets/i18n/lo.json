@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ເລືອກອຸປະກອນ Rockbox",
  "rockbox_select_device_prompt": "ຜູ້ນໃດທີ່ທ່ານກໍາລັງຕິດຕັ້ງຫົວຂໍ້ Rockbox ສໍາລັບ?",
  "rockbox_step2_connect_usb": "ແນບສາຍ USB ໃສ່ {model} ຂອງທ່ານ",
+ "rockbox_step2_connect_usb_storage": "ກະລຸນາເຊື່ອມຕໍ່ {model} ຂອງທ່ານດ້ວຍໂໝດໂອນຍ້າຍ USB",
  "rockbox_step_usb_storage_mode": "ກະລຸນາເປີດໃຊ້ຮູບແບບການເກັບຮັກສາ USB ໃນອຸປະກອນຂອງທ່ານ ແລະຄລິກຕໍ່ໄປ",
  "rockbox_step_usb_storage_folder": "ກະ​ລຸ​ນາ​ເປີດ​ໃຊ້​ງານ​ຮູບ​ແບບ​ການ​ເກັບ​ຮັກ​ສາ USB ໃນ {model}​ຂອງ​ທ່ານ​, ຫຼັງ​ຈາກ​ນັ້ນ​ເລືອກ​ເອົາ drive ທີ່​ປະ​ກົດ​ຂຶ້ນ​",
  "rockbox_step_select_player_folder": "ກະ​ລຸ​ນາ​ເລືອກ​ເອົາ​ຜູ້ນ​ຕົວ​ມັນ​ເອງ​ຫຼື​ຫນຶ່ງ​ໃນ​ໂຟນ​ເດີ​ກ່ຽວ​ກັບ​ມັນ​",

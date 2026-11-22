@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pik di Rɔkbɔks Divays",
  "rockbox_select_device_prompt": "Us pleya yu de instɔl Rɔkbɔks tim fɔ?",
  "rockbox_step2_connect_usb": "Ataya di USB kebul to yu {model} .",
+ "rockbox_step2_connect_usb_storage": "Duya kɔnɛkt yu {model} bay USB transfa mod",
  "rockbox_step_usb_storage_mode": "Duya, ɛnabul USB stɔrɔj ​​mɔd na yu divays ɛn klik Nɛks",
  "rockbox_step_usb_storage_folder": "Duya ɛnabul USB stɔrɔj ​​mɔd na yu {model}, dɔn pik di drayv we de apia",
  "rockbox_step_select_player_folder": "Duya pik di pleya insɛf ɔ wan pan di fɔlda dɛn we de pan am",

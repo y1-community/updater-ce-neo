@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Device इति चिनोतु",
  "rockbox_select_device_prompt": "भवान् कस्य खिलाडये Rockbox विषयवस्तुं संस्थापयति?",
  "rockbox_step2_connect_usb": "USB केबलं स्वस्य {model} .",
+ "rockbox_step2_connect_usb_storage": "कृपया स्वस्य {model} USB स्थानान्तरणविधानेन संयोजयन्तु",
  "rockbox_step_usb_storage_mode": "कृपया स्वयन्त्रे USB भण्डारणविधिं सक्षमं कृत्वा अग्रिमम् नुदतु",
  "rockbox_step_usb_storage_folder": "कृपया स्वस्य {model} इत्यत्र USB भण्डारणविधिं सक्षमं कुर्वन्तु, ततः यत् ड्राइव् दृश्यते तत् चिनोतु",
  "rockbox_step_select_player_folder": "कृपया प्लेयर् स्वयं वा तस्मिन् स्थापितानां पुटेषु एकं वा चिनोतु",

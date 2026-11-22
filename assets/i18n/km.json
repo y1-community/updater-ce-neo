@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ជ្រើសរើសឧបករណ៍ Rockbox",
  "rockbox_select_device_prompt": "តើអ្នកកំពុងដំឡើងស្បែក Rockbox សម្រាប់អ្នកលេងមួយណា?",
  "rockbox_step2_connect_usb": "ភ្ជាប់ខ្សែ USB ទៅនឹង {model} របស់អ្នក",
+ "rockbox_step2_connect_usb_storage": "សូមភ្ជាប់ {model} របស់អ្នកដោយរបៀបផ្ទេរ USB",
  "rockbox_step_usb_storage_mode": "សូមបើករបៀបផ្ទុក USB នៅលើឧបករណ៍របស់អ្នក ហើយចុច Next",
  "rockbox_step_usb_storage_folder": "សូមបើករបៀបផ្ទុក USB នៅលើ {model} របស់អ្នក បន្ទាប់មកជ្រើសរើស drive ដែលបង្ហាញ",
  "rockbox_step_select_player_folder": "សូមជ្រើសរើសអ្នកលេងខ្លួនឯង ឬថតមួយនៅលើវា។",

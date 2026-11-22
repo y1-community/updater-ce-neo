@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ئامێری ڕۆکبۆکس هەڵبژێرە",
  "rockbox_select_device_prompt": "بۆ کام یاریزان تەوەرەکانی ڕۆکبۆکس دادەمەزرێنیت؟",
  "rockbox_step2_connect_usb": "کەیبڵی USB بە {model} ـەکەتەوە ببەستە.",
+ "rockbox_step2_connect_usb_storage": "تکایە {model} ـەکەت بە دۆخی گواستنەوەی USB بەستنەوە",
  "rockbox_step_usb_storage_mode": "تکایە دۆخی هەڵگرتنی USB لەسەر ئامێرەکەت چالاک بکە و کرتە لە Next بکە",
  "rockbox_step_usb_storage_folder": "تکایە دۆخی هەڵگرتنی USB لەسەر {model}ەکەت چالاک بکە، پاشان ئەو درایوە هەڵبژێرە کە دەردەکەوێت",
  "rockbox_step_select_player_folder": "تکایە خودی پلەیەرەکە یان یەکێک لە فۆڵدەرەکانی سەری هەڵبژێرە",

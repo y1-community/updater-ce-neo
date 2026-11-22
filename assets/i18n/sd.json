@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "منتخب ڪريو Rockbox Device",
  "rockbox_select_device_prompt": "توهان ڪهڙي پليئر لاءِ Rockbox موضوعات انسٽال ڪري رهيا آهيو؟",
  "rockbox_step2_connect_usb": "USB ڪيبل کي پنھنجي {model} سان ڳنڍيو",
+ "rockbox_step2_connect_usb_storage": "مھرباني ڪري پنھنجي {model} کي USB منتقلي موڊ ذريعي ڳنڍيو",
  "rockbox_step_usb_storage_mode": "مھرباني ڪري پنھنجي ڊوائيس تي USB اسٽوريج موڊ کي فعال ڪريو ۽ ڪلڪ ڪريو اڳيون",
  "rockbox_step_usb_storage_folder": "مھرباني ڪري پنھنجي {model} تي USB اسٽوريج موڊ کي فعال ڪريو، پوءِ ظاهر ٿئي ٿو ڊرائيو چونڊيو",
  "rockbox_step_select_player_folder": "مھرباني ڪري پاڻ پليئر چونڊيو يا ان تي فولڊر مان ھڪڙو",

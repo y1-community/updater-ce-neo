@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleziona Dispositîf Rockbox",
  "rockbox_select_device_prompt": "Par cuâl zuiadôr stâs instalant i temis Rockbox?",
  "rockbox_step2_connect_usb": "Colegâ il câf USB al to {model}",
+ "rockbox_step2_connect_usb_storage": "Par plasê conetî il to {model} midiant de modalitât di trasferiment USB",
  "rockbox_step_usb_storage_mode": "Par plasê abilî la modalitât di archiviazion USB sul dispositîf e clicâ su Su",
  "rockbox_step_usb_storage_folder": "Par plasê abilî la modalitât di archiviazion USB sul to {model}, daspò sielzi la unitât che e viôt",
  "rockbox_step_select_player_folder": "Par plasê selezionâ il letôr stes o une des cjartis su di lui",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Рокбокс гӀирс хьажа .",
  "rockbox_select_device_prompt": "Муьлхачу плеерна лерина ю ахь Rockbox теманаш?",
  "rockbox_step2_connect_usb": "USB кабель хьай {model} .",
+ "rockbox_step2_connect_usb_storage": "Дехар ду хьай {model} USB передачийн режимца дӀасатоха",
  "rockbox_step_usb_storage_mode": "Дехар ду хьайн аппаратехь USB Ӏалашъяран режим дӀа а йиллина, Далее .",
  "rockbox_step_usb_storage_folder": "Дехар ду хьайн {model} тӀехь USB латторан режим дӀахӀоттае, тӀаккха гучуйолу диск харжа",
  "rockbox_step_select_player_folder": "Дехар ду ша плеер я цу тӀехь йолчу папкех цхьаъ схьахаржа .",

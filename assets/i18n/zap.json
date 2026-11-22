@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Biiyaʼ dispositivo Rockbox .",
  "rockbox_select_device_prompt": "¿Xi jugador nga cucaaluʼ tema stiʼ Rockbox?",
  "rockbox_step2_connect_usb": "Bicaa cable USB ca lu {model} stiluʼ .",
+ "rockbox_step2_connect_usb_storage": "Biʼniʼ conectar {model} stiluʼ pur modo transferencia USB .",
  "rockbox_step_usb_storage_mode": "Biʼniʼ activar modo almacenamiento USB lu dispositivo stiluʼ ne biʼniʼ clic lu Siguii .",
  "rockbox_step_usb_storage_folder": "Biʼniʼ activar modo almacenamiento USB lu {model} stiluʼ, despué biyubi unidad ni guihuinni .",
  "rockbox_step_select_player_folder": "Biyubi reproductor ca o tobi de ca carpeta ni nuu luni .",

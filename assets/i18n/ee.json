@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Tia Rockbox Dɔwɔnu",
  "rockbox_select_device_prompt": "Fefewɔla ka ŋue nèle Rockbox ƒe tanyawo ɖom na?",
  "rockbox_step2_connect_usb": "Kpe USB ka la ɖe wò {model} .",
+ "rockbox_step2_connect_usb_storage": "Taflatse tsɔ wò {model} do ka kple USB transfer mode",
  "rockbox_step_usb_storage_mode": "Taflatse na USB storage mode nawɔ dɔ le wò mɔ̃a dzi eye nàzi Next dzi",
  "rockbox_step_usb_storage_folder": "Taflatse na USB storage mode nawɔ dɔ le wò {model} dzi, emegbe nàtia drive si adze",
  "rockbox_step_select_player_folder": "Taflatse tia fefewɔla la ŋutɔ alo agbalẽdzraɖoƒe siwo le edzi la dometɔ ɖeka",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Selecteer Rockbox-apparaat",
  "rockbox_select_device_prompt": "Voor welke speler installeer je Rockbox-thema's?",
  "rockbox_step2_connect_usb": "Sluit de USB-kabel aan op uw {model}",
+ "rockbox_step2_connect_usb_storage": "Sluit uw {model} aan via de USB-overdrachtsmodus",
  "rockbox_step_usb_storage_mode": "Schakel de USB-opslagmodus in op uw apparaat en klik op Volgende",
  "rockbox_step_usb_storage_folder": "Schakel de USB-opslagmodus in op uw {model} en kies vervolgens de schijf die verschijnt",
  "rockbox_step_select_player_folder": "Selecteer de speler zelf of een van de mappen erop",

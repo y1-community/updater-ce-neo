@@ -52,15 +52,19 @@ def is_rockbox_dir(path) -> bool:
 def find_rockbox_dirs(
     selected: str | Path,
     *,
-    max_children: int = 32,
+    max_children: int = 64,
+    rockbox_folder_path: str = "",
 ) -> list[Path]:
     """Every ``.rockbox`` folder a picked player folder can resolve to.
 
     The picker shows a hidden ``.rockbox`` only when the OS allows it, so the
     user commonly picks the drive root, the ``sdcard`` folder, or a folder
-    inside it. Only the pick, its parents and a small number of immediate
-    children are inspected; nothing is created.
+    inside it. Only the pick, its parents, an optional manifest
+    ``rockbox_folder_path`` hint, and immediate children are inspected;
+    nothing is created.
     """
+    from .theme_sync import normalize_rockbox_folder_path
+
     try:
         base = Path(selected).expanduser()
     except (TypeError, ValueError):
@@ -77,6 +81,15 @@ def find_rockbox_dirs(
         # path; deleting it twice would report a folder that was already gone.
         if path not in found:
             found.append(path)
+
+    hint_rel = normalize_rockbox_folder_path(rockbox_folder_path)
+    if hint_rel:
+        hinted = base / hint_rel
+        if hinted.is_dir():
+            add(hinted)
+    sdcard_hint = base / "rockbox_sdcard" / ROCKBOX_DIR_NAME
+    if sdcard_hint.is_dir():
+        add(sdcard_hint)
 
     for candidate in [base, *base.parents]:
         if is_rockbox_dir(candidate) and candidate.is_dir():
@@ -193,9 +206,23 @@ class LocalRockboxCleanupWorker(QThread):
     log = Signal(str)
     finished = Signal(bool, str, int)  # success, message, count
 
-    def __init__(self, selected: str | Path, parent=None):
+    def __init__(
+        self,
+        selected: str | Path | list[str | Path],
+        parent=None,
+        *,
+        rockbox_folder_path: str = "",
+        skip_adb_reboot: bool = False,
+    ):
         super().__init__(parent)
-        self._selected = Path(selected)
+        if isinstance(selected, (list, tuple)):
+            self._selected_list = [Path(p) for p in selected if p]
+            self._selected = self._selected_list[0] if self._selected_list else Path("")
+        else:
+            self._selected = Path(selected)
+            self._selected_list = [self._selected]
+        self._rockbox_folder_path = str(rockbox_folder_path or "")
+        self._skip_adb_reboot = bool(skip_adb_reboot)
 
     def run(self):
         try:
@@ -203,7 +230,13 @@ class LocalRockboxCleanupWorker(QThread):
                 self.finished.emit(False, "Removing the old Rockbox folders was cancelled", 0)
                 return
             self.progress.emit(10, 100)
-            dirs = find_rockbox_dirs(self._selected)
+            dirs: list[Path] = []
+            for sel in self._selected_list:
+                for found in find_rockbox_dirs(
+                    sel, rockbox_folder_path=self._rockbox_folder_path
+                ):
+                    if found not in dirs:
+                        dirs.append(found)
             if dirs:
                 self.log.emit(
                     f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): "
@@ -219,17 +252,18 @@ class LocalRockboxCleanupWorker(QThread):
                 message = "No .rockbox folder was found in the selected folder"
                 count = 0
 
-            # Reboot device via ADB if binary is available so Rockbox populates a new .rockbox folder
-            from .adb import find_adb_binary, adb_devices, adb_reboot
-            adb_bin = find_adb_binary()
-            if adb_bin:
-                try:
-                    devs = adb_devices(adb_bin)
-                    if devs:
-                        self.log.emit(f"[Rockbox Cleanup] Automatically rebooting {devs[0]} via ADB so Rockbox can populate a new .rockbox folder...")
-                        adb_reboot(adb_bin, devs[0])
-                except Exception:
-                    pass
+            # Reboot device via ADB if binary is available (Android ports only)
+            if not self._skip_adb_reboot:
+                from .adb import find_adb_binary, adb_devices, adb_reboot
+                adb_bin = find_adb_binary()
+                if adb_bin:
+                    try:
+                        devs = adb_devices(adb_bin)
+                        if devs:
+                            self.log.emit(f"[Rockbox Cleanup] Automatically rebooting {devs[0]} via ADB so Rockbox can populate a new .rockbox folder...")
+                            adb_reboot(adb_bin, devs[0])
+                    except Exception:
+                        pass
 
             self.progress.emit(100, 100)
             self.finished.emit(ok, message, count)

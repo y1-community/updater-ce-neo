@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox デバイスの選択",
  "rockbox_select_device_prompt": "どのプレイヤーに Rockbox テーマをインストールしますか？",
  "rockbox_step2_connect_usb": "USB ケーブルを {model} に接続してください",
+ "rockbox_step2_connect_usb_storage": "{model} を USB 転送モードで接続してください",
  "rockbox_step_usb_storage_mode": "デバイスで USB ストレージモードを有効にして、次へをクリックしてください",
  "rockbox_step_usb_storage_folder": "{model} で USB ストレージモードを有効にしてから、表示されるドライブを選択してください",
  "rockbox_step_select_player_folder": "プレイヤー本体またはその中のいずれかのフォルダーを選択してください",

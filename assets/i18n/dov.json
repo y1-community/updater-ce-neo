@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sala chintu cha Rockbox",
  "rockbox_select_device_prompt": "Ino nguni sikusobana ngomubikkila mitwe ya Rockbox?",
  "rockbox_step2_connect_usb": "Kobikka ntambo ya USB ku {model} yako",
+ "rockbox_step2_connect_usb_storage": "Twalomba kuti ujatane {model} yako kwiinda mukubelesya nzila ya USB yakutola",
  "rockbox_step_usb_storage_mode": "Twalomba kuti uzumizye nzila yakubamba zintu aa USB aachibelesyo chako mpawo utyanke Chitobela",
  "rockbox_step_usb_storage_folder": "Twalomba kuti uzumizye USB storage mode a {model} yako, mpawo usale drive iilibonya",
  "rockbox_step_select_player_folder": "Twalomba kuti usale sikusobana wini naakuti imwi yamafooloda alinjiyo",

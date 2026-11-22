@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "د Rockbox وسیله غوره کړئ",
  "rockbox_select_device_prompt": "تاسو د کوم لوبغاړي لپاره د راک باکس موضوعات نصب کوئ؟",
  "rockbox_step2_connect_usb": "USB کیبل خپل {model} سره وصل کړئ",
+ "rockbox_step2_connect_usb_storage": "مهرباني وکړئ خپل {model} د USB لیږد حالت له لارې وصل کړئ",
  "rockbox_step_usb_storage_mode": "مهرباني وکړئ په خپل وسیله کې د USB ذخیره کولو حالت فعال کړئ او په بل کلیک وکړئ",
  "rockbox_step_usb_storage_folder": "مهرباني وکړئ په خپل {model} کې د USB ذخیره کولو حالت فعال کړئ، بیا هغه ډرایو غوره کړئ چې ښکاري",
  "rockbox_step_select_player_folder": "مهرباني وکړئ پخپله پلیر غوره کړئ یا په دې کې یو فولډر",

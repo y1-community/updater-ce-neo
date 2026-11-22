@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "בחר מכשיר Rockbox",
  "rockbox_select_device_prompt": "לאיזה נגן אתה מתקין ערכות נושא של Rockbox?",
  "rockbox_step2_connect_usb": "חבר את כבל ה-USB ל-{model} שלך",
+ "rockbox_step2_connect_usb_storage": "אנא חבר את {model} שלך באמצעות מצב העברת USB",
  "rockbox_step_usb_storage_mode": "הפעל את מצב אחסון USB במכשיר שלך ולחץ על הבא",
  "rockbox_step_usb_storage_folder": "הפעל את מצב אחסון USB ב-{model} שלך, ולאחר מכן בחר את הכונן שמופיע",
  "rockbox_step_select_player_folder": "אנא בחר את הנגן עצמו או אחת מהתיקיות שבו",

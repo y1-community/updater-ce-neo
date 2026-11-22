@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Londa Ekyuma kya Rockbox",
  "rockbox_select_device_prompt": "Muzannyi ki gw’oteeka emiramwa gya Rockbox?",
  "rockbox_step2_connect_usb": "Teeka waya ya USB ku {model} .",
+ "rockbox_step2_connect_usb_storage": "Nsaba oyunge {model} yo nga okozesa USB transfer mode",
  "rockbox_step_usb_storage_mode": "Nkusaba okole USB storage mode ku kyuma kyo era onyige Next",
  "rockbox_step_usb_storage_folder": "Nsaba okole USB storage mode ku {model} yo, olwo olonde drive eraga",
  "rockbox_step_select_player_folder": "Nsaba olonde omuzannyi yennyini oba emu ku folda eziriko",

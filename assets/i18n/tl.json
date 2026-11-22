@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Piliin ang Rockbox Device",
  "rockbox_select_device_prompt": "Aling player ka nag-i-install ng mga tema ng Rockbox?",
  "rockbox_step2_connect_usb": "Ikabit ang USB cable sa iyong {model}",
+ "rockbox_step2_connect_usb_storage": "Pakikonekta ang iyong {model} sa pamamagitan ng USB transfer mode",
  "rockbox_step_usb_storage_mode": "Mangyaring paganahin ang USB storage mode sa iyong device at i-click ang Susunod",
  "rockbox_step_usb_storage_folder": "Paki-enable ang USB storage mode sa iyong {model}, pagkatapos ay piliin ang drive na lalabas",
  "rockbox_step_select_player_folder": "Mangyaring piliin ang player mismo o ang isa sa mga folder dito",

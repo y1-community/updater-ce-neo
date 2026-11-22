@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Eiporavo Dispositivo Rockbox rehegua",
  "rockbox_select_device_prompt": "Mba’e jugador-pe g̃uarãpa reinstala umi tema Rockbox rehegua?",
  "rockbox_step2_connect_usb": "Emoĩ pe cable USB nde {model} .",
+ "rockbox_step2_connect_usb_storage": "Embojoaju nde {model} USB ñembohasa rupive",
  "rockbox_step_usb_storage_mode": "Emboguata USB ñeñongatuha reko ne tembipuru’ípe ha eñemboguejy Siguiente-pe",
  "rockbox_step_usb_storage_folder": "Emboguata USB ñeñongatuha reko nde {model}-pe, upéi eiporavo pe unidad ojehechaukáva",
  "rockbox_step_select_player_folder": "Eiporavo pe reproductor voi térã peteĩva umi carpeta oĩva hese",

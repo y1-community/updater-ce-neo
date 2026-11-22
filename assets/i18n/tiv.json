@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Tsua kwagh u Rockbox .",
  "rockbox_select_device_prompt": "Ka nyi i lu eren tom a Rockbox themes?",
  "rockbox_step2_connect_usb": "Ka u eren tom a USB la sha {model} wou .",
+ "rockbox_step2_connect_usb_storage": "We a rumun yô, zua a {model} wou sha gbenda u eren tom a USB.",
  "rockbox_step_usb_storage_mode": "We a rumun yô, bugh gbenda u koson akaa a USB sha ikyagh you ki tomough la, nahan kighir Next .",
  "rockbox_step_usb_storage_folder": "We a rumun yô, bugh gbenda u koson akaa a USB sha {model} wou, maa tsua kwagh u a lu duen la .",
  "rockbox_step_select_player_folder": "We a rumun yô, tsua kwagh u eren anumbe la iyol na shin môm ken ufolda mba ve lu sha mi la .",

@@ -676,6 +676,7 @@
  "rockbox_step1_disconnect_power_on": "Please disconnect and power on your {model}, then press Next",
  "rockbox_step1_power_on_button": "Disconnect USB, hold the {button} to power on your {model}, then press Next.",
  "rockbox_step2_connect_usb": "Please connect your {model} by USB",
+ "rockbox_step2_connect_usb_storage": "Please connect your {model} by USB transfer mode",
  "rockbox_step_select_player_folder": "Please select the player itself or one of the folders on it",
  "rockbox_step_usb_storage_folder": "Please enable USB storage mode on your {model}, then choose the drive that appears",
  "rockbox_step_usb_storage_mode": "Please enable USB storage mode on your device and click Next",

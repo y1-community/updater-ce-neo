@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "E koho i ka mea hana Rockbox",
  "rockbox_select_device_prompt": "ʻO wai ka mea pāʻani āu e kau nei i nā kumumanaʻo Rockbox?",
  "rockbox_step2_connect_usb": "E hoʻopili i ke kaula USB i kāu {model}",
+ "rockbox_step2_connect_usb_storage": "E ʻoluʻolu e hoʻopili i kāu {model} ma ke ʻano hoʻoili USB",
  "rockbox_step_usb_storage_mode": "E ʻoluʻolu e hoʻohana i ke ʻano waihona USB ma kāu kelepona a kaomi Next",
  "rockbox_step_usb_storage_folder": "E ʻoluʻolu e hoʻohana i ke ʻano hoʻopaʻa USB ma kāu {model}, a laila koho i ka drive e ʻike ʻia",
  "rockbox_step_select_player_folder": "E ʻoluʻolu e koho i ka mea pāʻani ponoʻī a i ʻole kekahi o nā waihona ma luna",

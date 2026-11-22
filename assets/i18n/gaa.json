@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Halamɔ Rockbox Nibii",
  "rockbox_select_device_prompt": "Mɛɛ shwɛlɔ okɛ Rockbox themes lɛ woɔ mli?",
  "rockbox_step2_connect_usb": "Kɛ USB kpã lɛ afata o {model} lɛ he",
+ "rockbox_step2_connect_usb_storage": "Ofainɛ, kɛ o {model} lɛ atsake kɛtsɔ USB tsɔne ni akɛyaa he kroko lɛ nɔ",
  "rockbox_step_usb_storage_mode": "Ofainɛ, ha USB nitoohe lɛ atsu nii yɛ otsɔne lɛ nɔ ni onyɛ Next nɔ",
  "rockbox_step_usb_storage_folder": "Ofainɛ, ha USB nitoohe lɛ atsu nii yɛ o {model} lɛ nɔ, ni halamɔ draiva ni baa lɛ",
  "rockbox_step_select_player_folder": "Ofainɛ halamɔ shwɛmɔ lɛ diɛŋtsɛ loo folda ni yɔɔ nɔ lɛ ateŋ ekome",

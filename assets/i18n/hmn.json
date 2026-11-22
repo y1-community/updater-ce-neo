@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Xaiv Rockbox Device",
  "rockbox_select_device_prompt": "Tus neeg uas ua ntawv yog koj txhim kho Rockbox ntxhais rau?",
  "rockbox_step2_connect_usb": "Txuas lub USB cable rau koj {model}",
+ "rockbox_step2_connect_usb_storage": "Thov txuas koj {model} los ntawm USB hloov hom",
  "rockbox_step_usb_storage_mode": "Thov qhib USB cia hom ntawm koj lub cuab yeej thiab nyem Next",
  "rockbox_step_usb_storage_folder": "Thov qhib USB cia hom ntawm koj {model}, tom qab ntawd xaiv lub tsav uas tshwm",
  "rockbox_step_select_player_folder": "Thov xaiv tus neeg uas ua ntawv nws tus kheej lossis ib qho ntawm cov folders ntawm nws",

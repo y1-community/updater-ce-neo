@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pasirinkite „Rockbox“ įrenginį",
  "rockbox_select_device_prompt": "Kuriam grotuvui diegiate Rockbox temas?",
  "rockbox_step2_connect_usb": "Prijunkite USB kabelį prie savo {model}",
+ "rockbox_step2_connect_usb_storage": "Prijunkite {model} naudodami USB perdavimo režimą",
  "rockbox_step_usb_storage_mode": "Įjunkite USB atmintinės režimą savo įrenginyje ir spustelėkite Pirmyn",
  "rockbox_step_usb_storage_folder": "Įgalinkite USB atmintinės režimą {model}, tada pasirinkite pasirodžiusį diską",
  "rockbox_step_select_player_folder": "Pasirinkite patį grotuvą arba vieną iš jame esančių aplankų",

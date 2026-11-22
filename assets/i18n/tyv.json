@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox херекселди шилип алыңар",
  "rockbox_select_device_prompt": "Кайы ойнакчыга Rockbox темаларын тургузуп турар силер?",
  "rockbox_step2_connect_usb": "USB кабельди {model}-че кожуп алыңар",
+ "rockbox_step2_connect_usb_storage": "{model}-ни USB дамчыдылга режими-биле кожуп алыңар",
  "rockbox_step_usb_storage_mode": "Хереглелиңерде USB-сактыры режимин ажылдадыпкаш, Дараазында базыптыңар",
  "rockbox_step_usb_storage_folder": "{model}-де USB-хранилище режимин ажылдадып алгаш, көстүп кээр дискини шилип алыңар",
  "rockbox_step_select_player_folder": "Ойнакчының бодун азы ында папкаларның бирээзин шилип алыңар",

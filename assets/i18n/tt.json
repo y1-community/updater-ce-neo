@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Рокбокс җайланмасын сайлагыз",
  "rockbox_select_device_prompt": "Кайсы плейер өчен Рокбокс темаларын урнаштырасыз?",
  "rockbox_step2_connect_usb": "USB кабелен {model} белән бәйләгез",
+ "rockbox_step2_connect_usb_storage": "Зинһар, {model}ны USB тапшыру режимы белән тоташтырыгыз",
  "rockbox_step_usb_storage_mode": "Зинһар, җайланмагызда USB саклау режимын эшләгез һәм \"Киләсе\" төймәсенә басыгыз",
  "rockbox_step_usb_storage_folder": "Please enable USB storage mode on your {model}, then choose the drive that appears",
  "rockbox_step_select_player_folder": "Зинһар, плеерның үзен яки андагы папкаларның берсен сайлагыз",

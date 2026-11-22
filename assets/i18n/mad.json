@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pèlè Perangkat Rockbox",
  "rockbox_select_device_prompt": "ghâbây pemain sè kemma sè èpasang tema Rockbox?",
  "rockbox_step2_connect_usb": "Pasang kabel USB ka {model}",
+ "rockbox_step2_connect_usb_storage": "Ngereng sambungaghi {model} kalabân mode transfer USB",
  "rockbox_step_usb_storage_mode": "Ngereng aktifaghi mode panyempenan USB è perangkat bân klik Saterrossa",
  "rockbox_step_usb_storage_folder": "Ngereng aktifaghi mode panyempenan USB è {model}, terros pilih drive sè muncul",
  "rockbox_step_select_player_folder": "Ngereng pilih pemain dhibi' otabâ sala sèttong folder sè bâdâ è attas",

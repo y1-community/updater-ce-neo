@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox minɛn sugandi .",
  "rockbox_select_device_prompt": "I be Rockbox ka barokunw donna tulonkɛla juman lo kama?",
  "rockbox_step2_connect_usb": "Aw ye USB juru siri aw ka {model} .",
+ "rockbox_step2_connect_usb_storage": "Aw k'aw ka {model} nɔrɔ ɲɔgɔn na ni USB ye",
  "rockbox_step_usb_storage_mode": "Aw ka USB maracogo yɛlɛma aw ka ɔridinatɛri kɔnɔ ani ka Next digi .",
  "rockbox_step_usb_storage_folder": "Aw ka USB maracogo lawuli aw ka {model} kan, o kɔ, diski min be bɔ, o sugandi .",
  "rockbox_step_select_player_folder": "Aw k’o tulonkɛla yɛrɛ sugandi wala a ka dosiye dɔ sugandi .",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Yer Rockbox Device",
  "rockbox_select_device_prompt": "Ibe ketho Rockbox themes pi jatug makani?",
  "rockbox_step2_connect_usb": "Med waya mi USB i {model} peri",
+ "rockbox_step2_connect_usb_storage": "Kwayo iketh {model} peri ku USB transfer mode",
  "rockbox_step_usb_storage_mode": "Kwayo iket USB storage mode iwi cim peri man igud Next",
  "rockbox_step_usb_storage_folder": "Kwayo iket USB storage mode iwi {model} peri, man iyer drive ma biwok",
  "rockbox_step_select_player_folder": "Kwayo iyer jatug ne gire nyo acel ikin folda ma iye",

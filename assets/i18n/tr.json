@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox Cihazını Seçin",
  "rockbox_select_device_prompt": "Rockbox temalarını hangi oyuncu için yüklüyorsunuz?",
  "rockbox_step2_connect_usb": "USB kablosunu {model} cihazınıza takın",
+ "rockbox_step2_connect_usb_storage": "Lütfen {model} cihazınızı USB aktarım moduyla bağlayın",
  "rockbox_step_usb_storage_mode": "Lütfen cihazınızda USB depolama modunu etkinleştirin ve İleri'ye tıklayın.",
  "rockbox_step_usb_storage_folder": "Lütfen {model} cihazınızda USB depolama modunu etkinleştirin, ardından görünen sürücüyü seçin",
  "rockbox_step_select_player_folder": "Lütfen oynatıcının kendisini veya içindeki klasörlerden birini seçin",

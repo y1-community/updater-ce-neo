@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox төхөөрөмжийг сонгоно уу",
  "rockbox_select_device_prompt": "Та аль тоглогчдоо зориулж Rockbox-ийн загваруудыг суулгаж байна вэ?",
  "rockbox_step2_connect_usb": "USB кабелийг {model}-д холбоно уу",
+ "rockbox_step2_connect_usb_storage": "{model}-г USB дамжуулах горимоор холбоно уу",
  "rockbox_step_usb_storage_mode": "Төхөөрөмж дээрээ USB санах ойн горимыг идэвхжүүлээд Next дарна уу",
  "rockbox_step_usb_storage_folder": "{model} дээрээ USB хадгалах горимыг идэвхжүүлж, гарч ирэх драйвераа сонгоно уу",
  "rockbox_step_select_player_folder": "Тоглогчийг өөрөө эсвэл түүн дээрх фолдеруудаас сонгоно уу",

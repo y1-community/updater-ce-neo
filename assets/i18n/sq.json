@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Zgjidhni pajisjen Rockbox",
  "rockbox_select_device_prompt": "Për cilin lojtar po instaloni temat e Rockbox?",
  "rockbox_step2_connect_usb": "Lidhni kabllon USB në {model} tuaj",
+ "rockbox_step2_connect_usb_storage": "Lidhni mënyrën tuaj të transferimit {model} me USB",
  "rockbox_step_usb_storage_mode": "Ju lutemi aktivizoni modalitetin e ruajtjes USB në pajisjen tuaj dhe klikoni Tjetër",
  "rockbox_step_usb_storage_folder": "Aktivizo modalitetin e ruajtjes USB në {model} dhe më pas zgjidh diskun që shfaqet",
  "rockbox_step_select_player_folder": "Ju lutemi zgjidhni vetë luajtësin ose një nga dosjet në të",

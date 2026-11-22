@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox ӱзгарым ойырен налза",
  "rockbox_select_device_prompt": "Rockbox теме-влакым могай модшолан шындет?",
  "rockbox_step2_connect_usb": "USB кабельым шке {model} деке ушыза",
+ "rockbox_step2_connect_usb_storage": "Пожалуйста, тендан {model} USB кусарыме режим дене ушен",
  "rockbox_step_usb_storage_mode": "Пожалуйста, тендан ӱзгарыште USB-наклыме режимым пурто да Умбакыже темдалза",
  "rockbox_step_usb_storage_folder": "Пожалуйста, тендан {model}-лан USB-наклыме режимым пурто, вара лекше дискым ойырен налза",
  "rockbox_step_select_player_folder": "Пожалуйста, модшо шке але тудын ӱмбалне ик папкым ойырен налза",

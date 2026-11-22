@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Pilia an Rockbox nga Gamit .",
  "rockbox_select_device_prompt": "Hain nga magdudumara an imo ginbubutangan hin mga tema nga Rockbox?",
  "rockbox_step2_connect_usb": "Ibutang an USB nga kable ha imo {model} .",
+ "rockbox_step2_connect_usb_storage": "Alayon pagsumpay han imo {model} pinaagi han USB nga pagbalhin nga paagi .",
  "rockbox_step_usb_storage_mode": "Alayon i-aktibo an USB nga paagi han pagtipig ha imo aparato ngan i-klik an Sunod .",
  "rockbox_step_usb_storage_folder": "Alayon pag-aktibo han USB nga pagtipig han paagi ha imo {model}, katapos pilia an drive nga makikita .",
  "rockbox_step_select_player_folder": "Alayon pilia an magdudumara mismo o an usa han mga folder dida hito .",

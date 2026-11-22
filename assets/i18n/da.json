@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Vælg Rockbox-enhed",
  "rockbox_select_device_prompt": "Hvilken afspiller installerer du Rockbox-temaer til?",
  "rockbox_step2_connect_usb": "Tilslut USB-kablet til din {model}",
+ "rockbox_step2_connect_usb_storage": "Tilslut venligst din {model} med USB-overførselstilstand",
  "rockbox_step_usb_storage_mode": "Aktiver USB-lagringstilstand på din enhed, og klik på Næste",
  "rockbox_step_usb_storage_folder": "Aktiver venligst USB-lagringstilstand på din {model}, og vælg derefter det drev, der vises",
  "rockbox_step_select_player_folder": "Vælg venligst selve afspilleren eller en af ​​mapperne på den",

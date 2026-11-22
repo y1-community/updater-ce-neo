@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Naura Rockboxbe karne",
  "rockbox_select_device_prompt": "Player ndaso nankaro Rockbox themes dəga yitagattəyin?",
  "rockbox_step2_connect_usb": "Kebul USBbedə {model} nanzəro ikko",
+ "rockbox_step2_connect_usb_storage": "Martəgəne {model} dəga USB lan kəlne",
  "rockbox_step_usb_storage_mode": "Martəgəne futu USB gənatəyedə nauranzən fəlezə kuru Fuwuro ratne",
  "rockbox_step_usb_storage_folder": "Martəgəne USB gənatəram {model} lan yitagattəgə, daji drive do fəlejin dəga karne",
  "rockbox_step_select_player_folder": "Martəgəne player kəlanzə au folda fal kəlanzən karne",

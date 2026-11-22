@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Sik’ ru li k’anjeleb’aal Rockbox .",
  "rockbox_select_device_prompt": "B’ar wan reheb’ li aj b’atz’unel yookat chixk’eeb’al li tema re Rockbox?",
  "rockbox_step2_connect_usb": "K’e li cable USB sa’ laa {model} .",
+ "rockbox_step2_connect_usb_storage": "B’aanu usilal, k’e laa {model} rik’in li modo de transferencia USB .",
  "rockbox_step_usb_storage_mode": "B’aanu usilal, k’e chi k’anjelak li modo de almacenamiento USB sa’ laa k’anjeleb’aal ut b’on li Next .",
  "rockbox_step_usb_storage_folder": "B’aanu usilal, k’e chi k’anjelak li modo de almacenamiento USB sa’ laa {model}, toja’ naq taasik’ ru li unidad li nak’utun .",
  "rockbox_step_select_player_folder": "B’aanu usilal, sik’ ru li reproductor a’an ajwi’ malaj jun reheb’ li carpeta li wan chiru .",

@@ -22,6 +22,8 @@ if str(ROOT) not in sys.path:
 from PySide6.QtCore import QThread, Signal  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from src import catalog  # noqa: E402
+from src.catalog import FirmwarePackage  # noqa: E402
 from src.ui import settings_page as settings_mod  # noqa: E402
 from src.ui.main_window import MainWindow, _PAGE_SETTINGS  # noqa: E402
 
@@ -207,4 +209,56 @@ def test_done_and_add_another_appear_after_the_first_player(monkeypatch):
         assert not page._onboarding_more.isHidden()
     finally:
         page.end_onboarding()
+        _close(win)
+
+
+def test_type_b_hides_type_a_only_240p_software(monkeypatch):
+    """A Type B player must not offer software published only for Type A."""
+    app, win = _window()
+    page = win._settings_page
+    saved = list(catalog.LIVE_CATALOG)
+    workers.clear()
+    monkeypatch.setattr(settings_mod, "_AddDeviceReleasesWorker", _RecordingWorker)
+    try:
+        catalog.set_live_catalog([
+            FirmwarePackage(
+                "original-y1", "Original Software", "Y1",
+                "y1-community/y1-stock-rom", "rom.zip",
+            ),
+            FirmwarePackage(
+                "rockbox-y1", "Rockbox", "Y1",
+                "rockbox-y1/rockbox", "rom.zip",
+            ),
+            FirmwarePackage(
+                "nugget-y1", "Nugget (Rockbox 240p)", "Y1",
+                "norocoral/nugget-y1", "rom.zip", is_240p_rockbox=True,
+            ),
+        ])
+        page._open_add_device_panel()
+        page._add_device_model.setCurrentIndex(page._add_device_model.findText("Y1"))
+        rockbox = page._add_device_software.findText("Rockbox")
+        assert rockbox >= 0
+        page._add_device_software.setCurrentIndex(rockbox)
+        _events(app)
+        assert not page._add_device_type.isHidden()
+
+        page._add_device_type.setCurrentIndex(page._add_device_type.findData("B"))
+        _events(app)
+        type_b_names = [
+            page._add_device_software.itemData(i)
+            for i in range(page._add_device_software.count())
+        ]
+        assert "Nugget (Rockbox 240p)" not in type_b_names
+        assert "Rockbox" in type_b_names
+
+        page._add_device_type.setCurrentIndex(page._add_device_type.findData("A"))
+        _events(app)
+        type_a_names = [
+            page._add_device_software.itemData(i)
+            for i in range(page._add_device_software.count())
+        ]
+        assert "Nugget (Rockbox 240p)" in type_a_names
+    finally:
+        catalog.set_live_catalog(saved)
+        page._hide_add_device_panel()
         _close(win)

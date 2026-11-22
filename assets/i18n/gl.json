@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Seleccione Dispositivo Rockbox",
  "rockbox_select_device_prompt": "Para que reprodutor estás instalando temas de Rockbox?",
  "rockbox_step2_connect_usb": "Conecte o cable USB ao seu {model}",
+ "rockbox_step2_connect_usb_storage": "Conecta o teu {model} mediante o modo de transferencia USB",
  "rockbox_step_usb_storage_mode": "Activa o modo de almacenamento USB no teu dispositivo e fai clic en Seguinte",
  "rockbox_step_usb_storage_folder": "Activa o modo de almacenamento USB no teu {model} e despois escolle a unidade que aparece",
  "rockbox_step_select_player_folder": "Selecciona o propio reprodutor ou un dos cartafoles del",

@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Suɓo Kaɓirgal Rockbox",
  "rockbox_select_device_prompt": "Hol player mo njiɗ-ɗaa waɗde tiitooɗe Rockbox?",
  "rockbox_step2_connect_usb": "Jokkondira kaɓirgal USB ngal e {model} maa .",
+ "rockbox_step2_connect_usb_storage": "Jokku {model} maa e mbaadi jokkondire USB",
  "rockbox_step_usb_storage_mode": "Tiiɗno, softin mbaadi mooftirgel USB e kaɓirgol maa, ɓuɗɗu e Ko arata",
  "rockbox_step_usb_storage_folder": "Tiiɗno, softin mbaadi mooftirgel USB e {model} maa, caggal ɗuum suɓo diski peeñɗo oo",
  "rockbox_step_select_player_folder": "Suɓo pijirlooji ɗii e hoore mum walla gooto e foldereeji gonɗi e mum ɗii",

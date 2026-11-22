@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "ਰਾਕਬਾਕਸ ਡਿਵਾਈਸ ਚੁਣੋ",
  "rockbox_select_device_prompt": "ਤੁਸੀਂ ਕਿਸ ਖਿਡਾਰੀ ਲਈ ਰਾਕਬਾਕਸ ਥੀਮ ਸਥਾਪਤ ਕਰ ਰਹੇ ਹੋ?",
  "rockbox_step2_connect_usb": "USB ਕੇਬਲ ਨੂੰ ਆਪਣੇ {model} ਨਾਲ ਨੱਥੀ ਕਰੋ",
+ "rockbox_step2_connect_usb_storage": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੇ {model} ਨੂੰ USB ਟ੍ਰਾਂਸਫਰ ਮੋਡ ਰਾਹੀਂ ਕਨੈਕਟ ਕਰੋ",
  "rockbox_step_usb_storage_mode": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਡਿਵਾਈਸ 'ਤੇ USB ਸਟੋਰੇਜ ਮੋਡ ਨੂੰ ਸਮਰੱਥ ਬਣਾਓ ਅਤੇ ਅੱਗੇ 'ਤੇ ਕਲਿੱਕ ਕਰੋ",
  "rockbox_step_usb_storage_folder": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੇ {model} 'ਤੇ USB ਸਟੋਰੇਜ ਮੋਡ ਨੂੰ ਸਮਰੱਥ ਬਣਾਓ, ਫਿਰ ਦਿਖਾਈ ਦੇਣ ਵਾਲੀ ਡਰਾਈਵ ਨੂੰ ਚੁਣੋ",
  "rockbox_step_select_player_folder": "ਕਿਰਪਾ ਕਰਕੇ ਖੁਦ ਪਲੇਅਰ ਜਾਂ ਇਸ 'ਤੇ ਫੋਲਡਰਾਂ ਵਿੱਚੋਂ ਇੱਕ ਚੁਣੋ",

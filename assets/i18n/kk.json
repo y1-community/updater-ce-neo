@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Rockbox құрылғысын таңдаңыз",
  "rockbox_select_device_prompt": "Rockbox тақырыптарын қай ойыншыға орнатып жатырсыз?",
  "rockbox_step2_connect_usb": "USB кабелін {model} құрылғысына жалғаңыз",
+ "rockbox_step2_connect_usb_storage": "{model} құрылғыңызды USB тасымалдау режимі арқылы қосыңыз",
  "rockbox_step_usb_storage_mode": "Құрылғыда USB сақтау режимін қосып, «Келесі» түймесін басыңыз",
  "rockbox_step_usb_storage_folder": "{model} құрылғыңызда USB сақтау режимін қосыңыз, содан кейін пайда болатын дискіні таңдаңыз",
  "rockbox_step_select_player_folder": "Ойнатқыштың өзін немесе ондағы қалталардың бірін таңдаңыз",

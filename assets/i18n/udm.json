@@ -1054,6 +1054,7 @@
  "rockbox_select_device_title": "Быръе Rockbox устройство",
  "rockbox_select_device_prompt": "Кыӵе шудӥсь понна тон пуктӥськод Rockbox темаосты?",
  "rockbox_step2_connect_usb": "USB-кабель {model}-лы юнматэ",
+ "rockbox_step2_connect_usb_storage": "Пожалуйста, тӥляд {model}-дэс USB-передача режимын герӟалэ",
  "rockbox_step_usb_storage_mode": "Пожалуйста, тӥляд устройстводы вылын USB-хранение режимез лэзе но «Далее» кнопкаез зӥбе",
  "rockbox_step_usb_storage_folder": "Пожалуйста, лэзе USB-хранение режимез тӥляд {model}, собере быръе диск, кудзэ потоз",
  "rockbox_step_select_player_folder": "Пожалуйста, быръе ачиз шудӥсь яке со вылын одӥг папка",
