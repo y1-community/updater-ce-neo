@@ -558,18 +558,36 @@ def _media_rw_counterpart(path: str) -> str:
     return f"/storage/{match.group(1)}/.rockbox" if match else ""
 
 
-def _dedupe_rockbox_dirs(paths: list[str]) -> list[str]:
-    """One entry per physical storage: a bind mount must not be pushed twice.
+def _is_android_vold_staging_path(path: str) -> bool:
+    """True for Android internal VOLD staging bind-mounts such as /mnt/secure/staging/.rockbox."""
+    norm = str(path or "").strip().rstrip("/")
+    return norm.startswith("/mnt/secure/")
 
-    Android exposes the same card as ``/storage/sdcard0`` and
-    ``/mnt/media_rw/sdcard0``. Pushing into both doubled the transfer time
-    and made the verification list look like it had duplicate targets.
+
+def _dedupe_rockbox_dirs(paths: list[str]) -> list[str]:
+    """One entry per physical storage: bind mounts must not be pushed twice.
+
+    Android exposes the same card under multiple mount points:
+    ``/storage/sdcard0``, ``/mnt/media_rw/sdcard0``, and VOLD's internal
+    ``/mnt/secure/staging``. Pushing into bind-mount aliases doubles transfer
+    time and can race VOLD mount setup during boot.
     """
-    available = set(paths)
+    cleaned = [p.rstrip("/") for p in paths if str(p or "").strip()]
+    non_staging = [p for p in cleaned if not _is_android_vold_staging_path(p)]
+    candidates = non_staging if non_staging else cleaned
+    available = set(candidates)
+    has_primary_emulated = bool(
+        available.intersection({"/storage/emulated/0/.rockbox", "/storage/sdcard0/.rockbox", "/sdcard/.rockbox"})
+    )
     unique: list[str] = []
-    for path in paths:
+    for path in candidates:
         counterpart = _media_rw_counterpart(path)
         if counterpart and counterpart in available:
+            continue
+        if has_primary_emulated and path in (
+            "/mnt/shell/emulated/0/.rockbox",
+            "/storage/emulated/legacy/.rockbox",
+        ):
             continue
         if path not in unique:
             unique.append(path)
@@ -585,6 +603,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
             *_target(serial),
             "shell",
             'for p in /storage/*/.rockbox /sdcard/.rockbox /mnt/*/.rockbox /mnt/*/*/.rockbox /data/.rockbox; do '
+            'case "$p" in /mnt/secure/*) continue;; esac; '
             '[ -d "$p" ] && (cd "$p" 2>/dev/null && pwd -P || readlink -f "$p" 2>/dev/null || echo "$p"); done',
             timeout=15,
         )
@@ -594,6 +613,7 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
                 if (
                     line
                     and line.startswith("/")
+                    and not _is_android_vold_staging_path(line)
                     and line not in found
                     and "No such" not in line
                     and "not found" not in line
@@ -880,13 +900,28 @@ def adb_push_merge(
     device_dir: str,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
+    *,
+    only_rel_paths: Optional[set[str]] = None,
+    log_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[bool, str]:
     """Push ``local_dir`` contents into ``device_dir``, overwriting same-name
-    files with granular batch-level progress reporting and robust fallbacks."""
+    files with granular batch-level progress reporting and robust fallbacks.
+
+    Always aims to overwrite existing files (including trying ``rm -f`` + push
+    once when a direct overwrite fails). If a specific file still cannot be
+    overwritten yet already exists on the device, that existing file is skipped
+    rather than failing and repeating the entire transfer.
+    """
     local = Path(local_dir)
     if not local.is_dir():
         return False, f"Local theme directory not found: {local}"
     files = sorted(p for p in local.rglob("*") if p.is_file())
+    if only_rel_paths is not None:
+        wanted = {str(r).replace("\\", "/").lstrip("/").casefold() for r in only_rel_paths}
+        files = [
+            p for p in files
+            if p.relative_to(local).as_posix().casefold() in wanted
+        ]
     total_files = len(files)
     if total_files == 0:
         if progress_cb is not None:
@@ -932,7 +967,16 @@ def adb_push_merge(
 
     BATCH_SIZE = 25
     done = 0
+    skipped_existing = 0
+    consecutive_missing_errors = 0
     errors: list[str] = []
+
+    def _emit_log(message: str) -> None:
+        if log_cb is not None:
+            try:
+                log_cb(message)
+            except Exception:
+                pass
 
     for rel_dir, flist in files_by_dir.items():
         if _cancelled(cancel_cb):
@@ -966,6 +1010,7 @@ def adb_push_merge(
 
             if proc is not None and proc.returncode == 0:
                 done += len(batch)
+                consecutive_missing_errors = 0
                 _progress(progress_cb, done, total_files)
             elif proc is not None and proc.returncode == 130:
                 return False, "Theme transfer cancelled"
@@ -998,10 +1043,66 @@ def adb_push_merge(
                         )
                         if single_proc.returncode == 0:
                             done += 1
+                            consecutive_missing_errors = 0
                         elif single_proc.returncode == 130:
                             return False, "Theme transfer cancelled"
                         else:
-                            errors.append(f"{rel}: {(single_proc.stderr or single_proc.stdout or '').strip()}")
+                            # Aim to overwrite first: try removing the existing destination
+                            # once (handles read-only / FAT32 overwrite blocks) and retry push.
+                            overwrote = False
+                            try:
+                                _run_adb(
+                                    adb,
+                                    *_target(serial),
+                                    "shell",
+                                    f"rm -f {_shell_quote(dest_path)} 2>/dev/null || true",
+                                    timeout=15,
+                                )
+                                retry_proc = _run_adb_push_with_progress(
+                                    adb,
+                                    serial,
+                                    src,
+                                    dest_path,
+                                    progress_cb=lambda p, base=done: _progress(
+                                        progress_cb, min(total_files, base + p / 100), total_files
+                                    ),
+                                    cancel_cb=cancel_cb,
+                                    timeout=600,
+                                )
+                                if retry_proc.returncode == 0:
+                                    done += 1
+                                    consecutive_missing_errors = 0
+                                    overwrote = True
+                                elif retry_proc.returncode == 130:
+                                    return False, "Theme transfer cancelled"
+                            except Exception:
+                                pass
+
+                            if not overwrote:
+                                # If the file is already on the player and simply couldn't be
+                                # overwritten, skip it rather than failing & repeating everything.
+                                if adb_shell_ls(adb, serial, dest_path):
+                                    done += 1
+                                    skipped_existing += 1
+                                    consecutive_missing_errors = 0
+                                    logger.info(
+                                        "Skipped existing theme file that could not be overwritten: %s",
+                                        rel,
+                                    )
+                                    _emit_log(
+                                        f"[Rockbox Themes] Kept existing {rel} (could not overwrite)."
+                                    )
+                                else:
+                                    err_txt = (single_proc.stderr or single_proc.stdout or "").strip()
+                                    errors.append(f"{rel}: {err_txt}")
+                                    consecutive_missing_errors += 1
+                                    if consecutive_missing_errors >= 3:
+                                        live = adb_devices(adb, timeout=3.0)
+                                        if str(serial) not in live:
+                                            return (
+                                                False,
+                                                "USB connection to the player was lost over ADB (device not found).",
+                                            )
                     except Exception as e:
                         if _cancelled(cancel_cb):
                             return False, "Theme transfer cancelled"
@@ -1010,6 +1111,11 @@ def adb_push_merge(
 
     if errors:
         return False, f"{done}/{total_files} files pushed; issues: {'; '.join(errors[:5])}"
+    if skipped_existing:
+        return (
+            True,
+            f"Skipped {skipped_existing} existing file(s) that could not be overwritten",
+        )
     return True, ""
 
 

@@ -317,8 +317,9 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         layout = fp._appeal.layout()
         # View Guide belongs to the extra-steps instruction, between its
         # sentence and the appeal copy, not in the donation button row.
-        assert layout.indexOf(fp._completion_guide_hint) < layout.indexOf(fp._view_guide_btn)
-        assert layout.indexOf(fp._view_guide_btn) < layout.indexOf(fp._appeal_body)
+        assert fp._view_guide_btn.parent() is fp._completion_guide_row
+        assert layout.indexOf(fp._completion_guide_hint) < layout.indexOf(fp._completion_guide_row)
+        assert layout.indexOf(fp._completion_guide_row) < layout.indexOf(fp._appeal_body)
         assert layout.indexOf(fp._appeal_body) < layout.indexOf(fp._appeal_signature_row)
         assert layout.indexOf(fp._appeal_signature_row) < layout.indexOf(fp._appeal_dont)
 

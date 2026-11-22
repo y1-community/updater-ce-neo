@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -1005,13 +1006,21 @@ class SettingsPage(QWidget):
         self._refresh_themes_btn.setIcon(get_symbol_icon("refresh", 14, color=T().fg))
         self._refresh_themes_btn.clicked.connect(self.refresh_themes_requested.emit)
         themes_btn_row.addWidget(self._refresh_themes_btn)
+        themes_btn_row.addStretch(1)
+        themes_layout.addLayout(themes_btn_row)
+
+        self._themes_progress_bar = QProgressBar()
+        self._themes_progress_bar.setRange(0, 100)
+        self._themes_progress_bar.setValue(0)
+        self._themes_progress_bar.setTextVisible(False)
+        self._themes_progress_bar.setVisible(False)
+        themes_layout.addWidget(self._themes_progress_bar)
 
         self._install_themes_status_lbl = QLabel("")
         self._install_themes_status_lbl.setWordWrap(True)
         self._install_themes_status_lbl.setProperty("cssClass", "subtitle")
         self._install_themes_status_lbl.setVisible(False)
-        themes_btn_row.addWidget(self._install_themes_status_lbl, 1)
-        themes_layout.addLayout(themes_btn_row)
+        themes_layout.addWidget(self._install_themes_status_lbl)
 
         themes_links_row = QHBoxLayout()
         themes_links_row.setContentsMargins(0, 2, 0, 0)
@@ -1020,7 +1029,6 @@ class SettingsPage(QWidget):
         self._get_240p_themes_link.setTextFormat(Qt.TextFormat.RichText)
         self._get_240p_themes_link.setTextInteractionFlags(
             Qt.TextInteractionFlag.LinksAccessibleByMouse
-            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         self._get_240p_themes_link.setOpenExternalLinks(False)
         self._get_240p_themes_link.setCursor(Qt.PointingHandCursor)
@@ -1033,7 +1041,6 @@ class SettingsPage(QWidget):
         self._save_360p_themes_link.setTextFormat(Qt.TextFormat.RichText)
         self._save_360p_themes_link.setTextInteractionFlags(
             Qt.TextInteractionFlag.LinksAccessibleByMouse
-            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         self._save_360p_themes_link.setOpenExternalLinks(False)
         self._save_360p_themes_link.setCursor(Qt.PointingHandCursor)
@@ -3194,15 +3201,69 @@ class SettingsPage(QWidget):
         self._install_themes_btn.setVisible(not refreshing)
         if hasattr(self, "_refresh_themes_btn"):
             self._refresh_themes_btn.setVisible(not refreshing)
+        if hasattr(self, "_themes_progress_bar"):
+            if refreshing:
+                if not self._themes_progress_bar.isVisible():
+                    self._themes_progress_bar.setRange(0, 0)
+                    self._themes_progress_bar.setVisible(True)
+            else:
+                self._themes_progress_bar.setRange(0, 100)
+                self._themes_progress_bar.setValue(0)
+                self._themes_progress_bar.setVisible(False)
         self._install_themes_status_lbl.setText(status_text if refreshing else "")
         self._install_themes_status_lbl.setVisible(refreshing)
+        self.content_size_changed.emit()
+
+    def set_themes_zip_saving(self, saving: bool, status_text: str = "") -> None:
+        """Show/hide progress controls in the themes card while saving the 360p ZIP."""
+        if hasattr(self, "_save_360p_themes_link"):
+            self._save_360p_themes_link.setEnabled(not saving)
+        if hasattr(self, "_refresh_themes_btn"):
+            self._refresh_themes_btn.setEnabled(not saving)
+        if hasattr(self, "_themes_progress_bar"):
+            if saving:
+                self._themes_progress_bar.setRange(0, 0)
+                self._themes_progress_bar.setVisible(True)
+            else:
+                self._themes_progress_bar.setRange(0, 100)
+                self._themes_progress_bar.setValue(0)
+                self._themes_progress_bar.setVisible(False)
+        if hasattr(self, "_install_themes_status_lbl"):
+            self._install_themes_status_lbl.setText(status_text or "")
+            self._install_themes_status_lbl.setVisible(bool(status_text))
+        self.content_size_changed.emit()
+
+    def set_themes_progress(
+        self, downloaded: int, total: int, status_text: str = ""
+    ) -> None:
+        """Update the inline native progress bar and status inside the themes card."""
+        if hasattr(self, "_themes_progress_bar"):
+            was_visible = self._themes_progress_bar.isVisible()
+            if total > 0:
+                pct = max(0, min(100, int(round(100 * downloaded / total))))
+                if self._themes_progress_bar.maximum() != 100:
+                    self._themes_progress_bar.setRange(0, 100)
+                self._themes_progress_bar.setValue(pct)
+            else:
+                if self._themes_progress_bar.maximum() != 0:
+                    self._themes_progress_bar.setRange(0, 0)
+            if not was_visible:
+                self._themes_progress_bar.setVisible(True)
+                self.content_size_changed.emit()
+        if status_text and hasattr(self, "_install_themes_status_lbl"):
+            was_lbl_visible = self._install_themes_status_lbl.isVisible()
+            self._install_themes_status_lbl.setText(status_text)
+            if not was_lbl_visible:
+                self._install_themes_status_lbl.setVisible(True)
+                self.content_size_changed.emit()
 
     def set_themes_status(self, status_text: str) -> None:
-        """Show a one-line result under the themes buttons."""
+        """Show a status or completion message inside the themes card."""
         if not hasattr(self, "_install_themes_status_lbl"):
             return
         self._install_themes_status_lbl.setText(status_text or "")
         self._install_themes_status_lbl.setVisible(bool(status_text))
+        self.content_size_changed.emit()
 
     def _on_install_rockbox_themes_clicked(self):
         self.install_rockbox_themes_requested.emit()

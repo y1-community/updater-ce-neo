@@ -254,7 +254,13 @@ def test_main_window_wires_install_themes_card():
         win = MainWindow()
     try:
         assert not win._install_run_active()
-        with patch("src.theme_pack.ThemePackUpdateWorker") as mock_worker:
+        with (
+            patch("src.adb.adb_detect_player_model", return_value=None),
+            patch("src.device_tracking.get_all_device_installs", return_value={}),
+            patch("src.theme_pack.AdbWatchWorker"),
+            patch("src.theme_pack.AdbPresencePoller"),
+            patch("src.theme_pack.ThemePackUpdateWorker") as mock_worker,
+        ):
             win._settings_page.install_rockbox_themes_requested.emit()
             app.processEvents()
             assert win._stack.currentIndex() == _PAGE_FLASH

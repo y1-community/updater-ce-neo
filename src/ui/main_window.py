@@ -3497,11 +3497,14 @@ class MainWindow(QMainWindow):
         open_browser(ROCKBOX_240P_THEMES_URL)
 
     def _on_settings_save_360p_themes_zip(self) -> None:
-        """Save a copy of the 360p Rockbox themes & fonts ZIP to a user-chosen path."""
-        import shutil
+        """Download (if needed) and save the 360p Rockbox themes & fonts ZIP off the UI thread."""
         from PySide6.QtWidgets import QFileDialog
         from ..downloads import default_picker_dir
-        from ..theme_pack import ensure_ready_theme_pack_zip
+        from ..theme_pack import ThemePackExportWorker
+
+        existing = getattr(self, "_theme_export_worker", None)
+        if existing is not None and existing.isRunning():
+            return
 
         suggested = str(Path(default_picker_dir()) / "rockbox-360p-themes.zip")
         dest_str, _flt = QFileDialog.getSaveFileName(
@@ -3515,23 +3518,105 @@ class MainWindow(QMainWindow):
         dest = Path(dest_str)
         if dest.suffix.lower() != ".zip":
             dest = dest.with_suffix(".zip")
-        try:
-            src_zip, err = ensure_ready_theme_pack_zip()
-            if src_zip is None or not Path(src_zip).is_file():
-                raise RuntimeError(err or "theme pack unavailable")
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_zip, dest)
-            msg = tr("settings_save_360p_themes_zip_saved").format(path=str(dest))
+
+        self._theme_export_stage = "downloading"
+        self._theme_export_last_progress_ts = 0.0
+        if hasattr(self, "_settings_page"):
+            self._settings_page.set_themes_zip_saving(
+                True, tr("settings_save_360p_themes_zip_downloading")
+            )
+        self._append_log(f"[Rockbox Themes] Saving 360p themes ZIP to {dest}...")
+
+        worker = ThemePackExportWorker(dest, parent=self)
+        self._theme_export_worker = worker
+        self._active_workers.add(worker)
+        worker.stage.connect(self._on_theme_export_stage)
+        worker.progress.connect(self._on_theme_export_progress)
+        worker.finished.connect(
+            lambda ok, out_path, err, w=worker: self._on_theme_export_finished(w, ok, out_path, err)
+        )
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_theme_export_stage(self, stage: str) -> None:
+        self._theme_export_stage = str(stage or "downloading")
+        if not hasattr(self, "_settings_page"):
+            return
+        key_map = {
+            "downloading": "settings_save_360p_themes_zip_downloading",
+            "preparing": "settings_save_360p_themes_zip_preparing",
+            "saving": "settings_save_360p_themes_zip_saving",
+        }
+        label = tr(key_map.get(self._theme_export_stage, "settings_save_360p_themes_zip_downloading"))
+        self._settings_page.set_themes_progress(0, 0, label)
+
+    def _on_theme_export_progress(self, done: int, total: int) -> None:
+        from time import monotonic
+        from ..progress_model import format_size_bytes
+
+        if not hasattr(self, "_settings_page"):
+            return
+        now = monotonic()
+        last_ts = getattr(self, "_theme_export_last_progress_ts", 0.0)
+        at_end = total > 0 and done >= total
+        if not at_end and (now - last_ts) < 0.08:
+            return
+        self._theme_export_last_progress_ts = now
+
+        stage = getattr(self, "_theme_export_stage", "downloading")
+        if total > 0:
+            pct = max(0, min(100, int(round(100 * done / total))))
+            fmt_key = (
+                "settings_save_360p_themes_zip_saving_fmt"
+                if stage == "saving"
+                else "settings_save_360p_themes_zip_progress_fmt"
+            )
+            status = tr(fmt_key).format(
+                percent=pct,
+                done=format_size_bytes(done),
+                total=format_size_bytes(total),
+            )
+            self._settings_page.set_themes_progress(done, total, status)
+        else:
+            key = (
+                "settings_save_360p_themes_zip_preparing"
+                if stage == "preparing"
+                else (
+                    "settings_save_360p_themes_zip_saving"
+                    if stage == "saving"
+                    else "settings_save_360p_themes_zip_downloading"
+                )
+            )
+            self._settings_page.set_themes_progress(0, 0, tr(key))
+
+    def _on_theme_export_finished(
+        self, worker, ok: bool, dest_str: str, err: str
+    ) -> None:
+        self._active_workers.discard(worker)
+        if getattr(self, "_theme_export_worker", None) is worker:
+            self._theme_export_worker = None
+        if ok:
+            msg = tr("settings_save_360p_themes_zip_saved").format(path=dest_str)
             self._append_log(f"[Rockbox Themes] {msg}")
-            self._show_status(msg, 10000)
+            self._show_status(msg, 15000)
             if hasattr(self, "_settings_page"):
-                self._settings_page.set_themes_status(msg)
-        except Exception as e:
-            msg = tr("settings_save_360p_themes_zip_failed").format(error=str(e))
+                self._settings_page.set_themes_zip_saving(False, msg)
+            try:
+                from ..notifications import show_completion_notification
+
+                show_completion_notification(
+                    tr("settings_save_360p_themes_zip_done_title"),
+                    msg,
+                    window=self,
+                )
+            except Exception:
+                logger.debug("Could not post 360p themes ZIP completion notice", exc_info=True)
+        else:
+            msg = tr("settings_save_360p_themes_zip_failed").format(error=err)
             self._append_log(f"[Rockbox Themes] {msg}")
-            self._show_status(msg, 10000)
+            self._show_status(msg, 15000)
             if hasattr(self, "_settings_page"):
-                self._settings_page.set_themes_status(msg)
+                self._settings_page.set_themes_zip_saving(False, msg)
 
     def _tracked_is_240p_for_target(self, target) -> bool:
         """Check whether the user's tracked install for ``target`` is a 240p release."""
@@ -3926,6 +4011,7 @@ class MainWindow(QMainWindow):
         )
         if hasattr(self, "_settings_page"):
             self._settings_page.set_themes_refreshing(True, status_text)
+            self._settings_page.set_themes_progress(downloaded, total, status_text)
         try:
             if self.themes.active and hasattr(self, "_flash_page"):
                 self._flash_page.set_theme_download_status(status_text)

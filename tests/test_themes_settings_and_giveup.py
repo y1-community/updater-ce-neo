@@ -323,16 +323,23 @@ def test_manual_themes_start_supports_y2():
     try:
         combo = w._select_page._model_combo
         combo.setCurrentIndex(combo.findText("Y2"))
-        assert w._manual_themes_model() == "Y2"
-        assert w.start_rockbox_themes_manually() is True
-        if w.themes.device_prompt_pending:
-            assert "Y2" in w._flash_page.keep_data_confirm_choice()
-            w._flash_page._wait_continue_btn.click()
-            app.processEvents()
-        assert w.themes.power_on_pending is True
-        assert w.themes.model == "Y2"
-        assert w.themes.rb_themes_path_fix is True
-        assert w.themes.is_standalone is True
+        with (
+            patch("src.adb.adb_detect_player_model", return_value=None),
+            patch("src.device_tracking.get_all_device_installs", return_value={}),
+            patch("src.theme_pack.AdbWatchWorker"),
+            patch("src.theme_pack.AdbPresencePoller"),
+            patch("src.theme_pack.ThemePackUpdateWorker"),
+        ):
+            assert w._manual_themes_model() == "Y2"
+            assert w.start_rockbox_themes_manually() is True
+            if w.themes.device_prompt_pending:
+                assert "Y2" in w._flash_page.keep_data_confirm_choice()
+                w._flash_page._wait_continue_btn.click()
+                app.processEvents()
+            assert w.themes.power_on_pending is True
+            assert w.themes.model == "Y2"
+            assert w.themes.rb_themes_path_fix is True
+            assert w.themes.is_standalone is True
     finally:
         w.themes.clear_power_on()
         w.close()
@@ -346,12 +353,19 @@ def test_manual_themes_start_still_starts_for_y1_rockbox():
     w = MainWindow()
     try:
         w._package_model = "Y1"
-        assert w.start_rockbox_themes_manually() is True
-        if w.themes.device_prompt_pending:
-            assert "Y1" in w._flash_page.keep_data_confirm_choice()
-            w._flash_page._wait_continue_btn.click()
-            app.processEvents()
-        assert w.themes.power_on_pending is True
+        with (
+            patch("src.adb.adb_detect_player_model", return_value=None),
+            patch("src.device_tracking.get_all_device_installs", return_value={}),
+            patch("src.theme_pack.AdbWatchWorker"),
+            patch("src.theme_pack.AdbPresencePoller"),
+            patch("src.theme_pack.ThemePackUpdateWorker"),
+        ):
+            assert w.start_rockbox_themes_manually() is True
+            if w.themes.device_prompt_pending:
+                assert "Y1" in w._flash_page.keep_data_confirm_choice()
+                w._flash_page._wait_continue_btn.click()
+                app.processEvents()
+            assert w.themes.power_on_pending is True
     finally:
         w.themes.clear_power_on()
         w.close()
@@ -368,11 +382,18 @@ def test_settings_button_still_starts_themes_with_the_toggle_off():
     sync.set_themes_auto_install_enabled(False)
     w = MainWindow()
     try:
-        assert w.start_rockbox_themes_manually() is True
-        if w.themes.device_prompt_pending:
-            w._flash_page._wait_continue_btn.click()
-            app.processEvents()
-        assert w.themes.power_on_pending is True
+        with (
+            patch("src.adb.adb_detect_player_model", return_value=None),
+            patch("src.device_tracking.get_all_device_installs", return_value={}),
+            patch("src.theme_pack.AdbWatchWorker"),
+            patch("src.theme_pack.AdbPresencePoller"),
+            patch("src.theme_pack.ThemePackUpdateWorker"),
+        ):
+            assert w.start_rockbox_themes_manually() is True
+            if w.themes.device_prompt_pending:
+                w._flash_page._wait_continue_btn.click()
+                app.processEvents()
+            assert w.themes.power_on_pending is True
     finally:
         w.themes.clear_power_on()
         sync.set_themes_auto_install_enabled(old)

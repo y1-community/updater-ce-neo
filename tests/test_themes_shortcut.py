@@ -31,24 +31,32 @@ def test_ctrl_t_shortcut_registered_and_starts_prompt():
     try:
         assert win._themes_shortcut.key() == QKeySequence("Ctrl+T")
         assert not win._install_run_active()
-        win._package_model = ""
-        win._themes_shortcut.activated.emit()
-        app.processEvents()
-        assert win._stack.currentIndex() == _PAGE_FLASH
-        assert win._install_run_active()
-        if win.themes.device_prompt_pending:
-            win._flash_page._wait_continue_btn.click()
+        with (
+            patch("src.adb.adb_detect_player_model", return_value=None),
+            patch("src.adb.adb_devices", return_value=[]),
+            patch("src.device_tracking.get_all_device_installs", return_value={}),
+            patch("src.theme_pack.AdbWatchWorker"),
+            patch("src.theme_pack.AdbPresencePoller"),
+            patch("src.theme_pack.ThemePackUpdateWorker"),
+        ):
+            win._package_model = ""
+            win._themes_shortcut.activated.emit()
             app.processEvents()
-        assert win.themes.power_on_pending
-        assert win.themes.active
-        assert win._install_run_active()
-        assert win.themes.power_on_model in ("Y1", "Y2")
+            assert win._stack.currentIndex() == _PAGE_FLASH
+            assert win._install_run_active()
+            if win.themes.device_prompt_pending:
+                win._flash_page._wait_continue_btn.click()
+                app.processEvents()
+            assert win.themes.power_on_pending
+            assert win.themes.active
+            assert win._install_run_active()
+            assert win.themes.power_on_model in ("Y1", "Y2")
 
-        # Confirming power-on enters the themes stage proper.
-        win._flash_page._theme_step1_next_btn.click()
-        app.processEvents()
-        assert not win.themes.power_on_pending
-        assert win._flash_page.themes.transfer_running
+            # Confirming power-on enters the themes stage proper.
+            win._flash_page._theme_step1_next_btn.click()
+            app.processEvents()
+            assert not win.themes.power_on_pending
+            assert win._flash_page.themes.transfer_running
     finally:
         win._force_quit = True
         win.close()

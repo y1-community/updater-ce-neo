@@ -139,6 +139,12 @@ def clear_firmware_cache(exclude=None) -> tuple[int, int]:
 #: ``.<stem>_extracted`` beside the archive (see flash_service.compute_extract_dir).
 FIRMWARE_ARCHIVE_SUFFIXES = (".zip", ".rar")
 THEME_TEMP_PREFIX = "themepack_download_"
+#: Cached 360p Rockbox theme packs live alongside firmware downloads but are
+#: managed on their own weekly-refresh schedule (not firmware retention).
+THEME_PACK_CACHE_NAMES = frozenset({
+    "rockbox_360p_themepack.zip",
+    "rockbox_360p_themepack_y2.zip",
+})
 #: An interrupted download is worth resuming for a day; after that it is junk.
 INTERRUPTED_PART_MAX_AGE = 24 * 60 * 60
 #: A temp staging folder younger than this may belong to a run in progress.
@@ -271,7 +277,11 @@ def enforce_firmware_retention(keep_package_path=None) -> tuple[int, int]:
         try:
             if entry.is_dir() and entry.name.startswith(".") and entry.name.endswith("_extracted"):
                 extracts.append(entry)
-            elif entry.is_file() and entry.suffix.lower() in FIRMWARE_ARCHIVE_SUFFIXES:
+            elif (
+                entry.is_file()
+                and entry.suffix.lower() in FIRMWARE_ARCHIVE_SUFFIXES
+                and entry.name.casefold() not in THEME_PACK_CACHE_NAMES
+            ):
                 archives.append(entry)
         except OSError:
             continue
@@ -346,7 +356,11 @@ def enforce_firmware_retention(keep_package_path=None) -> tuple[int, int]:
             continue
         low = item.name.casefold()
         is_stale_part = low.endswith(".part") and age > INTERRUPTED_PART_MAX_AGE
-        is_theme_temp = low.startswith(THEME_TEMP_PREFIX)
+        # Leave an active in-progress themepack_download_*.part alone; prune
+        # leftover temp .zip files and old abandoned .part files.
+        is_theme_temp = low.startswith(THEME_TEMP_PREFIX) and (
+            not low.endswith(".part") or age > TEMP_LEFTOVER_MAX_AGE
+        )
         is_stray_scatter = low.endswith(".txt") and "scatter" in low
         if is_stale_part or is_theme_temp or is_stray_scatter:
             logger.info("Pruning stale download-cache file: %s", item.name)

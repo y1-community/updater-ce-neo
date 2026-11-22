@@ -166,6 +166,10 @@ def test_completion_site_note_shows_for_240p_rockbox():
         app.processEvents()
         assert page._rockbox_site_widget.isVisible()
         assert page._rockbox_site_btn.isVisible()
+        # Both aliases must belong to the in-window FlashPage, never stray top-level popups.
+        assert page._rockbox_site_widget.window() is page
+        assert page._rockbox_site_btn.window() is page
+        assert [w for w in QApplication.topLevelWidgets() if w.isVisible()] == [page]
         # A fresh run hides it again.
         page.show_waiting()
         app.processEvents()

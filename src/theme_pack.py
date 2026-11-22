@@ -233,6 +233,7 @@ def theme_zip_has_themes(zip_path: Path | str) -> bool:
 def ensure_theme_pack_downloaded(
     timeout: float = 120.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    stage_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[bool, str]:
     """Make sure the downloaded archive has themes in it, fetching if needed.
 
@@ -250,9 +251,14 @@ def ensure_theme_pack_downloaded(
     if config.is_offline_mode():
         return False, "offline mode is on and no complete theme pack is cached"
     try:
-        _ok, status, _count = download_and_merge_theme_pack(
-            cached, timeout=timeout, progress_cb=progress_cb
-        )
+        if stage_cb is not None:
+            _ok, status, _count = download_and_merge_theme_pack(
+                cached, timeout=timeout, progress_cb=progress_cb, stage_cb=stage_cb
+            )
+        else:
+            _ok, status, _count = download_and_merge_theme_pack(
+                cached, timeout=timeout, progress_cb=progress_cb
+            )
     except Exception as e:
         logger.warning("Theme pack download failed: %s", e, exc_info=True)
         return False, f"the theme download failed ({e})"
@@ -265,6 +271,7 @@ def ensure_ready_theme_pack_zip(
     apply_path_fix: bool = False,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     log_cb: Optional[Callable[[str], None]] = None,
+    stage_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[Optional[Path], str]:
     """Return a validated, normalized themes+fonts zip, downloading if needed.
 
@@ -281,10 +288,15 @@ def ensure_ready_theme_pack_zip(
             except Exception:
                 pass
 
-    ok, status = ensure_theme_pack_downloaded(progress_cb=progress_cb)
+    ok, status = ensure_theme_pack_downloaded(progress_cb=progress_cb, stage_cb=stage_cb)
     if not ok:
         _log(f"[Rockbox Themes] Full theme pack unavailable: {status}")
 
+    if stage_cb is not None:
+        try:
+            stage_cb("preparing")
+        except Exception:
+            pass
     target = ensure_normalized_theme_pack_zip(
         apply_path_fix=apply_path_fix, force_rebuild=False
     )
@@ -359,6 +371,7 @@ def _download_and_merge_theme_pack(
     target_zip_path: Optional[Path | str] = None,
     timeout: float = 30.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    stage_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[bool, str, int]:
     """Download the latest themes and merge them over the bundled fonts pack.
 
@@ -386,10 +399,18 @@ def _download_and_merge_theme_pack(
     totals = [0]
     merge_count = 0
 
+    def _notify_stage(stage: str) -> None:
+        if stage_cb is not None:
+            try:
+                stage_cb(stage)
+            except Exception:
+                pass
+
     def fetch_and_merge(url: str, index: int) -> Optional[int]:
         temp_remote = download_dir / f"themepack_download_{index}.zip"
         tmp_part = temp_remote.with_suffix(".part")
         try:
+            _notify_stage("downloading")
             request = urllib.request.Request(url, headers={"User-Agent": "Innioasis-Updater"})
             with urllib.request.urlopen(request, timeout=timeout) as resp, open(tmp_part, "wb") as f:
                 source_total = int(resp.headers.get("Content-Length", 0) or 0)
@@ -404,6 +425,7 @@ def _download_and_merge_theme_pack(
                     if progress_cb:
                         progress_cb(downloaded[0], totals[0] if totals[0] > 0 else 0)
             os.replace(tmp_part, temp_remote)
+            _notify_stage("preparing")
             return merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
         except Exception as e:
             logger.warning("[Rockbox Themes] Source %s failed (%s); trying the next copy.", url, e)
@@ -441,10 +463,13 @@ def download_and_merge_theme_pack(
     target_zip_path: Optional[Path | str] = None,
     timeout: float = 30.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    stage_cb: Optional[Callable[[str], None]] = None,
 ) -> tuple[bool, str, int]:
     """Download and merge the pack, serialized with the weekly refresh."""
     with _download_lock:
-        return _download_and_merge_theme_pack(target_zip_path, timeout, progress_cb)
+        return _download_and_merge_theme_pack(
+            target_zip_path, timeout, progress_cb, stage_cb=stage_cb
+        )
 
 
 class ThemePackUpdateWorker(QThread):
@@ -463,6 +488,77 @@ class ThemePackUpdateWorker(QThread):
             progress_cb=self.progress.emit,
         )
         self.finished.emit(ok, status, count)
+
+
+class ThemePackExportWorker(QThread):
+    """Background worker that downloads/prepares the 360p themes ZIP and copies it to a user path.
+
+    Runs entirely off the UI thread so the Settings screen stays responsive and
+    shows live download/save progress inside the Install Themes card.
+    """
+
+    progress = Signal(int, int)       # done_bytes, total_bytes (0, 0 = indeterminate)
+    stage = Signal(str)               # "downloading" | "preparing" | "saving"
+    finished = Signal(bool, str, str)  # ok, dest_path, error_message
+
+    def __init__(
+        self,
+        dest_path: Path | str,
+        *,
+        apply_path_fix: bool = False,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._dest_path = Path(dest_path)
+        self._apply_path_fix = bool(apply_path_fix)
+
+    def run(self):
+        dest = self._dest_path
+        tmp_part: Optional[Path] = None
+        try:
+            self.stage.emit("downloading")
+            self.progress.emit(0, 0)
+            try:
+                src_zip, err = ensure_ready_theme_pack_zip(
+                    apply_path_fix=self._apply_path_fix,
+                    progress_cb=self.progress.emit,
+                    stage_cb=self.stage.emit,
+                )
+            except TypeError:
+                # Support simplified test stubs that omit optional callbacks.
+                src_zip, err = ensure_ready_theme_pack_zip()
+            if src_zip is None or not Path(src_zip).is_file():
+                raise RuntimeError(err or "theme pack unavailable")
+
+            src_path = Path(src_zip)
+            self.stage.emit("saving")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            total_size = src_path.stat().st_size
+            self.progress.emit(0, total_size)
+
+            tmp_part = dest.parent / f".{dest.name}.part"
+            copied = 0
+            chunk_size = 256 * 1024
+            with open(src_path, "rb") as src_f, open(tmp_part, "wb") as dst_f:
+                while True:
+                    if self.isInterruptionRequested():
+                        raise RuntimeError("cancelled")
+                    chunk = src_f.read(chunk_size)
+                    if not chunk:
+                        break
+                    dst_f.write(chunk)
+                    copied += len(chunk)
+                    self.progress.emit(copied, total_size)
+            os.replace(tmp_part, dest)
+            tmp_part = None
+            self.finished.emit(True, str(dest), "")
+        except Exception as exc:
+            if tmp_part is not None:
+                try:
+                    tmp_part.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            self.finished.emit(False, str(dest), str(exc))
 
 
 def open_wizards():
@@ -1053,7 +1149,10 @@ def ensure_theme_zip_patched_for_y2(
     """
     src = Path(source_zip)
     if not target_zip:
-        dst = src.with_name(f"{src.stem}_y2{src.suffix}")
+        if src.stem.endswith("_y2"):
+            dst = src
+        else:
+            dst = src.with_name(f"{src.stem}_y2{src.suffix}")
     else:
         dst = Path(target_zip)
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1775,14 +1874,25 @@ class AdbPushWorker(QThread):
                     else:
                         self.progress.emit(curr, total)
 
-                ok, msg = _adb.adb_push_merge(
-                    self._adb,
-                    self._serial,
-                    local_src,
-                    d_dir,
-                    progress_cb=_dir_progress,
-                    cancel_cb=self.isInterruptionRequested,
-                )
+                try:
+                    ok, msg = _adb.adb_push_merge(
+                        self._adb,
+                        self._serial,
+                        local_src,
+                        d_dir,
+                        progress_cb=_dir_progress,
+                        cancel_cb=self.isInterruptionRequested,
+                        log_cb=self.log.emit,
+                    )
+                except TypeError:
+                    ok, msg = _adb.adb_push_merge(
+                        self._adb,
+                        self._serial,
+                        local_src,
+                        d_dir,
+                        progress_cb=_dir_progress,
+                        cancel_cb=self.isInterruptionRequested,
+                    )
                 if not ok:
                     all_ok = False
                     messages.append(f"{d_dir}: {msg or 'push failed'}")
@@ -1795,6 +1905,38 @@ class AdbPushWorker(QThread):
                 verified, verify_msg = _adb.adb_verify_theme_payload(
                     self._adb, self._serial, d_dir, zip_file
                 )
+                if not verified and not self.isInterruptionRequested():
+                    # Retry ONLY the missing files in-place rather than discarding
+                    # everything already transferred and repeating from 0%.
+                    try:
+                        entries = _adb._payload_entries(Path(zip_file))
+                        missing = (
+                            _adb._payload_missing_from(self._adb, self._serial, d_dir, entries)
+                            if entries
+                            else None
+                        )
+                    except Exception:
+                        missing = None
+                    if missing and len(missing) < len(entries):
+                        self.log.emit(
+                            f"[Rockbox Themes] Retrying {len(missing)} missing theme file(s)..."
+                        )
+                        try:
+                            repair_ok, _repair_msg = _adb.adb_push_merge(
+                                self._adb,
+                                self._serial,
+                                local_src,
+                                d_dir,
+                                cancel_cb=self.isInterruptionRequested,
+                                only_rel_paths=set(missing),
+                                log_cb=self.log.emit,
+                            )
+                        except TypeError:
+                            repair_ok = False
+                        if repair_ok and not self.isInterruptionRequested():
+                            verified, verify_msg = _adb.adb_verify_theme_payload(
+                                self._adb, self._serial, d_dir, zip_file
+                            )
                 self.log.emit(f"[Rockbox Themes] {verify_msg}")
                 if not verified:
                     all_ok = False

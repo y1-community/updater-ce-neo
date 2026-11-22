@@ -536,7 +536,18 @@ def _software_without_model(software: str, model: str) -> str:
         (rf"{word}\s*[-–, ·,:/]?\s*", " "),
     ):
         stripped = re.sub(pattern, repl, stripped, flags=re.IGNORECASE)
-    stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–, ·,:()[]/")
+    # Remove empty leftover brackets like "()" / "[]" and tighten inner spaces
+    # without stripping a balanced closing ")" such as "(240p)".
+    stripped = re.sub(r"\(\s*\)|\[\s*\]", " ", stripped)
+    stripped = re.sub(r"\(\s+", "(", stripped)
+    stripped = re.sub(r"\s+\)", ")", stripped)
+    stripped = re.sub(r"\[\s+", "[", stripped)
+    stripped = re.sub(r"\s+\]", "]", stripped)
+    stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–, ·,:/")
+    while stripped.startswith((")", "]")):
+        stripped = stripped[1:].strip(" -–, ·,:/")
+    while stripped.endswith(("(", "[")):
+        stripped = stripped[:-1].strip(" -–, ·,:/")
     return stripped or text
 
 
@@ -2027,7 +2038,7 @@ class FlashPage(QWidget):
     def _build_preparing_view(self):
         self._prep_icon = _make_squircle_icon()
         self._prep_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        self._prep_banner = Banner()
+        self._prep_banner = Banner(parent=self)
         self._prep_banner.setVisible(False)
         self._prep_progress = InstallProgress()
         _configure_progress(self._prep_progress)
@@ -2056,7 +2067,7 @@ class FlashPage(QWidget):
         self._prep_col = copy
 
         # Guidance images are removed; keep dummy attribute for backward compatibility
-        self._prep_img = QLabel()
+        self._prep_img = QLabel(parent=self)
         self._prep_img.setVisible(False)
 
         return self._wrap_centered(self._prep_card)
@@ -2260,29 +2271,32 @@ class FlashPage(QWidget):
         self._keep_data_note.setVisible(False)
         copy.insertWidget(copy.indexOf(self._keep_data_cb) + 1, self._keep_data_note)
 
-        # Retained for attribute compatibility, but kept hidden and not added to layout
-        self._attempt_lbl = QLabel("")
+        # Retained for attribute compatibility, but kept hidden and parented so they
+        # can never float as top-level windows.
+        self._attempt_lbl = QLabel("", parent=self)
         self._attempt_lbl.setVisible(False)
         self._attempt_remaining = 0
 
-        self._wait_mode_hint = QLabel("")
+        self._wait_mode_hint = QLabel("", parent=self)
         self._wait_mode_hint.setVisible(False)
 
-        self._wait_banner = Banner()
+        self._wait_banner = Banner(parent=self)
         self._wait_banner.setVisible(False)
-        self._wait_status = StatusTag("idle")
+        self._wait_status = StatusTag("idle", parent=self)
         self._wait_status.setVisible(False)
 
         # SP Flash Tool GUI is a sidebar action. This page does not grow a second launcher.
 
         # Guidance images are removed; keep dummy attributes for backward compatibility
-        self._status_img = QLabel()
+        self._status_img = QLabel(parent=self)
         self._status_img.setVisible(False)
-        self._guide_title = QLabel(tr("flash_guide_title"))
+        self._guide_title = QLabel(tr("flash_guide_title"), parent=self)
+        self._guide_title.setVisible(False)
         self._guide_texts = []
         for key in ("flash_guide_1", "flash_guide_2", "flash_guide_3", "flash_guide_4"):
-            text = QLabel(tr(key))
+            text = QLabel(tr(key), parent=self)
             text.setWordWrap(True)
+            text.setVisible(False)
             self._guide_texts.append((key, text))
 
         # Paperclip hint with diagram image and model-specific wording in the main card
@@ -2368,7 +2382,7 @@ class FlashPage(QWidget):
     def _build_flashing_view(self):
         self._flash_icon = _make_squircle_icon()
         self._flash_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
-        self._flash_banner = Banner()
+        self._flash_banner = Banner(parent=self)
         self._flash_banner.setVisible(False)
         self._progress_bar = InstallProgress()
         _configure_progress(self._progress_bar)
@@ -2549,11 +2563,6 @@ class FlashPage(QWidget):
         _apply_card_text(self._theme_paperclip_tip)
         self._theme_paperclip_tip.setVisible(False)
         theme_vbox.addWidget(self._theme_paperclip_tip)
-
-        self._rockbox_site_widget = QWidget()
-        self._rockbox_site_widget.setVisible(False)
-        self._rockbox_site_btn = QPushButton(tr("rockbox_site_themes_open"))
-        self._rockbox_site_btn.setVisible(False)
 
         self._theme_row.setVisible(False)
         copy.addWidget(self._theme_row)
@@ -2872,26 +2881,27 @@ class FlashPage(QWidget):
         for offset, widget in enumerate(reading_order):
             appeal_layout.insertWidget(1 + offset, widget)
 
-        # Dummy attributes for backward compatibility
-        self._flash_img = QLabel()
+        # Dummy attributes for backward compatibility (parented and hidden so
+        # they can never appear as top-level windows).
+        self._flash_img = QLabel(parent=self)
         self._flash_img.setVisible(False)
         self._action_label = QLabel("", parent=self)
         self._action_label.setVisible(False)
-        self._status_card = Card("flash_status_panel")
+        self._status_card = Card("flash_status_panel", parent=self)
         self._status_card.setVisible(False)
-        self._conn_row = InfoRow("flash_conn_status")
-        self._dev_row = InfoRow("flash_device_status")
-        self._pkg_row = InfoRow("flash_current_pkg")
-        self._elapsed_row = InfoRow("flash_elapsed")
-        self._eta_row = InfoRow("flash_eta")
+        self._conn_row = InfoRow("flash_conn_status", parent=self)
+        self._conn_row.setVisible(False)
+        self._dev_row = InfoRow("flash_device_status", parent=self)
+        self._dev_row.setVisible(False)
+        self._pkg_row = InfoRow("flash_current_pkg", parent=self)
+        self._pkg_row.setVisible(False)
+        self._elapsed_row = InfoRow("flash_elapsed", parent=self)
+        self._elapsed_row.setVisible(False)
+        self._eta_row = InfoRow("flash_eta", parent=self)
+        self._eta_row.setVisible(False)
         self._prep_eta_seconds = 0
         self._eta_label.setText("")
         self._partition_progress_label.setVisible(False)
-        if getattr(self, "_rockbox_site_themes", False):
-            if hasattr(self, "_rockbox_site_widget"):
-                self._rockbox_site_widget.setVisible(True)
-            if hasattr(self, "_rockbox_site_btn"):
-                self._rockbox_site_btn.setVisible(True)
 
         return self._wrap_centered(self._progress_card, warning_container)
 
@@ -2906,7 +2916,7 @@ class FlashPage(QWidget):
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
 
-        self._download_next_btn = _RoundNextButton(symbol="arrow-right", accent=True)
+        self._download_next_btn = _RoundNextButton(parent=self, symbol="arrow-right", accent=True)
         self._download_next_btn.setObjectName("downloadNextPlaceholderBtn")
         self._download_next_btn.setEnabled(False)
         self._download_next_btn.setVisible(False)
@@ -3340,10 +3350,7 @@ class FlashPage(QWidget):
     def show_waiting(self):
         self._complete = False
         self.dismiss_flash_question()
-        if hasattr(self, "_rockbox_site_widget"):
-            self._rockbox_site_widget.setVisible(False)
-        if hasattr(self, "_rockbox_site_btn"):
-            self._rockbox_site_btn.setVisible(False)
+        self._apply_post_install_state()
         self._switch_view(self._waiting_view)
         if not self._prompt_only:
             # Nothing has been written yet. The bar stays at 0 until DA or
@@ -4108,11 +4115,6 @@ class FlashPage(QWidget):
         if hasattr(self, "_eta_label"):
             self._eta_label.setText("")
         self._partition_progress_label.setVisible(False)
-        if getattr(self, "_rockbox_site_themes", False):
-            if hasattr(self, "_rockbox_site_widget"):
-                self._rockbox_site_widget.setVisible(True)
-            if hasattr(self, "_rockbox_site_btn"):
-                self._rockbox_site_btn.setVisible(True)
         if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
             self._status_flow.set_forced_stacked(False)
         self._hide_theme_wizard_chips()
@@ -6750,6 +6752,20 @@ class FlashPage(QWidget):
         elif getattr(self, "_completion_themes_kind", "") == "240p":
             self.set_completion_themes("")
 
+    @property
+    def _rockbox_site_widget(self):
+        """In-window completion themes container (never a separate popup window)."""
+        if getattr(self, "_donations_shown", False) and hasattr(self, "_completion_guide_row"):
+            return self._completion_guide_row
+        return getattr(self, "_done_themes_btn", None)
+
+    @property
+    def _rockbox_site_btn(self):
+        """In-window Get Themes button (never a separate popup window)."""
+        if getattr(self, "_donations_shown", False) and hasattr(self, "_get_themes_btn"):
+            return self._get_themes_btn
+        return getattr(self, "_done_themes_btn", None)
+
     def _has_completion_themes(self) -> bool:
         """True when the completion screen should offer a Get Themes action."""
         return bool(getattr(self, "_completion_themes_url", ""))
@@ -6950,6 +6966,9 @@ class FlashPage(QWidget):
         get_themes_link = _themed_link(
             "get-themes", tr("completion_get_themes_link"), underline=True
         )
+        view_guide_link = _themed_link(
+            "post-install", tr("completion_view_guide_link"), underline=True
+        )
 
         if has_guide and has_themes:
             if themes_failed or kind == "360p_fallback":
@@ -6958,7 +6977,7 @@ class FlashPage(QWidget):
                     f"{escape(tr('post_install_explain_completion'))}"
                 )
             return tr("completion_installed_guide_and_themes_donations").format(
-                model=escape(model), get_themes=get_themes_link
+                model=escape(model), view_guide=view_guide_link, get_themes=get_themes_link
             )
         if has_guide:
             return escape(tr("post_install_explain_completion"))
@@ -7403,6 +7422,9 @@ class FlashPage(QWidget):
         get_themes_link = _themed_link(
             "get-themes", tr("completion_get_themes_link"), underline=True
         )
+        view_guide_link = _themed_link(
+            "post-install", tr("completion_view_guide_link"), underline=True
+        )
         palette_uri = get_symbol_data_uri("palette", 12, match_accent=False)
         palette_html = (
             f'<img src="{palette_uri}" width="12" height="12" style="vertical-align: -1px;">'
@@ -7425,6 +7447,10 @@ class FlashPage(QWidget):
                 tr("completion_240p_manual_body").format(get_themes=get_themes_link)
             )
             body_lbl.setTextFormat(Qt.TextFormat.RichText)
+            body_lbl.setTextInteractionFlags(
+                Qt.TextInteractionFlag.LinksAccessibleByMouse
+                | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+            )
             body_lbl.setWordWrap(True)
             body_lbl.setProperty("cssClass", "dimmed")
             body_lbl.setOpenExternalLinks(False)
@@ -7441,6 +7467,10 @@ class FlashPage(QWidget):
                     )
                 )
                 anyway_lbl.setTextFormat(Qt.TextFormat.RichText)
+                anyway_lbl.setTextInteractionFlags(
+                    Qt.TextInteractionFlag.LinksAccessibleByMouse
+                    | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+                )
                 anyway_lbl.setWordWrap(True)
                 anyway_lbl.setProperty("cssClass", "dimmed")
                 anyway_lbl.setOpenExternalLinks(False)
@@ -7496,6 +7526,7 @@ class FlashPage(QWidget):
                     software=escape(software),
                     model=escape(model),
                     globe=globe_html,
+                    view_guide=view_guide_link,
                     get_themes=get_themes_link,
                     palette=palette_html,
                 )
@@ -7515,6 +7546,10 @@ class FlashPage(QWidget):
                 )
             lbl = QLabel(themes_html)
             lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setTextInteractionFlags(
+                Qt.TextInteractionFlag.LinksAccessibleByMouse
+                | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+            )
             lbl.setWordWrap(True)
             lbl.setProperty("cssClass", "dimmed")
             lbl.setOpenExternalLinks(False)
@@ -7524,6 +7559,10 @@ class FlashPage(QWidget):
         elif has_guide and not self.themes.placement_failed:
             lbl = QLabel(self._post_install_hint_html())
             lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setTextInteractionFlags(
+                Qt.TextInteractionFlag.LinksAccessibleByMouse
+                | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+            )
             lbl.setWordWrap(True)
             lbl.setProperty("cssClass", "dimmed")
             lbl.setOpenExternalLinks(False)
@@ -8084,11 +8123,6 @@ class FlashPage(QWidget):
         self._progress_bar.setValue(100)
         self._eta_label.setText("")
         self._partition_progress_label.setVisible(False)
-        if getattr(self, "_rockbox_site_themes", False):
-            if hasattr(self, "_rockbox_site_widget"):
-                self._rockbox_site_widget.setVisible(True)
-            if hasattr(self, "_rockbox_site_btn"):
-                self._rockbox_site_btn.setVisible(True)
 
     def update_prep_progress(self, percent):
         self._set_determinate(self._prep_progress, percent)
