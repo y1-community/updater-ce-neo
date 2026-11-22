@@ -88,6 +88,111 @@ class _FileOpenFilter(QObject):
         return False
 
 
+class _AppQuitFilter(QObject):
+    """Distinguish an explicit OS/Dock Quit (Cmd+Q, Dock -> Quit) from window close.
+
+    When "Run in background" is enabled, clicking the window's close button
+    hides to the menu bar/tray. An application-level Quit event (AppKit
+    ``applicationShouldTerminate:`` -> ``QEvent.Type.Quit`` on ``QApplication``)
+    means the user explicitly asked to quit the app: let ``closeEvent`` quit
+    (still prompting if an install is active) instead of hiding to the menu bar
+    and cancelling termination.
+    """
+
+    def __init__(self, app, holder: dict):
+        super().__init__(app)
+        self._app = app
+        self._holder = holder
+
+    def eventFilter(self, watched, event):  # noqa: N802
+        if watched is self._app and event.type() == QEvent.Type.Quit:
+            window = self._holder.get("window")
+            if window is not None:
+                window._tray_quit_pending = True
+
+                def _reset_flag(w=window):
+                    try:
+                        if not getattr(w, "_closing_accepted", False):
+                            w._tray_quit_pending = False
+                    except RuntimeError:
+                        pass
+
+                from PySide6.QtCore import QTimer
+
+                QTimer.singleShot(0, _reset_flag)
+                if not window.isVisible():
+                    tray = getattr(window, "_background_tray", None)
+                    if tray is not None:
+                        try:
+                            tray.hide()
+                        except Exception:
+                            pass
+                    try:
+                        from .tray import hold_off_automatic_termination
+
+                        hold_off_automatic_termination(False)
+                    except Exception:
+                        pass
+        return False
+
+
+def _install_macos_reopen_hook(holder: dict, show_main_window) -> bool:
+    """Reopen the main window when the user clicks the Dock icon on macOS.
+
+    Adding an ``objc.Category`` replaces the Objective-C IMP for
+    ``applicationShouldHandleReopen:hasVisibleWindows:`` on
+    ``QCocoaApplicationDelegate`` in place. Capturing ``getattr(delegate, ...)``
+    beforehand returns an ``objc.bound_selector`` that dispatches through
+    ``objc_msgSend`` and therefore recurses right back into this category
+    until Python hits ``RecursionError`` / ``SIGSEGV``. Never call the
+    captured selector: show the window once under a re-entrancy guard and
+    return ``True`` so AppKit completes the Dock click immediately.
+    """
+    from AppKit import NSApplication
+    import objc
+
+    ns_app = NSApplication.sharedApplication()
+    delegate = ns_app.delegate()
+    if delegate is None:
+        return False
+
+    reopening = [False]
+
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible):  # noqa: N802
+        if reopening[0]:
+            return True
+        reopening[0] = True
+        try:
+            window = holder.get("window")
+            needs_show = (
+                not has_visible
+                or window is None
+                or not window.isVisible()
+                or window.isMinimized()
+            )
+            if needs_show:
+                show_main_window()
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "macOS Dock reopen handler failed", exc_info=True
+            )
+        finally:
+            reopening[0] = False
+        return True
+
+    delegate_cls = delegate.__class__
+    type(
+        delegate_cls.__name__,
+        (objc.Category(delegate_cls),),
+        {
+            "applicationShouldHandleReopen_hasVisibleWindows_": (
+                applicationShouldHandleReopen_hasVisibleWindows_
+            )
+        },
+    )
+    return True
+
+
 def _apply_native_chrome(window, *, dark=None):
     """Apply the post-show host chrome (glass, traffic lights, title bar)."""
     from .ui import glass
@@ -102,6 +207,10 @@ def _apply_native_chrome(window, *, dark=None):
     _startup_step("apply_glass", glass.apply_glass, window, dark=dark)
     _startup_step("configure_traffic_lights", glass.configure_traffic_lights, window, x_offset=18)
     _startup_step("apply_windows_dark_titlebar", glass.apply_windows_dark_titlebar, window, dark)
+    try:
+        window._native_chrome_applied = True
+    except Exception:
+        pass
 
 
 def _configure_logging():
@@ -833,6 +942,7 @@ def main():
             _startup_step("apply_theme", apply_theme, app, force_dark=None)
             app._theme_applied = True
         window = MainWindow()
+        holder["window"] = window
         # First launch: the welcome journey owns the first screen so a player
         # that was installed before this app existed can still be recorded for
         # update reminders. A launch with a tracked player, or one that has
@@ -870,8 +980,18 @@ def main():
             agent.show_window(route)
             return
         window = holder["window"]
-        if window is not None:
-            window._show_from_tray()
+        if window is None:
+            try:
+                window = _create_window()
+            except Exception:
+                logging.getLogger(__name__).exception("The app window could not be built")
+                return
+        window._show_from_tray()
+        if route:
+            try:
+                window._on_notification_clicked(route)
+            except Exception:
+                logging.getLogger(__name__).debug("Notification route failed", exc_info=True)
 
     external_drop_ready = {"value": False}
     external_drop_attempts = {"count": 0}
@@ -935,33 +1055,14 @@ def main():
     # Reopen window when clicking Dock icon on macOS while hidden in the menu bar / tray
     if _sys.platform == "darwin":
         try:
-            from AppKit import NSApplication
-            import objc
-
-            ns_app = NSApplication.sharedApplication()
-            delegate = ns_app.delegate()
-            if delegate is not None:
-                orig_reopen = getattr(
-                    delegate, "applicationShouldHandleReopen_hasVisibleWindows_", None
-                )
-
-                class QCocoaApplicationDelegate(objc.Category(delegate.__class__)):
-                    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible):
-                        window = holder["window"]
-                        if not has_visible or (
-                            window is not None and not window.isVisible()
-                        ):
-                            _show_main_window()
-                        if orig_reopen is not None:
-                            try:
-                                return orig_reopen(sender, has_visible)
-                            except Exception:
-                                pass
-                        return True
+            _install_macos_reopen_hook(holder, _show_main_window)
         except Exception:
             logging.getLogger(__name__).debug(
                 "Could not hook macOS applicationShouldHandleReopen", exc_info=True
             )
+        _app_quit_filter = _AppQuitFilter(app, holder)
+        app.installEventFilter(_app_quit_filter)
+        app._app_quit_filter = _app_quit_filter
 
     if background:
         app.setQuitOnLastWindowClosed(False)

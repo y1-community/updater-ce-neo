@@ -415,3 +415,117 @@ def test_macos_close_quits_instead_of_hiding(monkeypatch):
         win.close()
         app.processEvents()
 
+
+def test_macos_reopen_hook_reopens_once_without_recursion():
+    """Dock clicks must call show_main_window once and never recurse into objc_msgSend."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS-only AppKit delegate check")
+    from AppKit import NSApplication
+    from src.app import _install_macos_reopen_hook
+
+    _app()
+    ns_app = NSApplication.sharedApplication()
+    delegate = ns_app.delegate()
+    if delegate is None:
+        pytest.skip("No NSApplication delegate in offscreen QPA mode")
+
+    class _FakeWin:
+        def __init__(self, visible=False, minimized=False):
+            self._visible = visible
+            self._minimized = minimized
+
+        def isVisible(self):
+            return self._visible
+
+        def isMinimized(self):
+            return self._minimized
+
+    win = _FakeWin(visible=False)
+    holder = {"window": win}
+    calls = []
+
+    def _show():
+        calls.append("show")
+        win._visible = True
+
+    assert _install_macos_reopen_hook(holder, _show) is True
+    assert delegate.applicationShouldHandleReopen_hasVisibleWindows_(ns_app, False) is True
+    assert calls == ["show"]
+
+    # Already visible & non-minimized: Dock click with hasVisibleWindows=True is a no-op.
+    assert delegate.applicationShouldHandleReopen_hasVisibleWindows_(ns_app, True) is True
+    assert calls == ["show"]
+
+    # Minimized window is restored too.
+    win._minimized = True
+    assert delegate.applicationShouldHandleReopen_hasVisibleWindows_(ns_app, True) is True
+    assert calls == ["show", "show"]
+
+
+def test_macos_set_menu_bar_only_never_demotes_to_accessory(monkeypatch):
+    """Keeping Regular activation policy keeps both the Dock icon and menu bar icon alive."""
+    if sys.platform != "darwin":
+        pytest.skip("macOS-only AppKit policy check")
+    import AppKit
+
+    calls = []
+
+    class _FakeNSApp:
+        @classmethod
+        def sharedApplication(cls):
+            return cls()
+
+        def activationPolicy(self):
+            return AppKit.NSApplicationActivationPolicyRegular
+
+        def setActivationPolicy_(self, policy):
+            calls.append(policy)
+
+    monkeypatch.setattr(AppKit, "NSApplication", _FakeNSApp)
+    tray.set_menu_bar_only(True)
+    assert calls == []
+    tray.set_menu_bar_only(False)
+    assert calls == []
+
+
+def test_app_quit_filter_allows_cmd_q_while_background_enabled(monkeypatch):
+    """An app-level Quit event (Cmd+Q / Dock Quit) quits cleanly instead of hiding."""
+    from PySide6.QtCore import QEvent
+    from src.app import _AppQuitFilter
+
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    app, win = _window()
+    quit_calls = []
+    monkeypatch.setattr(win, "_schedule_app_quit", lambda: quit_calls.append(True))
+    holder = {"window": win}
+    flt = _AppQuitFilter(app, holder)
+    try:
+        # Simulate macOS applicationShouldTerminate -> QEvent.Quit on QApplication,
+        # immediately followed by QCloseEvent on the visible window.
+        flt.eventFilter(app, QEvent(QEvent.Type.Quit))
+        assert getattr(win, "_tray_quit_pending", False) is True
+        event = QCloseEvent()
+        win.closeEvent(event)
+        assert event.isAccepted()
+        assert quit_calls == [True]
+    finally:
+        _clear_opt_in()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_macos_keeps_hidden_window_warm_instead_of_shedding(monkeypatch):
+    """On macOS, hiding to the menu bar keeps the window ready for instant Dock reopen."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+    app, win = _window()
+    try:
+        win._background_agent = object()
+        win._arm_idle_shed()
+        assert getattr(win, "_idle_shed_timer", None) is None
+    finally:
+        win._background_agent = None
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+

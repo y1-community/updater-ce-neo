@@ -13077,6 +13077,18 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self.cleanup_workers(sweep=False, wait=False)
+        tray = getattr(self, "_background_tray", None)
+        if tray is not None:
+            try:
+                tray.hide()
+            except Exception:
+                pass
+        try:
+            from ..tray import hold_off_automatic_termination
+
+            hold_off_automatic_termination(False)
+        except Exception:
+            pass
 
         self._closing_accepted = True
         super().closeEvent(event)
@@ -13124,6 +13136,11 @@ class MainWindow(QMainWindow):
 
     def _arm_idle_shed(self) -> None:
         """Schedule the window's release after a long, idle stay in the tray."""
+        if sys.platform == "darwin":
+            # On macOS, keep the hidden window ready in memory (with polling
+            # paused) so clicking the Dock or menu bar icon reopens it
+            # instantaneously without tearing down and rebuilding Liquid Glass.
+            return
         if getattr(self, "_background_agent", None) is None:
             return
         timer = self._idle_shed_timer
@@ -13368,7 +13385,18 @@ class MainWindow(QMainWindow):
         hold_off_automatic_termination(False)
         bring_window_to_front(self)
         self._set_window_polling(True)
-        self._apply_host_chrome()
+        needs_chrome = not getattr(self, "_native_chrome_applied", False)
+        if not needs_chrome:
+            try:
+                from .dark import is_dark
+                from .glass import native_chrome_intact
+
+                needs_chrome = not native_chrome_intact(self, dark=is_dark())
+            except Exception:
+                needs_chrome = True
+        if needs_chrome:
+            self._apply_host_chrome()
+            self._native_chrome_applied = True
 
     def _apply_host_chrome(self) -> None:
         """Reapply the native window chrome for a window shown from the tray.

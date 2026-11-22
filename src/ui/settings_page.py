@@ -2788,6 +2788,21 @@ class SettingsPage(QWidget):
 
             set_notifications_enabled(True)
             self._sync_notification_controls()
+        else:
+            self._retire_background_tray()
+
+    def _retire_background_tray(self) -> None:
+        """Hide any existing menu bar / tray icon when background mode is turned off."""
+        try:
+            win = self.window()
+            tray = getattr(win, "_background_tray", None) if win is not None else None
+            if tray is not None:
+                tray.hide()
+            from ..tray import hold_off_automatic_termination
+
+            hold_off_automatic_termination(False)
+        except Exception:
+            logger.debug("Could not hide menu bar icon on background opt-out", exc_info=True)
 
     def _on_notifications_background_toggled(self, checked: bool):
         if checked and self._redirect_keep_alive_preference(
@@ -2809,6 +2824,8 @@ class SettingsPage(QWidget):
             from ..notice_alerts import set_notifications_enabled
 
             set_notifications_enabled(True)
+        else:
+            self._retire_background_tray()
         box = getattr(self, "_cb_run_in_background", None)
         if box is not None:
             box.blockSignals(True)

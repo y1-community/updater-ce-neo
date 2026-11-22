@@ -1039,7 +1039,7 @@ class SelectPackagePage(QWidget):
         # Busy bar on the title row while the manifest refreshes in the background;
         # the cached list stays usable underneath it.
         self._manifest_throbber = QProgressBar()
-        self._manifest_throbber.setRange(0, 0)
+        self._manifest_throbber.setRange(0, 100)
         self._manifest_throbber.setTextVisible(False)
         self._manifest_throbber.setFixedSize(60, 6)
         self._manifest_throbber.setVisible(False)
@@ -2698,9 +2698,11 @@ class SelectPackagePage(QWidget):
             self._manifest_worker = worker
             self._active_workers.add(worker)
             worker.finished.connect(lambda entries: self._on_manifest_worker_finished(worker, entries))
+            self._manifest_throbber.setRange(0, 0)
             self._manifest_throbber.setVisible(True)
             worker.start()
         except Exception as e:
+            self._manifest_throbber.setRange(0, 100)
             self._manifest_throbber.setVisible(False)
             logger.debug("Background manifest refresh failed: %s", e)
 
@@ -2708,6 +2710,7 @@ class SelectPackagePage(QWidget):
         self._active_workers.discard(worker)
         if worker is getattr(self, "_manifest_worker", None):
             self._manifest_worker = None
+            self._manifest_throbber.setRange(0, 100)
             self._manifest_throbber.setVisible(False)
             self._on_manifest_refreshed(entries)
 

@@ -41,30 +41,26 @@ def background_mode_supported(platform: Optional[str] = None) -> bool:
 
 
 def set_menu_bar_only(hidden: bool) -> None:
-    """macOS: live in the menu bar alone while the window is away.
+    """macOS: keep the app as a regular Dock + menu bar app while backgrounded.
 
-    An app that keeps a Dock icon but no window is what AppKit treats as idle
-    and reaps, and it is also why a background copy looked like a second, stuck
-    copy in the Dock. An accessory app shows only its status item; the window
-    coming back restores the ordinary app. Other hosts have nothing to change.
+    Demoting a live Qt ``QCocoa`` application to
+    ``NSApplicationActivationPolicyAccessory`` strips its running indicator from
+    the Dock, breaks instant ``applicationShouldHandleReopen`` Dock clicks, and
+    can wedge AppKit/Qt responder state on macOS. Automatic termination is
+    already held off by :func:`hold_off_automatic_termination`, so keeping
+    ``NSApplicationActivationPolicyRegular`` lets both the menu bar status item
+    and the Dock icon reopen the window instantaneously.
     """
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or hidden:
         return
     try:
-        from AppKit import (
-            NSApplication,
-            NSApplicationActivationPolicyAccessory,
-            NSApplicationActivationPolicyRegular,
-        )
+        from AppKit import NSApplication, NSApplicationActivationPolicyRegular
 
-        policy = (
-            NSApplicationActivationPolicyAccessory
-            if hidden
-            else NSApplicationActivationPolicyRegular
-        )
-        NSApplication.sharedApplication().setActivationPolicy_(policy)
+        ns_app = NSApplication.sharedApplication()
+        if ns_app.activationPolicy() != NSApplicationActivationPolicyRegular:
+            ns_app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
     except Exception:
-        logger.debug("Could not change the macOS activation policy", exc_info=True)
+        logger.debug("Could not ensure regular macOS activation policy", exc_info=True)
 
 
 def run_in_background_setting(settings: Optional[QSettings] = None) -> bool:
