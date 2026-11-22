@@ -104,6 +104,7 @@ class FwIni:
     model: str = ""
     type: str = ""
     description: str = ""
+    icon: str = ""
     post_install: str = ""
     post_install_2: str = ""
     # The catalogue's own reaction to this release, so an offline copy of it is
@@ -146,6 +147,7 @@ class FwPackage:
     has_rockbox_240p: bool = False
     has_ini: bool = False
     has_preserve_data_scatter: bool = False
+    icon_url: str = ""
     post_install: str = ""
     post_install_2: str = ""
     do_not_keep_data: bool = False
@@ -271,6 +273,7 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     model = get_first("target_model", "target model", "model", "target")
     sw_type = get_first("target_type", "target type", "type", "type_variant", "variant")
     desc = get_first("description", "desc")
+    icon = get_first("icon", "image", "icon_url", "image_url")
     post_install = get_first("post_install", "post install")
     post_install_2 = get_first("post_install2", "post_install_2", "post install 2")
     do_not_keep_data = get_first("do_not_keep_data", "no_keep_data").lower() in (
@@ -329,6 +332,7 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         model=model,
         type=sw_type,
         description=desc,
+        icon=icon,
         post_install=post_install,
         post_install_2=post_install_2,
         do_not_keep_data=do_not_keep_data,
@@ -1162,6 +1166,20 @@ def read_package(
         if appimage_dir is not None:
             image = _package_image(appimage_dir)
 
+    icon_url = ""
+    if meta.icon:
+        if meta.icon.startswith(("http://", "https://")):
+            icon_url = meta.icon
+        elif image is None:
+            cand_dirs = [folder_p, *scope]
+            if ini is not None and ini.parent not in cand_dirs:
+                cand_dirs.append(ini.parent)
+            for cdir in cand_dirs:
+                cand_file = cdir / meta.icon
+                if cand_file.is_file():
+                    image = cand_file
+                    break
+
     return FwPackage(
         folder=folder_p.resolve(),
         scatter=scatter.resolve(),
@@ -1175,6 +1193,7 @@ def read_package(
         has_rockbox_240p=has_rockbox_240p,
         has_ini=has_ini,
         has_preserve_data_scatter=scatter_has_preserve_data_variant(folder_p),
+        icon_url=icon_url,
         post_install=meta.post_install,
         post_install_2=meta.post_install_2,
         do_not_keep_data=meta.do_not_keep_data,
@@ -1450,12 +1469,39 @@ def stage_bundled_firmware(pkg: FwPackage) -> Path:
     except Exception as e:
         logger.debug("Could not copy rockbox marker: %s", e)
 
+    # Copy fw_package.ini so the staged scatter retains package metadata
+    try:
+        ini_candidates = [pkg.folder / FW_PACKAGE_INI]
+        if pkg.folder.parent and pkg.folder.parent != pkg.folder:
+            ini_candidates.append(pkg.folder.parent / FW_PACKAGE_INI)
+        for cand_ini in ini_candidates:
+            if cand_ini.is_file():
+                dest_ini = staged_dir / FW_PACKAGE_INI
+                if not dest_ini.exists():
+                    shutil.copy2(cand_ini, dest_ini)
+                break
+    except Exception as e:
+        logger.debug("Could not copy fw_package.ini: %s", e)
+
     # Copy the updater image so the staged scatter still shows the release icon
     if pkg.image is not None and pkg.image.is_file():
         try:
-            shutil.copy2(pkg.image, staged_dir / pkg.image.name)
+            dest_img = staged_dir / pkg.image.name
+            if not dest_img.exists():
+                shutil.copy2(pkg.image, dest_img)
         except Exception as e:
             logger.debug("Could not copy release icon: %s", e)
+    elif pkg.folder.parent and pkg.folder.parent != pkg.folder:
+        try:
+            for img_name in PACKAGE_ICON_NAMES:
+                parent_img = pkg.folder.parent / img_name
+                if parent_img.is_file():
+                    dest_img = staged_dir / img_name
+                    if not dest_img.exists():
+                        shutil.copy2(parent_img, dest_img)
+                    break
+        except Exception as e:
+            logger.debug("Could not copy parent release icon: %s", e)
 
     # Prime SP Flash Tool's history.ini if the package is in an SP Flash Tool folder
     prime_sp_tool_history_ini(pkg.folder, pkg.scatter)

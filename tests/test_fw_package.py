@@ -1171,3 +1171,40 @@ def test_history_ini_is_relative_for_a_portable_flash_tool(tmp_path):
         "lastDir=\n"
     )
     assert str(tmp_path) not in text
+
+
+def test_read_fw_package_ini_parses_icon(tmp_path):
+    ini = tmp_path / "fw_package.ini"
+    ini.write_text(
+        "[Firmware]\nsoftware_name = Rondo\nversion = 4.1.0\nicon = https://innioasis.app/assets/rondo_icon.jpg\n",
+        encoding="utf-8",
+    )
+    meta = fw_package.read_fw_package_ini(ini)
+    assert meta.name == "Rondo"
+    assert meta.icon == "https://innioasis.app/assets/rondo_icon.jpg"
+
+
+def test_read_package_sets_icon_url_and_resolves_image(tmp_path):
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini=(
+            "[Firmware]\nsoftware_name = Nugget\nversion = 2.1.3\n"
+            "icon = https://innioasis.app/assets/nugget.png\n"
+        ),
+    )
+    pkg = read_package(folder)
+    assert pkg is not None
+    assert pkg.name == "Nugget"
+    assert pkg.icon_url == "https://innioasis.app/assets/nugget.png"
+
+
+def test_read_package_resolves_custom_icon_file(tmp_path):
+    custom_icon = tmp_path / "pkg" / "my_icon.png"
+    folder = _firmware(
+        tmp_path / "pkg",
+        ini="[Firmware]\nsoftware_name = Custom\nicon = my_icon.png\n",
+    )
+    custom_icon.write_bytes(b"image")
+    pkg = read_package(folder)
+    assert pkg is not None
+    assert pkg.image == custom_icon.resolve()

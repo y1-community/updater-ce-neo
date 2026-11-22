@@ -170,3 +170,22 @@ def test_names_that_only_look_like_the_model_are_left_alone():
     # A name that is nothing but the model stays as it is rather than blanking.
     assert _software_without_model("Y2", "Y2") == "Y2"
     assert _software_without_model("Solar (A5)", "A5") == "Solar"
+
+
+def test_completion_note_unwraps_install_heading():
+    from src.i18n import tr
+    from src.ui.flash_page import FlashPage
+
+    app = _app()
+    page = FlashPage()
+    try:
+        page.show_completion_note(False, software="Get your Y1 ready to install Nugget 2.1.3", model="Y1")
+        note = page._complete_note.text()
+        expected = tr("donate_completion_subtitle").format(
+            software="Nugget 2.1.3", model="Y1"
+        )
+        assert note == expected
+        assert tr("donate_completion_subtitle_the_software").format(model="Y1") not in note
+    finally:
+        page.close()
+        app.processEvents()

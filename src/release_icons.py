@@ -389,6 +389,13 @@ def load_local_package_icon_bytes(package_path: str | Path | None, *, dark: bool
                     data = cand.read_bytes()
                     if image_bytes_ok(data):
                         return data
+            if p.parent and p.parent != p and p.parent.is_dir():
+                for name in names:
+                    cand = p.parent / name
+                    if cand.is_file():
+                        data = cand.read_bytes()
+                        if image_bytes_ok(data):
+                            return data
         elif p.is_file():
             if p.suffix.lower() == ".zip":
                 import zipfile

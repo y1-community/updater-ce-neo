@@ -7811,7 +7811,11 @@ class MainWindow(QMainWindow):
             self.sm.force_state(FlashState.S5_COMPLETE)
 
         model = self._package_model or ""
-        software = self._package_name or software_word()
+        software = (
+            getattr(self, "_bundled_software_name", "")
+            or self._package_name
+            or software_word()
+        )
         steps = install_power_on_steps(model)
 
         # Read this before recording the new install: ``post_install_once``
@@ -11057,7 +11061,13 @@ class MainWindow(QMainWindow):
             from .release_icon import pixmap_from_icon_bytes
 
             pkg_path = getattr(self, "_package_path", None)
+            bundled = getattr(self, "_bundled_fw_package", None)
             local_bytes = load_local_package_icon_bytes(pkg_path, dark=dark) if pkg_path else None
+            if not local_bytes and bundled and bundled.image and bundled.image.is_file():
+                try:
+                    local_bytes = bundled.image.read_bytes()
+                except OSError:
+                    pass
             pixmap = pixmap_from_icon_bytes(local_bytes) if local_bytes else QPixmap()
             self._flash_page.set_release_icon(pixmap, complete=complete)
             return
@@ -11847,6 +11857,9 @@ class MainWindow(QMainWindow):
             self._portable_session = portable_run.PortableSession()
             self._bundled_firmware_run = True
             self._bundled_fw_package = pkg
+            self._bundled_software_name = (
+                pkg.display_name if pkg.has_release_name else (pkg.name or "")
+            )
             if hasattr(self, "_settings_page"):
                 self._settings_page.set_portable_run(True)
             # 1. Parse scatter, stage firmware files into working directory

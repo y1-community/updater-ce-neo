@@ -7495,11 +7495,16 @@ class FlashPage(QWidget):
             self._complete_note.setVisible(False)
             return
 
-        if not software or software.startswith(("Get ready to install", "Installing software", "Get your")):
+        clean_software = software
+        if clean_software and clean_software.startswith(("Get ready to install", "Get your")):
+            from .. import catalog
+            clean_software = catalog.software_from_install_heading(clean_software, model) or clean_software
+
+        if not clean_software or clean_software.startswith(("Get ready to install", "Installing software", "Get your")):
             installed = tr("donate_completion_subtitle_the_software").format(model=model)
         else:
             installed = tr("donate_completion_subtitle").format(
-                software=software, model=model
+                software=clean_software, model=model
             )
         if self.themes.placement_failed:
             # The themes stage gave up: the note's job is the try-again copy,
