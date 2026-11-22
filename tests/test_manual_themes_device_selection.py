@@ -215,7 +215,7 @@ def test_resolve_manual_themes_choice_rules():
 # 3. MainWindow Settings / Ctrl+T / Drag-and-Drop flows
 # ---------------------------------------------------------------------------
 
-def test_settings_manual_themes_prompts_once_for_unknown_devices_and_cancels_cleanly(tmp_path):
+def test_settings_manual_themes_prompts_in_gui_for_unknown_devices_and_cancels_cleanly(tmp_path):
     from src.ui.main_window import MainWindow, _PAGE_FLASH, _PAGE_SETTINGS
 
     app = _app()
@@ -225,29 +225,49 @@ def test_settings_manual_themes_prompts_once_for_unknown_devices_and_cancels_cle
     win.settings = qs
     try:
         win._nav_to_page(_PAGE_SETTINGS)
-        # Cancel on picker -> must NOT switch to Flash page or start download
+        # Unknown devices -> opens in-GUI dropdown inside FlashPage (NEVER QInputDialog!)
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
-            patch.object(QInputDialog, "getItem", return_value=("", False)) as mock_dlg,
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
             patch("src.theme_pack.ThemePackUpdateWorker") as mock_worker,
         ):
             win._on_settings_install_rockbox_themes()
             app.processEvents()
-            assert mock_dlg.call_count == 1
+            assert win._stack.currentIndex() == _PAGE_FLASH
+            assert win.themes.device_prompt_pending is True
             assert mock_worker.call_count == 0
-            assert win._stack.currentIndex() == _PAGE_SETTINGS
-            assert not win.themes.active
+            items = [
+                win._flash_page._keep_data_choice.itemText(i)
+                for i in range(win._flash_page._keep_data_choice.count())
+            ]
+            assert any("Rockbox" in x and "Y1" in x for x in items)
+            assert any("Rockbox" in x and "Y2" in x for x in items)
+            # Non-Rockbox models (G1/G5/Q3) must never appear in the dropdown
+            assert not any(m in x for x in items for m in ("G1", "G5", "Q3"))
 
-        # Choose Y2 -> prompted ONCE (not twice!), enters Flash page for Y2
+            # Cancel chip returns cleanly to Settings with no download started
+            win._flash_page._wait_cancel_btn.click()
+            app.processEvents()
+            assert win._stack.currentIndex() == _PAGE_SETTINGS
+            assert not win.themes.device_prompt_pending
+            assert not win.themes.active
+            assert mock_worker.call_count == 0
+
+        # Choose Rockbox on Y2 -> enters Flash page power-on step for Y2
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
-            patch.object(QInputDialog, "getItem", return_value=("Y2", True)) as mock_dlg,
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
             patch("src.theme_pack.ThemePackUpdateWorker"),
         ):
             win._on_settings_install_rockbox_themes()
             app.processEvents()
-            assert mock_dlg.call_count == 1
+            combo = win._flash_page._keep_data_choice
+            y2_idx = next(i for i in range(combo.count()) if "Y2" in combo.itemText(i))
+            combo.setCurrentIndex(y2_idx)
+            win._flash_page._wait_continue_btn.click()
+            app.processEvents()
             assert win._stack.currentIndex() == _PAGE_FLASH
+            assert not win.themes.device_prompt_pending
             assert win.themes.active
             assert win.themes.model == "Y2"
             assert win.themes.rb_themes_path_fix is True
@@ -259,7 +279,6 @@ def test_settings_manual_themes_prompts_once_for_unknown_devices_and_cancels_cle
 
 def test_settings_manual_themes_prompts_when_multiple_supported_models_tracked(tmp_path):
     from src import player_update_check as tracking
-    from src.config import device_label_for_model
     from src.ui.main_window import MainWindow
 
     app = _app()
@@ -274,16 +293,22 @@ def test_settings_manual_themes_prompts_when_multiple_supported_models_tracked(t
     try:
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
-            patch.object(QInputDialog, "getItem", return_value=(device_label_for_model("Y2"), True)) as mock_dlg,
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
             patch("src.theme_pack.ThemePackUpdateWorker"),
         ):
             win._on_settings_install_rockbox_themes()
             app.processEvents()
-            assert mock_dlg.call_count == 1
-            items_arg = mock_dlg.call_args.args[3]
-            assert device_label_for_model("Y1") in items_arg
-            assert device_label_for_model("Y2") in items_arg
+            assert win.themes.device_prompt_pending is True
+            combo = win._flash_page._keep_data_choice
+            items = [combo.itemText(i) for i in range(combo.count())]
+            assert any("Y1" in x for x in items)
+            assert any("Y2" in x for x in items)
+            y2_idx = next(i for i in range(combo.count()) if "Y2" in combo.itemText(i))
+            combo.setCurrentIndex(y2_idx)
+            win._flash_page._wait_continue_btn.click()
+            app.processEvents()
             assert win.themes.model == "Y2"
+            assert win.themes.rb_themes_path_fix is True
     finally:
         win._force_quit = True
         win.close()
@@ -301,12 +326,14 @@ def test_settings_manual_themes_skips_prompt_when_adb_detects_model(tmp_path):
     try:
         with (
             patch("src.adb.adb_detect_player_model", return_value="Y2"),
-            patch.object(QInputDialog, "getItem") as mock_dlg,
+            patch("src.adb.find_adb_binary", return_value="/fake/adb"),
+            patch("src.adb.adb_devices", return_value=[]),
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
             patch("src.theme_pack.ThemePackUpdateWorker"),
         ):
             win._on_settings_install_rockbox_themes()
             app.processEvents()
-            assert mock_dlg.call_count == 0
+            assert not win.themes.device_prompt_pending
             assert win._stack.currentIndex() == _PAGE_FLASH
             assert win.themes.model == "Y2"
             assert win.themes.rb_themes_path_fix is True
@@ -322,7 +349,7 @@ def test_settings_manual_themes_skips_prompt_for_single_tracked_model(tmp_path):
 
     app = _app()
     qs = _isolated_settings(tmp_path)
-    # Only Y1 tracked (even across both Type A and Type B variants -> still one model Y1)
+    # Only Y1 Rockbox tracked (even across Type A and Type B -> still one Rockbox target)
     tracking.record_device_install("Y1", "Rockbox", "0.6.1", hardware_type="A", settings=qs)
     tracking.record_device_install("Y1", "Original Software", "3.2.4", hardware_type="B", settings=qs)
     # A non-Rockbox-theme device (G1) should not cause a Rockbox theme prompt
@@ -334,12 +361,12 @@ def test_settings_manual_themes_skips_prompt_for_single_tracked_model(tmp_path):
     try:
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
-            patch.object(QInputDialog, "getItem") as mock_dlg,
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
             patch("src.theme_pack.ThemePackUpdateWorker"),
         ):
             win._on_settings_install_rockbox_themes()
             app.processEvents()
-            assert mock_dlg.call_count == 0
+            assert not win.themes.device_prompt_pending
             assert win.themes.model == "Y1"
             assert win.themes.rb_themes_path_fix is False
     finally:
@@ -363,25 +390,31 @@ def test_drag_and_drop_theme_skips_prompt_via_adb_and_honours_cancel(tmp_path):
     win.settings = qs
     try:
         win._nav_to_page(_PAGE_SELECT)
-        # Cancel -> does not start
+        # Unknown devices -> opens in-GUI dropdown; Cancel returns to Select Software
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
-            patch.object(QInputDialog, "getItem", return_value=("", False)) as mock_dlg,
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
         ):
             win._start_theme_drop_install(theme_zip)
             app.processEvents()
-            assert mock_dlg.call_count == 1
+            assert win.themes.device_prompt_pending is True
+            assert win._stack.currentIndex() == _PAGE_FLASH
+            win._flash_page._wait_cancel_btn.click()
+            app.processEvents()
             assert win._stack.currentIndex() == _PAGE_SELECT
+            assert not win.themes.device_prompt_pending
             assert not win.themes.active
 
-        # ADB detects Y2 -> skips prompt and applies Y2 path fix
+        # ADB detects Y2 -> skips dropdown and applies Y2 path fix
         with (
             patch("src.adb.adb_detect_player_model", return_value="Y2"),
-            patch.object(QInputDialog, "getItem") as mock_dlg,
+            patch("src.adb.find_adb_binary", return_value="/fake/adb"),
+            patch("src.adb.adb_devices", return_value=[]),
+            patch.object(QInputDialog, "getItem", side_effect=AssertionError("No popup dialog allowed!")),
         ):
             win._start_theme_drop_install(theme_zip)
             app.processEvents()
-            assert mock_dlg.call_count == 0
+            assert not win.themes.device_prompt_pending
             assert win._stack.currentIndex() == _PAGE_FLASH
             assert win.themes.model == "Y2"
             assert win.themes.rb_themes_path_fix is True

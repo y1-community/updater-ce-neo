@@ -361,15 +361,23 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
         rockbox_folder_path = str(mapping.get("rockbox_folder_path") or "")
         rockbox_folder_path = rockbox_folder_path.replace("\\", "/").strip().strip("/")
 
-        raw_240p_rockbox = mapping.get("is_240p_rockbox")
-        if isinstance(raw_240p_rockbox, bool):
-            is_240p_rockbox = raw_240p_rockbox
-        else:
-            is_240p_rockbox = str(raw_240p_rockbox or "").strip().lower() in (
-                "true",
-                "1",
-                "yes",
-            )
+        def _bool_attr(*keys: str) -> bool:
+            for key in keys:
+                raw_val = mapping.get(key)
+                if isinstance(raw_val, bool):
+                    if raw_val:
+                        return True
+                elif str(raw_val or "").strip().lower() in ("true", "1", "yes"):
+                    return True
+            return False
+
+        is_240p_themes = _bool_attr(
+            "is_240p_themes",
+            "is_rb_240p_themes",
+            "is_rockbox_240p_themes",
+            "is_240p_rockbox",
+        )
+        is_240p_rockbox = is_240p_themes
         raw_hw_type = (
             mapping.get("supported_types")
             or mapping.get("supported_device_types")
@@ -437,6 +445,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 type_b_asset=type_b_asset,
                 hw_type=hw_type,
                 is_240p_rockbox=is_240p_rockbox,
+                is_240p_themes=is_240p_themes,
                 rockbox_folder_path=rockbox_folder_path,
                 rockbox_no_themes=rockbox_no_themes,
                 asset_pattern=asset_pattern,
@@ -542,6 +551,7 @@ def cache_manifest(entries):
              "type_b_asset": getattr(e, "type_b_asset", "") or "",
              "hw_type": getattr(e, "hw_type", "") or "",
              "is_240p_rockbox": bool(getattr(e, "is_240p_rockbox", False)),
+             "is_240p_themes": bool(getattr(e, "is_240p_themes", False) or getattr(e, "is_240p_rockbox", False)),
              "rb_themes_path_fix": getattr(e, "rb_themes_path_fix", None),
              "is_rockbox_android_port": getattr(e, "is_rockbox_android_port", None),
              "is_rockbox_port": getattr(e, "is_rockbox_port", None),
@@ -563,7 +573,8 @@ def cache_manifest(entries):
              "keep_data_on_first_install": bool(getattr(e, "keep_data_on_first_install", False)),
              "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False)),
              "post_install_once": bool(getattr(e, "post_install_once", False)),
-             "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False))}
+             "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False)),
+             "description": getattr(e, "description", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -590,6 +601,33 @@ def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
         if max_age is not None and (time.time() - path.stat().st_mtime) > max_age:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            isinstance(data, list)
+            and data
+            and not any(isinstance(e, dict) and "is_240p_themes" in e for e in data)
+        ):
+            # Cache predates is_240p_themes parsing: expire timed reads so the
+            # updated bundled snapshot / live manifest repopulates the flag.
+            if max_age is not None:
+                return None
+            # For offline/seed reads (max_age=None), backfill is_240p_themes
+            # from the bundled snapshot so upgraded users never lose the flag.
+            try:
+                snap = load_snapshot_manifest() or []
+                snap_240p = {
+                    (str(s.repo or "").lower(), str(s.model or "").upper()): bool(
+                        getattr(s, "is_240p_themes", False) or getattr(s, "is_240p_rockbox", False)
+                    )
+                    for s in snap
+                }
+                for e in data:
+                    if isinstance(e, dict):
+                        k = (str(e.get("repo", "")).lower(), str(e.get("device", "")).upper())
+                        if snap_240p.get(k):
+                            e["is_240p_themes"] = True
+                            e["is_240p_rockbox"] = True
+            except Exception:
+                pass
         return [
             FirmwarePackage(
                 slug=e.get("slug", ""), name=e.get("name", ""),
@@ -601,7 +639,8 @@ def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
                 type_a_asset=e.get("type_a_asset", "") or "",
                 type_b_asset=e.get("type_b_asset", "") or "",
                 hw_type=e.get("hw_type", "") or "",
-                is_240p_rockbox=bool(e.get("is_240p_rockbox", False)),
+                is_240p_rockbox=bool(e.get("is_240p_rockbox", False) or e.get("is_240p_themes", False)),
+                is_240p_themes=bool(e.get("is_240p_themes", False) or e.get("is_240p_rockbox", False)),
                 rb_themes_path_fix=e.get("rb_themes_path_fix", None),
                 is_rockbox_android_port=e.get("is_rockbox_android_port", None),
                 is_rockbox_port=e.get("is_rockbox_port", None),
@@ -626,6 +665,7 @@ def load_cached_manifest(max_age=MANIFEST_CACHE_TTL_SECONDS):
                 pmt_format_needed=bool(
                     e.get("PMT_format_needed", e.get("pmt_format_needed", False))
                 ),
+                description=e.get("description", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")

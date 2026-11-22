@@ -254,7 +254,9 @@ def test_confirm_step_shows_a_segmented_pair_with_back_disabled():
         app.processEvents()
         back, nxt = page._theme_back_btn, page._theme_step1_next_btn
         assert back.isVisible() and nxt.isVisible()
-        assert not back.isEnabled()
+        # Leading chip is an active Cancel button so users are never stuck.
+        assert back.isEnabled()
+        assert back._symbol == "cancel"
         assert nxt.isEnabled()
         assert back._companion is nxt and nxt._companion is back
         assert back._is_leading is True and nxt._is_leading is False
@@ -323,6 +325,10 @@ def test_manual_themes_start_supports_y2():
         combo.setCurrentIndex(combo.findText("Y2"))
         assert w._manual_themes_model() == "Y2"
         assert w.start_rockbox_themes_manually() is True
+        if w.themes.device_prompt_pending:
+            assert "Y2" in w._flash_page.keep_data_confirm_choice()
+            w._flash_page._wait_continue_btn.click()
+            app.processEvents()
         assert w.themes.power_on_pending is True
         assert w.themes.model == "Y2"
         assert w.themes.rb_themes_path_fix is True
@@ -341,6 +347,10 @@ def test_manual_themes_start_still_starts_for_y1_rockbox():
     try:
         w._package_model = "Y1"
         assert w.start_rockbox_themes_manually() is True
+        if w.themes.device_prompt_pending:
+            assert "Y1" in w._flash_page.keep_data_confirm_choice()
+            w._flash_page._wait_continue_btn.click()
+            app.processEvents()
         assert w.themes.power_on_pending is True
     finally:
         w.themes.clear_power_on()
@@ -359,6 +369,9 @@ def test_settings_button_still_starts_themes_with_the_toggle_off():
     w = MainWindow()
     try:
         assert w.start_rockbox_themes_manually() is True
+        if w.themes.device_prompt_pending:
+            w._flash_page._wait_continue_btn.click()
+            app.processEvents()
         assert w.themes.power_on_pending is True
     finally:
         w.themes.clear_power_on()

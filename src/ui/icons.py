@@ -230,6 +230,13 @@ _SVG_TEMPLATES = {
         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
         <polyline points="21 3 21 8 16 8"/>
     </svg>""",
+    "palette": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a10 10 0 0 0 0 20c1.66 0 2.5-1.1 2.5-2.3 0-.6-.2-1.1-.6-1.5-.4-.4-.6-.9-.6-1.4 0-1.1.9-2 2-2h2.2A4.5 4.5 0 0 0 22 10.3C22 5.6 17.5 2 12 2z"/>
+        <circle cx="7.5" cy="11.5" r="1.2" fill="{color}" stroke="none"/>
+        <circle cx="10.5" cy="7.5" r="1.2" fill="{color}" stroke="none"/>
+        <circle cx="15" cy="8" r="1.2" fill="{color}" stroke="none"/>
+        <circle cx="17.5" cy="11.5" r="1.2" fill="{color}" stroke="none"/>
+    </svg>""",
 }
 
 # Platform mappings
@@ -242,6 +249,7 @@ _SF_SYMBOL_MAP = {
     "translate": "globe",
     "globe": "globe",
     "www": "globe",
+    "palette": "paintpalette",
     "diagnostics": "waveform.path.ecg",
     "bell": "bell",
     "info": "info.circle.fill",
@@ -271,6 +279,7 @@ _SEGOE_SYMBOL_MAP = {
     "translate": 0xE774,   # Globe
     "globe": 0xE774,       # Globe
     "www": 0xE774,         # Globe
+    "palette": 0xE790,     # Color / Paint Palette
     "diagnostics": 0xEC7A, # Diagnostic
     "bell": 0xEA8F,        # Ringer
     "update": 0xE72C,      # Refresh
@@ -313,6 +322,7 @@ _FREEDESKTOP_MAP = {
     "translate": ["preferences-desktop-locale-symbolic", "preferences-desktop-locale", "locale-symbolic", "locale"],
     "globe": ["applications-internet", "web-browser", "network-workgroup"],
     "www": ["applications-internet", "web-browser", "network-workgroup"],
+    "palette": ["applications-graphics-symbolic", "preferences-desktop-theme-symbolic", "color-management"],
     "diagnostics": ["utilities-system-monitor-symbolic"],
     "bell": [
         "preferences-system-notifications-symbolic",

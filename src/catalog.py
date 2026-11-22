@@ -87,9 +87,12 @@ class FirmwarePackage:
     # Explicit hardware type target: 'A' or 'B' (or empty for both/auto)
     hw_type: str = ""
     # The manifest marks this build as Rockbox with 240p themes
-    # (``is_240p_rockbox="true"``). It is not a 360p-only build, and the
-    # current Y1 catalogue's 240p Rockbox builds target Type A hardware.
+    # (``is_240p_rockbox="true"`` / ``is_240p_themes="true"`` /
+    # ``is_rb_240p_themes="true"`` / ``is_rockbox_240p_themes="true"``).
+    # It is not a 360p-only build, and the current Y1 catalogue's 240p Rockbox
+    # builds target Type A hardware.
     is_240p_rockbox: bool = False
+    is_240p_themes: bool = False
     # Asset filename/glob pattern for Type A variant
     type_a_asset: str = ""
     # Asset filename/glob pattern for Type B variant
@@ -150,16 +153,50 @@ class FirmwarePackage:
         default_factory=dict, compare=False, hash=False, repr=False
     )
 
+    def __post_init__(self) -> None:
+        if self.is_240p_themes or self.is_240p_rockbox:
+            object.__setattr__(self, "is_240p_themes", True)
+            object.__setattr__(self, "is_240p_rockbox", True)
+
+
+def clean_rockbox_software_name(name: str) -> str:
+    """Short user-facing software name for menus (e.g. ``Nugget (Rock8ox ...)`` -> ``Nugget``)."""
+    raw = str(name or "").strip()
+    if not raw:
+        return ""
+    # Strip trailing parenthetical qualifiers like "(Rock8ox 240p + 360p)"
+    short = re.sub(r"\s*\([^)]*\)\s*$", "", raw).strip()
+    return short or raw
+
+
+def is_rockbox_firmware_package(package=None, name: str = "", repo: str = "") -> bool:
+    """True when ``package`` is a Rockbox firmware (including 240p-themes builds like Nugget)."""
+    if package is not None:
+        if (
+            bool(getattr(package, "is_240p_themes", False))
+            or bool(getattr(package, "is_240p_rockbox", False))
+            or getattr(package, "is_rockbox_port", None) is True
+            or getattr(package, "is_rockbox_android_port", None) is True
+        ):
+            return True
+        ident = " ".join(
+            str(getattr(package, attr, "") or "")
+            for attr in ("name", "slug", "repo")
+        ).lower()
+        if "rockbox" in ident or "rock8ox" in ident:
+            return True
+    ident_extra = f"{name or ''} {repo or ''}".lower()
+    return "rockbox" in ident_extra or "rock8ox" in ident_extra
+
 
 def is_rockbox_android_port(package=None, name: str = "", repo: str = "") -> bool:
     """Whether a firmware package runs Rockbox on Android with ADB support.
 
     Controlled by ``is_rockbox_android_port`` (or ``is_rockbox_android_false="true"``)
-    in slidia_manifest.xml if set.
-    Defaults to True (we assume it is an Android port unless explicitly declared
-    as ``is_rockbox_android_port="false"``, ``is_rockbox_android_false="true"``,
-    or boolean False).
-    Asking the user to intervene in mass storage mode is strictly a last resort.
+    in slidia_manifest.xml if set. Linux-based Rockbox builds (such as Nugget)
+    have no Android/ADB layer and default to mass-storage mode unless explicitly
+    marked ``is_rockbox_android_port="true"``. Generic Rockbox entries default to
+    True so ADB automation is always tried first.
     """
     if package is not None:
         raf = getattr(package, "is_rockbox_android_false", None)
@@ -173,7 +210,16 @@ def is_rockbox_android_port(package=None, name: str = "", repo: str = "") -> boo
         rp = getattr(package, "is_rockbox_port", None)
         if (rp is True or str(rp).strip().lower() == "true") and (rap is False or str(rap).strip().lower() == "false"):
             return False
+        ident = " ".join(
+            str(getattr(package, attr, "") or "")
+            for attr in ("name", "slug", "repo", "description")
+        ).lower()
+        if "based on linux" in ident or "nugget" in ident:
+            return False
         return True
+    ident_extra = f"{name or ''} {repo or ''}".lower()
+    if "nugget" in ident_extra:
+        return False
     return True
 
 
@@ -600,9 +646,9 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
                 is_type_b = hw_type_in_name(tag_lower) == "B"
             hw_type = "B" if is_type_b else "A"
 
-        if "_360p" in lower:
+        if "_360p" in lower or re.search(r"(?<!\d)360p(?!\d)", lower):
             resolution = "360p"
-        elif "_240p" in lower:
+        elif "_240p" in lower or re.search(r"(?<!\d)240p?(?!\d)", lower):
             resolution = "240p"
         else:
             resolution = "native"
@@ -1654,10 +1700,13 @@ def format_release_display_label(rel, prefer_240p=False):
 
     designations = list(version_info.get("designations") or [])
     # Append (240p) only when this row's own asset is the 240p variant.
-    # Such rows only exist when the Settings toggle allows them.
+    # Such rows only exist when the Settings toggle allows them (or when the
+    # manifest explicitly declares the whole package as 240p themes).
+    asset_low = str(rel.get("asset_name", "")).lower()
     is_240p = (
         rel.get("selected_resolution") == "240p"
-        or "240p" in str(rel.get("asset_name", "")).lower()
+        or "240p" in asset_low
+        or bool(re.search(r"(?<!\d)240p?(?!\d)", asset_low))
     )
     if is_240p:
         if not any("240p" in d.lower() for d in designations):

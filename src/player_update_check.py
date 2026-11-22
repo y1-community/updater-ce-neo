@@ -596,27 +596,122 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     return out
 
 
+@dataclass(frozen=True)
+class RockboxThemeTarget:
+    """One manifest-backed Rockbox-family software + model option for theme installs."""
+
+    model: str
+    software_name: str
+    full_name: str
+    package_slug: str = ""
+    repo: str = ""
+    is_240p_themes: bool = False
+    is_android_port: bool = True
+    rockbox_folder_path: str = ""
+    rb_themes_path_fix: Optional[bool] = None
+    post_install: str = ""
+    post_install_2: str = ""
+    package: object = None
+
+    @property
+    def display_label(self) -> str:
+        from .i18n import tr
+
+        model_lbl = device_label_for_model(self.model)
+        return tr("rockbox_theme_software_on_model").format(
+            software=self.software_name,
+            model=model_lbl,
+        )
+
+
+def tracked_record_is_240p(rec: Optional[dict], target: Optional[RockboxThemeTarget] = None) -> bool:
+    """True when a tracked install record or its target firmware uses 240p themes."""
+    if target is not None and target.is_240p_themes:
+        return True
+    if not rec:
+        return False
+    marker = " ".join(
+        str(rec.get(k) or "")
+        for k in ("release_label", "tag_name", "software_name", "package_slug")
+    ).lower()
+    return bool(re.search(r"(?<!\d)240p?(?!\d)", marker))
+
+
+def get_rockbox_theme_targets() -> list[RockboxThemeTarget]:
+    """Return distinct Rockbox-family software/model options declared in the manifest.
+
+    Only models that actually carry a Rockbox-family firmware in the catalogue
+    are listed (non-Rockbox models such as G1/G5/Q3 are never offered), and
+    hardware revisions (Type A / Type B) are collapsed because they do not
+    affect how themes are installed.
+    """
+    raw_pkgs = list(getattr(catalog, "LIVE_CATALOG", None) or [])
+    if not raw_pkgs:
+        try:
+            from . import manifest as _manifest
+
+            raw_pkgs = list(_manifest.load_snapshot_manifest() or [])
+        except Exception:
+            raw_pkgs = []
+    if not raw_pkgs:
+        raw_pkgs = list(catalog._catalog_packages())
+
+    seen: set[tuple[str, str]] = set()
+    android_targets: list[RockboxThemeTarget] = []
+    other_targets: list[RockboxThemeTarget] = []
+
+    for pkg in raw_pkgs:
+        if not catalog.is_rockbox_firmware_package(pkg):
+            continue
+        model = str(getattr(pkg, "model", "") or "").strip().upper()
+        if not model:
+            continue
+        full_name = str(getattr(pkg, "name", "") or "").strip() or "Rockbox"
+        short_name = catalog.clean_rockbox_software_name(full_name) or full_name
+        key = (short_name.casefold(), model)
+        if key in seen:
+            continue
+        seen.add(key)
+        is_240p = bool(
+            getattr(pkg, "is_240p_themes", False)
+            or getattr(pkg, "is_240p_rockbox", False)
+        )
+        android_port = catalog.is_rockbox_android_port(package=pkg, name=full_name)
+        target = RockboxThemeTarget(
+            model=model,
+            software_name=short_name,
+            full_name=full_name,
+            package_slug=str(getattr(pkg, "slug", "") or ""),
+            repo=str(getattr(pkg, "repo", "") or ""),
+            is_240p_themes=is_240p,
+            is_android_port=android_port,
+            rockbox_folder_path=str(getattr(pkg, "rockbox_folder_path", "") or ""),
+            rb_themes_path_fix=getattr(pkg, "rb_themes_path_fix", None),
+            post_install=str(getattr(pkg, "post_install", "") or ""),
+            post_install_2=str(getattr(pkg, "post_install_2", "") or ""),
+            package=pkg,
+        )
+        if android_port and not is_240p:
+            android_targets.append(target)
+        else:
+            other_targets.append(target)
+
+    # Stable order: Android-port Rockbox (Y1, Y2, ...) first, then 240p/Linux ports (Nugget on Y1, ...)
+    android_targets.sort(key=lambda t: (t.model != "Y1", t.model != "Y2", t.model, t.software_name.casefold()))
+    other_targets.sort(key=lambda t: (t.model != "Y1", t.model != "Y2", t.model, t.software_name.casefold()))
+    return android_targets + other_targets
+
+
 def get_rockbox_theme_supported_models() -> list[str]:
-    """Return distinct player models that support Rockbox theme installation."""
-    supported: list[str] = ["Y1", "Y2"]
-    try:
-        for pkg in catalog._catalog_packages():
-            model = str(getattr(pkg, "model", "") or "").strip().upper()
-            if not model or model in supported:
-                continue
-            if bool(getattr(pkg, "rockbox_no_themes", False)):
-                continue
-            if bool(getattr(pkg, "is_240p_rockbox", False)):
-                continue
-            ident = " ".join(
-                str(getattr(pkg, attr, "") or "")
-                for attr in ("name", "slug", "repo")
-            ).lower()
-            if "rockbox" in ident:
-                supported.append(model)
-    except Exception as e:
-        logger.debug("Error inspecting catalog for Rockbox theme models: %s", e)
-    return supported
+    """Return distinct player models that have a Rockbox firmware in the manifest."""
+    targets = get_rockbox_theme_targets()
+    if targets:
+        models: list[str] = []
+        for t in targets:
+            if t.model not in models:
+                models.append(t.model)
+        return models
+    return ["Y1", "Y2"]
 
 
 def get_tracked_rockbox_theme_models(settings: Optional[QSettings] = None) -> list[str]:
@@ -636,12 +731,22 @@ def get_rockbox_installed_models(settings: Optional[QSettings] = None) -> list[s
     """Return list of distinct models (e.g. ['Y1', 'Y2']) where Rockbox is currently tracked."""
     supported = get_rockbox_theme_supported_models()
     supported_set = set(supported)
+    targets = get_rockbox_theme_targets()
     installs = get_all_device_installs(settings)
     rockbox_models: set[str] = set()
     for key, rec in (installs or {}).items():
         base_model = (rec.get("model") or key.split("_")[0] or "").strip().upper()
+        if base_model not in supported_set:
+            continue
         sw = f"{rec.get('software_name', '')} {rec.get('package_slug', '')}".lower()
-        if "rockbox" in sw and base_model in supported_set:
+        if "rockbox" in sw or "rock8ox" in sw or any(
+            t.model == base_model
+            and (
+                (t.package_slug and t.package_slug.lower() in sw)
+                or (t.software_name.lower() in sw)
+            )
+            for t in targets
+        ):
             rockbox_models.add(base_model)
     return [m for m in supported if m in rockbox_models]
 

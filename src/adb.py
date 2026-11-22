@@ -624,6 +624,28 @@ def adb_find_all_rockbox_dirs(adb: str, serial: "AdbDevice | str") -> list[str]:
     return _dedupe_rockbox_dirs(found)
 
 
+def adb_stop_rockbox_processes(adb: str, serial: "AdbDevice | str") -> None:
+    """Stop running Rockbox processes before deleting ``.rockbox``.
+
+    If Rockbox is still running when ``.rockbox`` is removed or when
+    ``adb reboot`` runs, Rockbox flushes its in-memory ``config.cfg`` back
+    onto storage during shutdown, causing old settings to survive a fresh
+    install. Force-stopping the Android package and killing any Rockbox
+    process first prevents config resurrection.
+    """
+    cmd = (
+        "am force-stop org.rockbox 2>/dev/null; "
+        "am force-stop org.y2rockbox 2>/dev/null; "
+        "killall -9 rockbox org.rockbox 2>/dev/null; "
+        "pkill -9 -f rockbox 2>/dev/null; "
+        "true"
+    )
+    try:
+        _run_adb(adb, *_target(serial), "shell", cmd, timeout=10)
+    except Exception as e:
+        logger.debug("Stopping Rockbox processes before cleanup skipped/failed: %s", e)
+
+
 def adb_delete_rockbox_dirs(
     adb: str,
     serial: "AdbDevice | str",
@@ -637,13 +659,14 @@ def adb_delete_rockbox_dirs(
     Used by the install's cleanup step when Keep my settings is left unticked:
     themes, fonts and Rockbox's own settings live in ``.rockbox`` rather than
     on the user data partition, so keeping the partition is not the same as a
-    fresh start. Only paths whose final component is ``.rockbox`` are passed
-    to ``rm -rf``; each removal is verified, because a shell exit status alone
-    does not prove the directory is gone.
+    fresh start. Rockbox is stopped first so it cannot write its in-memory
+    ``config.cfg`` back on shutdown; each removal is synced and verified.
     """
     targets = list(dirs) if dirs is not None else adb_find_all_rockbox_dirs(adb, serial)
     if not targets:
         return True, "No .rockbox folder was found on the player"
+
+    adb_stop_rockbox_processes(adb, serial)
 
     removed: list[str] = []
     failed: list[str] = []
@@ -659,7 +682,8 @@ def adb_delete_rockbox_dirs(
                 adb,
                 *_target(serial),
                 "shell",
-                f"rm -rf {_shell_quote(clean)} && echo __ADB_RM_OK__",
+                f"rm -rf {_shell_quote(clean)} {_shell_quote(clean)}.deleted-* 2>/dev/null; "
+                f"if [ ! -e {_shell_quote(clean)} ]; then sync 2>/dev/null; echo __ADB_RM_OK__; fi",
                 timeout=180,
             )
         except Exception as e:
@@ -671,6 +695,7 @@ def adb_delete_rockbox_dirs(
             and proc.returncode == 0
             and "__ADB_RM_OK__" in (proc.stdout or "")
             and not adb_shell_ls(adb, serial, clean)
+            and not adb_shell_ls(adb, serial, f"{clean}/config.cfg")
         ):
             removed.append(clean)
             if log_cb is not None:
@@ -682,15 +707,17 @@ def adb_delete_rockbox_dirs(
 
         # Rockbox runs while its card is mounted over FUSE and can recreate a
         # file mid-delete, which makes rm -rf exit with ENOTEMPTY even though
-        # the folder is already being emptied. Renaming the tree takes it out
-        # of Rockbox's sight atomically; the reboot then creates a fresh one.
+        # the folder is already being emptied. Stop Rockbox again, then rename
+        # the tree out of Rockbox's sight atomically and remove it.
+        adb_stop_rockbox_processes(adb, serial)
         trash = f"{clean}.deleted-{int(time.time())}"
         try:
             moved = _run_adb(
                 adb,
                 *_target(serial),
                 "shell",
-                f"mv {_shell_quote(clean)} {_shell_quote(trash)} && echo __ADB_MV_OK__",
+                f"mv {_shell_quote(clean)} {_shell_quote(trash)} && sync 2>/dev/null; "
+                f"if [ ! -e {_shell_quote(clean)} ]; then echo __ADB_MV_OK__; fi",
                 timeout=60,
             )
         except Exception as e:
@@ -702,6 +729,7 @@ def adb_delete_rockbox_dirs(
             moved.returncode == 0
             and "__ADB_MV_OK__" in (moved.stdout or "")
             and not adb_shell_ls(adb, serial, clean)
+            and not adb_shell_ls(adb, serial, f"{clean}/config.cfg")
         ):
             removed.append(clean)
             if log_cb is not None:
@@ -709,13 +737,13 @@ def adb_delete_rockbox_dirs(
                     log_cb(f"Moved {clean} aside so Rockbox can rebuild it")
                 except Exception:
                     logger.debug("ADB cleanup log callback failed", exc_info=True)
-            # Best effort: the reboot finishes the job for any file still open.
+            # Best effort: delete the moved tree and flush to storage.
             try:
                 _run_adb(
                     adb,
                     *_target(serial),
                     "shell",
-                    f"rm -rf {_shell_quote(trash)}",
+                    f"rm -rf {_shell_quote(trash)} && sync 2>/dev/null",
                     timeout=120,
                 )
             except Exception:
@@ -725,6 +753,13 @@ def adb_delete_rockbox_dirs(
         failed.append(
             f"{clean}: {(proc.stderr or proc.stdout or 'rm failed').strip() if proc is not None else 'rm failed'}"
         )
+
+    # Flush filesystem buffers before returning so a reboot cannot lose the unlinks.
+    if removed:
+        try:
+            _run_adb(adb, *_target(serial), "shell", "sync", timeout=15)
+        except Exception:
+            pass
 
     if removed and failed:
         return False, f"Removed {len(removed)}; issues: {'; '.join(failed[:3])}"
@@ -986,6 +1021,34 @@ def adb_reboot(adb: str, serial: str) -> bool:
     except Exception as e:
         logger.debug("adb reboot failed: %s", e)
         return False
+
+
+def adb_wait_for_reboot_disconnect(
+    adb: str,
+    serial: str,
+    *,
+    timeout: float = 25.0,
+    cancel_cb: Optional[Callable[[], bool]] = None,
+) -> bool:
+    """Wait until ``serial`` drops off ADB after ``adb reboot``.
+
+    Prevents the themes stage that follows cleanup from immediately latching
+    onto the pre-reboot ADB session before the player has actually restarted
+    and repopulated a clean ``.rockbox`` folder.
+    """
+    deadline = time.monotonic() + max(1.0, timeout)
+    seen_online = False
+    while time.monotonic() < deadline:
+        if _cancelled(cancel_cb):
+            return False
+        current = adb_devices(adb, timeout=3.0)
+        if str(serial) not in current:
+            if seen_online:
+                time.sleep(1.5)
+            return True
+        seen_online = True
+        time.sleep(0.5)
+    return False
 
 
 def adb_enable_mass_storage(adb: str, serial: str) -> bool:

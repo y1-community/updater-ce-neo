@@ -212,16 +212,16 @@ def rockbox_package_name(*names: Optional[str]) -> bool:
 
 
 def rockbox_240p_package_name(*names: Optional[str]) -> bool:
-    """True when the names mark a 240p Rockbox ROM: ``rockbox`` plus a ``240p``/``_240`` tag.
+    """True when the names mark a 240p Rockbox ROM: ``rockbox``/``rock8ox`` plus a ``240``/``240p`` tag.
 
-    A release name containing ``240p`` (with Rockbox in the release or ini name and the tag
-    in the zip name) is a Rockbox ROM for the small-screen player. It takes the theme-site
-    completion note instead of the bundled 360p theme push.
+    A release name or zip filename containing ``240`` / ``240p`` (without
+    matching dates like ``20240501``) marks a Rockbox ROM that supports 240p
+    iPod Classic themes instead of requiring the bundled 360p theme pack push.
     """
     texts = [n.lower() for n in names if n]
-    if not any("rockbox" in t for t in texts):
+    if not any("rockbox" in t or "rock8ox" in t for t in texts):
         return False
-    return any("240p" in t or "_240" in t for t in texts)
+    return any(re.search(r"(?<!\d)240p?(?!\d)", t) for t in texts)
 
 
 def read_fw_package_ini(path: Union[str, Path]) -> FwIni:

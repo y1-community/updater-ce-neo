@@ -172,7 +172,22 @@ class AdbRockboxCleanupWorker(QThread):
                 self.finished.emit(False, "Removing the old Rockbox folders was cancelled")
                 return
             self.progress.emit(5, 100)
+            # Storage on freshly booted players (especially Y2) can take a few
+            # seconds after adbd starts to finish mounting /storage/sdcard0.
+            # Retry discovery briefly when the first probe finds nothing so we
+            # don't skip deleting an existing .rockbox folder on a race.
             dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
+            if not dirs:
+                import time as _time
+
+                wait_deadline = _time.monotonic() + 12.0
+                while not dirs and _time.monotonic() < wait_deadline:
+                    if self.isInterruptionRequested():
+                        self.finished.emit(False, "Removing the old Rockbox folders was cancelled")
+                        return
+                    self.msleep(1000)
+                    dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
+
             if dirs:
                 self.log.emit(
                     f"[Rockbox Cleanup] Removing {len(dirs)} .rockbox folder(s): {', '.join(dirs)}"
@@ -189,9 +204,21 @@ class AdbRockboxCleanupWorker(QThread):
                 ok = True
                 message = "No .rockbox folder was found on the player"
 
+            if not ok:
+                self.finished.emit(False, message)
+                return
+
             self.progress.emit(70, 100)
             self.log.emit("[Rockbox Cleanup] Automatically rebooting device via ADB so Rockbox can populate a new .rockbox folder...")
-            _adb.adb_reboot(self._adb, self._serial)
+            rebooted = _adb.adb_reboot(self._adb, self._serial)
+            if rebooted:
+                self.progress.emit(85, 100)
+                _adb.adb_wait_for_reboot_disconnect(
+                    self._adb,
+                    self._serial,
+                    timeout=25.0,
+                    cancel_cb=self.isInterruptionRequested,
+                )
             self.progress.emit(100, 100)
             self.finished.emit(ok, message)
         except Exception as e:

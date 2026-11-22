@@ -52,6 +52,12 @@ class ThemesJourney:
         self.rockbox_folder_path = ""
         self.rockbox_no_themes = False
         self.mass_storage = False
+        self.adb_reconnect_tried = False
+        # Standalone software-picker state (Settings / Ctrl+T / drag-and-drop).
+        self.device_prompt_pending = False
+        self.manual_target = None
+        self.manual_target_is_240p = False
+        self.manual_prompt_choices: list = []
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
         # UI objects whose lifetime *is* journey state: the ADB presence
@@ -226,6 +232,8 @@ class ThemesJourney:
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
+        self.adb_reconnect_tried = False
+        self.device_prompt_pending = False
 
     def finish(self) -> None:
         """The transfer left the card: completed, given up, or abandoned."""
@@ -243,6 +251,11 @@ class ThemesJourney:
         self.rockbox_folder_path = ""
         self.rockbox_no_themes = False
         self.mass_storage = False
+        self.adb_reconnect_tried = False
+        self.device_prompt_pending = False
+        self.manual_target = None
+        self.manual_target_is_240p = False
+        self.manual_prompt_choices = []
 
     def mark_placement_failed(self) -> None:
         self._release_awake()
@@ -469,3 +482,123 @@ def resolve_manual_themes_choice(
         default_model = choices[0]
 
     return None, choices, default_model
+
+
+def resolve_manual_themes_target(
+    *,
+    adb_model: str | None,
+    targets: list,
+    tracked_installs: dict | None = None,
+    fallback_model: str = "",
+    fallback_software: str = "",
+) -> tuple[object | None, list, object | None, bool]:
+    """Resolve the manifest-backed Rockbox software/model target for standalone runs.
+
+    Returns ``(auto_target, choices, default_target, tracked_is_240p)``:
+    - ``auto_target`` is non-None when no wizard dropdown is needed (ADB detected
+      an attached Y1/Y2, or exactly one Rockbox-capable software/model is tracked).
+    - ``choices`` is the ordered list of ``RockboxThemeTarget`` entries for the
+      in-GUI dropdown (e.g. ``Rockbox on Y1``, ``Rockbox on Y2``, ``Nugget on Y1``),
+      strictly filtered to models/firmwares declared in ``slidia_manifest.xml``.
+    - ``default_target`` is the pre-selected item when prompting.
+    - ``tracked_is_240p`` is True when the resolved target or its tracked install
+      record uses 240p themes (e.g. Nugget, or a tracked 240p Rockbox build).
+    """
+    from .player_update_check import tracked_record_is_240p
+
+    all_targets = list(targets or [])
+    if not all_targets:
+        return None, [], None, False
+
+    adb_norm = str(adb_model or "").strip().upper()
+    if adb_norm:
+        # Prefer the Android-port Rockbox entry for the ADB-detected model.
+        adb_matches = [t for t in all_targets if t.model.upper() == adb_norm]
+        android_match = next((t for t in adb_matches if t.is_android_port), None)
+        chosen = android_match or (adb_matches[0] if adb_matches else None)
+        if chosen is not None:
+            return chosen, [chosen], chosen, bool(chosen.is_240p_themes)
+
+    installs = tracked_installs or {}
+    supported_models = {t.model.upper() for t in all_targets}
+    tracked_models: list[str] = []
+    matched_rb_targets: list[tuple[object, bool]] = []
+
+    def _record_matches_target(rec: dict, target) -> bool:
+        rec_model = str(rec.get("model") or "").strip().upper()
+        if rec_model != target.model.upper():
+            return False
+        sw_low = str(rec.get("software_name") or "").strip().casefold()
+        slug_low = str(rec.get("package_slug") or "").strip().casefold()
+        if target.package_slug and slug_low and slug_low == target.package_slug.casefold():
+            return True
+        short_low = target.software_name.casefold()
+        full_low = target.full_name.casefold()
+        if sw_low and (sw_low == short_low or sw_low == full_low or short_low in sw_low):
+            return True
+        if target.is_android_port and not target.is_240p_themes and "rockbox" in sw_low and "nugget" not in sw_low:
+            return True
+        return False
+
+    for key, rec in installs.items():
+        if not isinstance(rec, dict):
+            continue
+        base_model = str(rec.get("model") or str(key).split("_")[0] or "").strip().upper()
+        if base_model not in supported_models:
+            continue
+        if base_model not in tracked_models:
+            tracked_models.append(base_model)
+        rec_copy = dict(rec, model=base_model)
+        for target in all_targets:
+            if _record_matches_target(rec_copy, target):
+                is_240 = tracked_record_is_240p(rec_copy, target)
+                if not any(existing is target for existing, _ in matched_rb_targets):
+                    matched_rb_targets.append((target, is_240))
+                elif is_240:
+                    matched_rb_targets = [
+                        (t, True if t is target else flag) for t, flag in matched_rb_targets
+                    ]
+
+    def _pick_default(pool: list):
+        if len(matched_rb_targets) == 1 and matched_rb_targets[0][0] in pool:
+            return matched_rb_targets[0][0]
+        fb_m = str(fallback_model or "").strip().upper()
+        fb_sw = str(fallback_software or "").strip().casefold()
+        if fb_m and fb_sw:
+            for t in pool:
+                if t.model.upper() == fb_m and (
+                    t.software_name.casefold() in fb_sw or fb_sw in t.full_name.casefold()
+                ):
+                    return t
+        if fb_m:
+            for t in pool:
+                if t.model.upper() == fb_m:
+                    return t
+        return pool[0]
+
+    # Single tracked model that supports Rockbox themes:
+    if len(tracked_models) == 1:
+        only_model = tracked_models[0]
+        model_targets = [t for t in all_targets if t.model.upper() == only_model]
+        # Exactly one tracked Rockbox-family software on this single model -> auto!
+        if len(matched_rb_targets) == 1:
+            t, is_240 = matched_rb_targets[0]
+            return t, [t], t, is_240
+        # Only one Rockbox-family firmware exists for this model (e.g. Y2 -> Rockbox on Y2) -> auto!
+        if len(model_targets) == 1:
+            t = model_targets[0]
+            return t, [t], t, bool(t.is_240p_themes)
+        # Multiple tracked Rockbox-family softwares on this model (or only non-Rockbox
+        # tracked on a model that has both Rockbox and Nugget) -> ask among model's targets.
+        choices = [t for t, _ in matched_rb_targets] if len(matched_rb_targets) > 1 else model_targets
+        return None, choices, _pick_default(choices), False
+
+    # Multiple tracked Rockbox-capable models -> ask among targets for those models.
+    if len(tracked_models) > 1:
+        choices = [t for t in all_targets if t.model.upper() in tracked_models]
+        if not choices:
+            choices = list(all_targets)
+        return None, choices, _pick_default(choices), False
+
+    # Unknown devices (no tracked Rockbox-capable models) -> ask among all manifest targets.
+    return None, list(all_targets), _pick_default(all_targets), False

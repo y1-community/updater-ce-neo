@@ -1252,47 +1252,7 @@ class MainWindow(QMainWindow):
         paths = [path] if isinstance(path, (str, Path)) else list(path)
         if not paths:
             return
-        model = self._manual_themes_model()
-        if not model:
-            self._append_log("Dropped Rockbox theme install cancelled: no device selected.")
-            return
-        from ..theme_pack import prepare_dragged_theme_payload, should_apply_theme_path_fix
-        import tempfile
-        import time
-        apply_fix = should_apply_theme_path_fix(model=model)
-        target_zip = Path(tempfile.gettempdir()) / f"dragged_theme_{int(time.time())}.zip"
-        res = prepare_dragged_theme_payload(paths, target_zip, apply_path_fix=apply_fix)
-        ok = bool(res[0])
-        msg = str(res[1])
-        count = getattr(res, "count", 1)
-        if not ok:
-            self._show_status(f"Could not load theme: {msg}", 10000)
-            self._append_log(f"Failed to load dropped Rockbox theme(s): {msg}")
-            return
-        first_stem = Path(paths[0]).stem
-        display_name = first_stem if count <= 1 else f"{count} Rockbox Themes"
-        theme_names = ", ".join(Path(p).name for p in paths[:3]) + ("..." if len(paths) > 3 else "")
-        self._append_log(f"Loaded {count} dropped Rockbox theme(s) ({theme_names}) for {model}.")
-        self._package_model = model
-        self._package_name = display_name
-        self._install_complete = False
-        self._install_failed = False
-        self.themes.reset_completion()
-        self.themes.set_apk("", "")
-        self.themes.payload_zip_path = target_zip
-        self.themes.is_standalone = True
-        self.themes.is_custom_theme = True
-        self.themes.custom_theme_count = count
-        self.themes.custom_theme_name = display_name
-        self.themes.custom_theme_paths = [Path(p) for p in paths]
-        self.themes.model = model
-        self.themes.rb_themes_path_fix = apply_fix
-        self._compact_install_screen = False
-        self._is_360p_rockbox = True
-        self._flash_page.set_model(model)
-        self._flash_page.set_package_name(display_name)
-        self._nav_to_page(_PAGE_FLASH)
-        self._show_rockbox_power_on_prompt(model, standalone=True)
+        self._begin_manual_themes_wizard(drop_paths=[Path(p) for p in paths])
 
     def eventFilter(self, watched, event):  # noqa: N802
         """Catch a firmware drag over any child of the window.
@@ -1574,6 +1534,14 @@ class MainWindow(QMainWindow):
         self._settings_page.themes_auto_install_changed.connect(
             self._on_themes_auto_install_changed
         )
+        if hasattr(self._settings_page, "get_240p_themes_requested"):
+            self._settings_page.get_240p_themes_requested.connect(
+                self._on_settings_get_240p_themes
+            )
+        if hasattr(self._settings_page, "save_360p_themes_zip_requested"):
+            self._settings_page.save_360p_themes_zip_requested.connect(
+                self._on_settings_save_360p_themes_zip
+            )
 
         # The Notices rail row exists only while there is something to read:
         # dismissing the last notice removes it, and a new notice id in the
@@ -2535,6 +2503,8 @@ class MainWindow(QMainWindow):
         self.service.eta_changed.connect(self._on_worker_eta)
         self._flash_page.on_cancel(self._on_cancel_flash)
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
+        if hasattr(self._flash_page, "set_theme_cancel_callback"):
+            self._flash_page.set_theme_cancel_callback(self._on_theme_stage_cancelled)
         self._flash_page.on_install_retry(self._on_progress_retry)
         self._flash_page.on_power_off_continue(self._on_power_off_continue)
         self._flash_page.on_try_anyway(self._on_keep_data_try_anyway)
@@ -3469,59 +3439,15 @@ class MainWindow(QMainWindow):
                     return m
         return supported_models[0] if supported_models else "Y1"
 
-    def _prompt_manual_themes_model(
-        self,
-        choices: list[str],
-        default_model: str = "",
-    ) -> str | None:
-        """Ask the user which supported player they are installing Rockbox themes for."""
-        from PySide6.QtWidgets import QInputDialog
-        from ..config import device_label_for_model
-
-        if not choices:
-            return None
-        default_idx = choices.index(default_model) if default_model in choices else 0
-        headless = (
-            os.environ.get("QT_QPA_PLATFORM") == "offscreen"
-            or bool(os.environ.get("INNIOASIS_HEADLESS"))
-        )
-        get_item = QInputDialog.getItem
-        is_mocked = not callable(get_item) or type(get_item).__name__ not in (
-            "builtin_function_or_method",
-            "method_descriptor",
-            "wrapper_descriptor",
-        )
-        if headless and not is_mocked and not getattr(self, "_allow_offscreen_device_prompt", False):
-            return choices[default_idx]
-
-        items = [device_label_for_model(m) for m in choices]
-        chosen, ok = get_item(
-            self,
-            tr("rockbox_select_device_title"),
-            tr("rockbox_select_device_prompt"),
-            items,
-            default_idx,
-            False,
-        )
-        if not ok or not chosen:
-            return None
-        for m, label in zip(choices, items):
-            if chosen == label or chosen.strip().upper() == m:
-                return m
-        for m in choices:
-            if m in chosen.upper():
-                return m
-        return None
-
     def _manual_themes_model(self, *, prompt: bool = True) -> str | None:
         """Resolve the target model for standalone/manual Rockbox theme installs.
 
         Priority:
-        1. Automatically detect an attached player via ADB (skips the prompt).
+        1. Automatically detect an attached player via ADB.
         2. If exactly one Rockbox-theme-capable model is tracked, use it.
-        3. Otherwise (unknown devices or multiple Rockbox-theme-capable models
-           tracked), prompt the user to pick the device, returning ``None`` if
-           cancelled.
+        3. Otherwise return the preselected fallback model (interactive flows
+           present the in-GUI software dropdown via ``_begin_manual_themes_wizard``
+           rather than spawning a modal popup dialog).
         """
         from ..player_update_check import (
             get_rockbox_installed_models,
@@ -3548,7 +3474,7 @@ class MainWindow(QMainWindow):
             logger.debug("Error reading tracked Rockbox models: %s", e)
 
         fallback_default = self._manual_themes_fallback_default(supported)
-        auto_model, choices, default_model = resolve_manual_themes_choice(
+        auto_model, _choices, default_model = resolve_manual_themes_choice(
             adb_model=adb_model,
             tracked_supported_models=tracked_supported,
             rockbox_installed_models=rb_models,
@@ -3561,35 +3487,381 @@ class MainWindow(QMainWindow):
                     f"[Rockbox Themes] Detected connected {auto_model} over ADB; skipping device prompt."
                 )
             return auto_model
-        if not prompt:
-            return default_model
-        return self._prompt_manual_themes_model(choices, default_model=default_model)
+        return default_model
+
+    def _on_settings_get_240p_themes(self) -> None:
+        """Open the 240p iPod Classic / Y1 / Y2 themes catalogue via innioasis.app."""
+        from ..browser import open_browser
+        from .flash_page import ROCKBOX_240P_THEMES_URL
+
+        open_browser(ROCKBOX_240P_THEMES_URL)
+
+    def _on_settings_save_360p_themes_zip(self) -> None:
+        """Save a copy of the 360p Rockbox themes & fonts ZIP to a user-chosen path."""
+        import shutil
+        from PySide6.QtWidgets import QFileDialog
+        from ..downloads import default_picker_dir
+        from ..theme_pack import ensure_ready_theme_pack_zip
+
+        suggested = str(Path(default_picker_dir()) / "rockbox-360p-themes.zip")
+        dest_str, _flt = QFileDialog.getSaveFileName(
+            self,
+            tr("settings_save_360p_themes_zip_title"),
+            suggested,
+            tr("settings_save_360p_themes_zip_filter"),
+        )
+        if not dest_str:
+            return
+        dest = Path(dest_str)
+        if dest.suffix.lower() != ".zip":
+            dest = dest.with_suffix(".zip")
+        try:
+            src_zip, err = ensure_ready_theme_pack_zip()
+            if src_zip is None or not Path(src_zip).is_file():
+                raise RuntimeError(err or "theme pack unavailable")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_zip, dest)
+            msg = tr("settings_save_360p_themes_zip_saved").format(path=str(dest))
+            self._append_log(f"[Rockbox Themes] {msg}")
+            self._show_status(msg, 10000)
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_themes_status(msg)
+        except Exception as e:
+            msg = tr("settings_save_360p_themes_zip_failed").format(error=str(e))
+            self._append_log(f"[Rockbox Themes] {msg}")
+            self._show_status(msg, 10000)
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_themes_status(msg)
+
+    def _tracked_is_240p_for_target(self, target) -> bool:
+        """Check whether the user's tracked install for ``target`` is a 240p release."""
+        if getattr(target, "is_240p_themes", False):
+            return True
+        try:
+            installs = device_tracking.get_all_device_installs(self.settings) or {}
+            for key, rec in installs.items():
+                if not isinstance(rec, dict):
+                    continue
+                base_model = (rec.get("model") or str(key).split("_")[0] or "").strip().upper()
+                if base_model != str(target.model or "").upper():
+                    continue
+                if device_tracking.tracked_record_is_240p(rec):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _begin_manual_themes_wizard(
+        self,
+        *,
+        drop_paths: list[Path] | None = None,
+        refresh_pack: bool = False,
+    ) -> bool:
+        """Entry point for Settings, Ctrl+T, and drag-and-drop theme installs.
+
+        Auto-detects connected ADB players or a single tracked Rockbox device;
+        otherwise presents the in-GUI software dropdown inside the Install card
+        (never a modal popup) with live passive ADB auto-skip.
+        """
+        if self._install_run_active():
+            self._append_log("Rockbox themes install ignored: an install is already in progress.")
+            return False
+
+        from ..player_update_check import (
+            get_rockbox_theme_supported_models,
+            get_rockbox_theme_targets,
+        )
+        from ..themes_journey import resolve_manual_themes_target
+
+        targets = get_rockbox_theme_targets()
+        if not targets:
+            return False
+        supported = get_rockbox_theme_supported_models()
+        adb_model: str | None = None
+        try:
+            from ..adb import adb_detect_player_model
+
+            adb_model = adb_detect_player_model(supported_models=supported)
+        except Exception as e:
+            logger.debug("Error detecting connected player via ADB: %s", e)
+
+        tracked_installs: dict = {}
+        try:
+            tracked_installs = device_tracking.get_all_device_installs(self.settings) or {}
+        except Exception as e:
+            logger.debug("Error reading tracked installs: %s", e)
+
+        fallback_default = self._manual_themes_fallback_default(supported)
+        auto_target, prompt_choices, default_target, auto_is_240p = resolve_manual_themes_target(
+            adb_model=adb_model,
+            targets=targets,
+            tracked_installs=tracked_installs,
+            fallback_model=fallback_default,
+            fallback_software=str(getattr(self, "_package_name", "") or ""),
+        )
+        default_label = default_target.display_label if default_target is not None else ""
+        self._theme_prompt_return_page = self._stack.currentIndex()
+
+        if auto_target is not None:
+            if adb_model and auto_target.model == adb_model:
+                self._append_log(
+                    f"[Rockbox Themes] Detected connected {auto_target.model} over ADB; skipping software prompt."
+                )
+            return self._proceed_manual_themes_for_target(
+                auto_target,
+                is_240p=auto_is_240p and not bool(drop_paths),
+                drop_paths=drop_paths,
+                refresh_pack=refresh_pack,
+                adb_auto_detected=bool(adb_model and auto_target.model == adb_model),
+            )
+
+        # Unknown devices or multiple Rockbox-capable models tracked: ask in
+        # the main Install card using the wizard dropdown with passive ADB watch.
+        self.themes.reset_completion()
+        self.themes.set_apk("", "")
+        self.themes.is_standalone = True
+        self.themes.manual_prompt_choices = list(prompt_choices)
+        self._install_complete = False
+        self._install_failed = False
+        self._compact_install_screen = False
+        card_title = (
+            Path(drop_paths[0]).stem
+            if drop_paths and len(drop_paths) == 1
+            else (
+                f"{len(drop_paths)} Rockbox Themes"
+                if drop_paths
+                else tr("rockbox_themes_and_fonts_pack")
+            )
+        )
+        self._package_name = card_title
+        self._flash_page.set_package_name(card_title)
+        self._flash_page.set_model("")
+
+        def _on_choice(label: str) -> None:
+            chosen = next(
+                (t for t in prompt_choices if t.display_label == label),
+                prompt_choices[0],
+            )
+            is_240p = self._tracked_is_240p_for_target(chosen)
+            self._proceed_manual_themes_for_target(
+                chosen,
+                is_240p=is_240p,
+                drop_paths=drop_paths,
+                refresh_pack=refresh_pack,
+            )
+
+        def _on_cancel() -> None:
+            self._append_log("Rockbox themes installation cancelled at software selection.")
+            self._on_theme_stage_cancelled()
+
+        def _on_adb_detected(detected_model: str, _serial: str) -> None:
+            self._append_log(
+                f"[Rockbox Themes] Detected connected {detected_model} over ADB; skipping software dropdown."
+            )
+            matched = next(
+                (t for t in prompt_choices if t.model == detected_model and t.is_android_port),
+                next((t for t in prompt_choices if t.model == detected_model), prompt_choices[0]),
+            )
+            is_240p = (not bool(drop_paths)) and self._tracked_is_240p_for_target(matched)
+            self._proceed_manual_themes_for_target(
+                matched,
+                is_240p=is_240p,
+                drop_paths=drop_paths,
+                refresh_pack=refresh_pack,
+                adb_auto_detected=True,
+            )
+
+        self._flash_page.show_rockbox_theme_device_prompt(
+            choices=[t.display_label for t in prompt_choices],
+            selected=default_label,
+            on_continue=_on_choice,
+            on_cancel=_on_cancel,
+            on_adb_detected=_on_adb_detected,
+            supported_models=supported,
+        )
+        self._sync_install_nav_entry()
+        self._nav_to_page(_PAGE_FLASH)
+        self._adjust_window_geometry()
+        return True
+
+    def _show_240p_manual_themes_guidance(
+        self,
+        target,
+        *,
+        refresh_pack: bool = False,
+    ) -> None:
+        """Suggest 240p themes on the completion card with an 'Install 360p themes anyway' hint."""
+        from .flash_page import ROCKBOX_240P_THEMES_URL
+
+        model = target.model or "Y1"
+        software = target.software_name or "Rockbox"
+        donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
+
+        self._append_log(
+            f"[Rockbox Themes] {software} on {model} supports 240p themes; offering Get Themes guidance."
+        )
+        self.themes.clear_power_on()
+        self.themes.finish()
+        self.themes.reset_completion()
+        self._package_model = model
+        self._package_name = software
+        self._install_complete = True
+        self._install_failed = False
+        self._compact_install_screen = False
+        self._sync_install_nav_entry()
+
+        self._flash_page.set_model(model)
+        self._flash_page.set_package_name(software)
+        self._flash_page.show_flashing()
+        self._flash_page.set_post_install_urls("", "")
+        self._flash_page.set_completion_themes(
+            ROCKBOX_240P_THEMES_URL,
+            kind="240p_manual_hint",
+            on_install_anyway=lambda t=target, rp=refresh_pack: self._proceed_manual_themes_for_target(
+                t,
+                is_240p=False,
+                drop_paths=None,
+                refresh_pack=rp,
+                force_360p=True,
+            ),
+        )
+        self._flash_page.set_device_done(donations_shown=not donation_disabled)
+        self._flash_page.show_completion_note(
+            not donation_disabled,
+            software=software,
+            model=model,
+        )
+        if not donation_disabled:
+            self._flash_page.show_completion_appeal(
+                True,
+                self._on_completion_dont_ask,
+                self._on_completion_not_now,
+            )
+        self._apply_release_icon(complete=donation_disabled)
+        self._nav_to_page(_PAGE_FLASH)
+        self._adjust_window_geometry()
+
+    def _proceed_manual_themes_for_target(
+        self,
+        target,
+        *,
+        is_240p: bool = False,
+        drop_paths: list[Path] | None = None,
+        refresh_pack: bool = False,
+        force_360p: bool = False,
+        adb_auto_detected: bool = False,
+    ) -> bool:
+        """Run the chosen manual/drag-and-drop themes journey for ``target``."""
+        from ..theme_pack import prepare_dragged_theme_payload, should_apply_theme_path_fix
+
+        model = target.model or "Y1"
+        use_mass_storage = not bool(target.is_android_port)
+        apply_fix = should_apply_theme_path_fix(
+            model=model,
+            rb_themes_path_fix=getattr(target, "rb_themes_path_fix", None),
+        )
+
+        # Manual 360p pack against a 240p-themes firmware (Nugget or tracked 240p
+        # Rockbox): recommend 240p themes with an option to install 360p anyway.
+        if not drop_paths and is_240p and not force_360p:
+            self._show_240p_manual_themes_guidance(target, refresh_pack=refresh_pack)
+            return True
+
+        self._package_model = model
+        self._install_complete = False
+        self._install_failed = False
+        self.themes.reset_completion()
+        self.themes.set_apk("", "")
+        self.themes.manual_target = target
+        self.themes.manual_target_is_240p = bool(is_240p)
+        self.themes.is_standalone = True
+        self.themes.model = model
+        self.themes.rb_themes_path_fix = apply_fix
+        self.themes.set_manifest_options(
+            mass_storage=use_mass_storage,
+            rockbox_folder_path=str(getattr(target, "rockbox_folder_path", "") or ""),
+            rockbox_no_themes=False,
+        )
+        self._compact_install_screen = False
+        self._is_360p_rockbox = True
+
+        if drop_paths:
+            import tempfile
+            import time
+
+            target_zip = Path(tempfile.gettempdir()) / f"dragged_theme_{int(time.time())}.zip"
+            res = prepare_dragged_theme_payload(drop_paths, target_zip, apply_path_fix=apply_fix)
+            ok = bool(res[0])
+            msg = str(res[1])
+            count = getattr(res, "count", 1)
+            if not ok:
+                self.themes.finish()
+                self._show_status(f"Could not load theme: {msg}", 10000)
+                self._append_log(f"Failed to load dropped Rockbox theme(s): {msg}")
+                return False
+            first_stem = Path(drop_paths[0]).stem
+            display_name = first_stem if count <= 1 else f"{count} Rockbox Themes"
+            theme_names = ", ".join(Path(p).name for p in drop_paths[:3]) + ("..." if len(drop_paths) > 3 else "")
+            self._append_log(f"Loaded {count} dropped Rockbox theme(s) ({theme_names}) for {target.display_label}.")
+            self._package_name = display_name
+            self.themes.payload_zip_path = target_zip
+            self.themes.is_custom_theme = True
+            self.themes.custom_theme_count = count
+            self.themes.custom_theme_name = display_name
+            self.themes.custom_theme_paths = [Path(p) for p in drop_paths]
+        else:
+            from ..config import is_offline_mode
+
+            self._append_log(f"Starting Rockbox 360p themes installation for {target.display_label}...")
+            if refresh_pack:
+                if not is_offline_mode():
+                    self._append_log("[Rockbox Themes] Checking for latest 360p themes from GitHub...")
+                    self._start_theme_pack_refresh()
+                else:
+                    self._append_log("[Rockbox Themes] Offline mode active: using cached 360p themes and the bundled fonts pack.")
+            self._theme_install_pending = False
+            self._package_name = tr("rockbox_themes_and_fonts_pack")
+            self.themes.is_custom_theme = False
+            self.themes.custom_theme_paths = []
+            self.themes.payload_zip_path = None
+
+        self._flash_page.set_model(model)
+        self._flash_page.set_package_name(self._package_name)
+        self._nav_to_page(_PAGE_FLASH)
+
+        if adb_auto_detected and not use_mass_storage:
+            donation_disabled = device_tracking.is_donation_install_prompt_disabled(self.settings)
+            self._start_themes_stage(
+                model,
+                donation_disabled,
+                already_powered_on=True,
+                automatic=False,
+                after_firmware=False,
+            )
+            return True
+
+        self._show_rockbox_power_on_prompt(model, standalone=True)
+        return True
+
+    def _on_theme_stage_cancelled(self) -> None:
+        """Cleanly exit a cancelled standalone Rockbox themes journey."""
+        if hasattr(self, "_flash_page") and hasattr(self._flash_page, "clear_rockbox_theme_device_prompt"):
+            self._flash_page.clear_rockbox_theme_device_prompt()
+        self.themes.clear_power_on()
+        self.themes.finish()
+        self._install_complete = False
+        self._install_failed = False
+        self._compact_install_screen = False
+        self._sync_install_nav_entry()
+        target_page = getattr(self, "_theme_prompt_return_page", _PAGE_SELECT)
+        if target_page not in (_PAGE_SELECT, _PAGE_SETTINGS):
+            target_page = _PAGE_SELECT
+        self._nav_to_page(target_page)
+        self._adjust_window_geometry()
 
     def _on_settings_install_rockbox_themes(self) -> None:
         """Triggered from Settings card: install Rockbox 360p themes."""
-        if self._install_run_active():
-            self._append_log("Rockbox themes install ignored: an install is already in progress.")
-            return
-
-        model = self._manual_themes_model()
-        if not model:
-            self._append_log("Rockbox themes installation cancelled: no device selected.")
-            return
-
-        from ..config import is_offline_mode
-        offline = is_offline_mode()
-        self._append_log(f"Starting Rockbox 360p themes installation for {model}...")
-
-        if not offline:
-            self._append_log("[Rockbox Themes] Checking for latest 360p themes from GitHub...")
-            # The download runs alongside the stage. Connecting the player and
-            # booting into Rockbox takes longer than the pack fetch, so the
-            # install never waits on the network; the status line reports it.
-            self._start_theme_pack_refresh()
-        else:
-            self._append_log("[Rockbox Themes] Offline mode active: using cached 360p themes and the bundled fonts pack.")
-        self._theme_install_pending = False
-        self.start_rockbox_themes_manually(model=model)
+        self._begin_manual_themes_wizard(drop_paths=None, refresh_pack=True)
 
     def _on_refresh_themes(self) -> None:
         """Manual refresh from the Rockbox themes settings card."""
@@ -3684,45 +3956,48 @@ class MainWindow(QMainWindow):
     def start_rockbox_themes_manually(self, model: str | None = None) -> bool:
         """Begin the Rockbox themes & fonts stage without a flash having just run.
 
-        Does nothing while an install is in progress. Otherwise it opens the same
-        guided stage a Rockbox install hands off to: power the player on, connect
-        USB, then the themes and fonts are pushed over ADB.
+        Does nothing while an install is in progress. When ``model`` is omitted
+        it enters the unified wizard (auto-detecting ADB or a single tracked
+        device, otherwise presenting the in-GUI software dropdown).
         """
         if self._install_run_active():
             self._append_log("Rockbox themes shortcut ignored: an install is already running.")
             return False
         if model is None:
-            model = self._manual_themes_model()
-        if not model:
-            self._append_log("Rockbox themes stage cancelled: no device selected.")
-            return False
-        from ..player_update_check import get_rockbox_theme_supported_models
+            return self._begin_manual_themes_wizard(drop_paths=None, refresh_pack=False)
+        from ..player_update_check import (
+            RockboxThemeTarget,
+            get_rockbox_theme_supported_models,
+            get_rockbox_theme_targets,
+        )
         from ..theme_pack import should_apply_theme_path_fix
 
         supported = get_rockbox_theme_supported_models()
-        if model not in supported:
+        norm_model = str(model or "").strip().upper()
+        if norm_model not in supported:
             self._append_log(f"Rockbox themes are not supported for {model}; the themes stage was not started.")
             return False
-        self._append_log(f"Rockbox themes & fonts stage started manually for {model}.")
-        self._package_model = model
-        self._install_complete = False
-        self._install_failed = False
-        self.themes.reset_completion()
-        self.themes.set_apk("", "")
-        self.themes.is_standalone = True
-        self.themes.is_custom_theme = False
-        self.themes.custom_theme_paths = []
-        self.themes.payload_zip_path = None
-        self.themes.model = model
-        self.themes.rb_themes_path_fix = should_apply_theme_path_fix(model=model)
-        self._package_name = tr("rockbox_themes_and_fonts_pack")
-        self._compact_install_screen = False
-        self._is_360p_rockbox = True
-        self._flash_page.set_model(model)
-        self._flash_page.set_package_name(self._package_name)
-        self._nav_to_page(_PAGE_FLASH)
-        self._show_rockbox_power_on_prompt(model, standalone=True)
-        return True
+        targets = get_rockbox_theme_targets()
+        matched = next(
+            (t for t in targets if t.model == norm_model and t.is_android_port),
+            next(
+                (t for t in targets if t.model == norm_model),
+                RockboxThemeTarget(
+                    model=norm_model,
+                    software_name="Rockbox",
+                    full_name="Rockbox",
+                    is_android_port=True,
+                    rb_themes_path_fix=should_apply_theme_path_fix(model=norm_model),
+                ),
+            ),
+        )
+        return self._proceed_manual_themes_for_target(
+            matched,
+            is_240p=False,
+            drop_paths=None,
+            refresh_pack=False,
+            force_360p=True,
+        )
 
     def _apk_install_info(self) -> tuple[str, str]:
         """Return ``(apk_path, apk_url)`` when the selected release comes from an ``apk_repo``."""
@@ -3821,14 +4096,24 @@ class MainWindow(QMainWindow):
         package = _pkg_getter() if callable(_pkg_getter) else None
         if bool(getattr(package, "rockbox_no_themes", False)):
             return False, model
-        is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
-        manifest_240p = bool(getattr(package, "is_240p_rockbox", False))
-        is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
+        from ..catalog import is_rockbox_firmware_package
+
+        is_rockbox = (
+            "rockbox" in name
+            or "rockbox" in path
+            or "rockbox" in slug
+            or is_rockbox_firmware_package(package)
+        )
+        manifest_240p = bool(
+            getattr(package, "is_240p_themes", False)
+            or getattr(package, "is_240p_rockbox", False)
+        )
         is_240p = (
             manifest_240p
-            or is_240p
+            or any("240p" in value for value in (name, path, asset_name, release_label))
             or str(info.get("selected_resolution", "")).lower() == "240p"
             or bool((selected_rel or {}).get("is_240p_rockbox"))
+            or self._rockbox_240p_detected()
         )
         # Themes installation is for Y1 and Y2 (Rockbox-named, non-240p).
         wanted = bool(model in ("Y1", "Y2") and is_rockbox and not is_240p)
@@ -3899,7 +4184,7 @@ class MainWindow(QMainWindow):
             release_label = str(selected_rel.get("release_label", release_label) or release_label)
         _pkg_getter = getattr(self, "_active_firmware_package", None)
         package = _pkg_getter() if callable(_pkg_getter) else None
-        if getattr(package, "is_240p_rockbox", False):
+        if getattr(package, "is_240p_themes", False) or getattr(package, "is_240p_rockbox", False):
             return True
         if bool((selected_rel or {}).get("is_240p_rockbox")):
             return True
@@ -3994,6 +4279,8 @@ class MainWindow(QMainWindow):
         if self.themes.active:
             return True
         if self.themes.power_on_pending:
+            return True
+        if getattr(self.themes, "device_prompt_pending", False):
             return True
         if getattr(self, "_rockbox_themes_prompt_pending", False):
             return True
@@ -7384,6 +7671,37 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Could not refresh the notice context after install: %s", e)
 
+    def _completion_themes_spec(self, *, themes_failed: bool = False) -> tuple[str, str]:
+        """Return ``(url, kind)`` for the completion screen's Get Themes button.
+
+        Rules:
+        - 240p-themes-compatible firmwares (``is_240p_themes="true"`` /
+          ``is_rb_240p_themes`` / ``is_rockbox_240p_themes`` / ``is_240p_rockbox``
+          or release zip with ``240`` in its filename, including ``install_first``)
+          -> 240p iPod Classic themes site (via innioasis.app).
+        - Failed or cancelled 360p Rockbox themes stage -> 360p Rockbox THEMES.md
+          guide (via innioasis.app/post_install.html).
+        - ``install_first`` present for a 360p Rockbox firmware -> 360p Rockbox
+          THEMES.md guide (via innioasis.app/post_install.html).
+        - Successful 360p Rockbox without ``install_first``, or non-Rockbox
+          firmwares -> ``("", "")`` (no Get Themes button).
+        """
+        from .flash_page import ROCKBOX_240P_THEMES_URL, ROCKBOX_360P_THEMES_GUIDE_URL
+
+        active_pkg = self._active_firmware_package()
+        rockbox_no_themes = bool(getattr(active_pkg, "rockbox_no_themes", False))
+        is_240p = bool(self._rockbox_240p_detected())
+        if is_240p and not rockbox_no_themes:
+            return ROCKBOX_240P_THEMES_URL, "240p"
+        if themes_failed:
+            return ROCKBOX_360P_THEMES_GUIDE_URL, "360p_fallback"
+        has_install_first = bool(
+            str(getattr(active_pkg, "install_first", "") or "").strip()
+        ) or bool(getattr(self, "_install_first_target_run", False))
+        if has_install_first and self._is_rockbox_install() and not rockbox_no_themes:
+            return ROCKBOX_360P_THEMES_GUIDE_URL, "360p_fallback"
+        return "", ""
+
     def _handle_flash_success(self):
         if (
             getattr(self, "_install_first_prerequisite_run", False)
@@ -7523,11 +7841,10 @@ class MainWindow(QMainWindow):
             self._download_active = False
             self._sync_install_nav_entry()
             self._flash_page.show_flashing()
-            self._flash_page.set_device_done(donations_shown=not donation_disabled)
             self._apply_post_install_urls()
-            self._flash_page.set_rockbox_site_themes(
-                is_240p_rockbox and not rockbox_no_themes
-            )
+            themes_url, themes_kind = self._completion_themes_spec(themes_failed=False)
+            self._flash_page.set_completion_themes(themes_url, kind=themes_kind)
+            self._flash_page.set_device_done(donations_shown=not donation_disabled)
             self._flash_page.show_completion_appeal(False)
             post_install_once = self._post_install_once
 
@@ -7595,9 +7912,11 @@ class MainWindow(QMainWindow):
         if not allowed:
             self._append_log(reason)
             return
-        self.themes.reset_completion()
         if after_firmware:
+            self.themes.reset_completion()
             self._apply_themes_manifest_options()
+        else:
+            self.themes.completion_shown = False
         # Start downloading the full themes pack in the background if not yet
         # cached, including on automatic SP Flash runs that bypass the prompt.
         if (
@@ -7649,10 +7968,15 @@ class MainWindow(QMainWindow):
     def _is_rockbox_install(self) -> bool:
         """Whether the software being installed is a Rockbox build.
 
-        Detection cannot use the 360p themes helper: that one is Y1-only and
-        obeys the themes Settings switch, while the cleanup step applies to any
-        Rockbox install on any model.
+        Detection cannot use the 360p themes helper: that one is Y1/Y2 360p
+        only and obeys the themes Settings switch, while manifest flags like
+        ``is_240p_themes`` also mark Rockbox-family firmwares (e.g. Nugget).
         """
+        from ..catalog import is_rockbox_firmware_package
+
+        active_pkg = self._active_firmware_package()
+        if is_rockbox_firmware_package(active_pkg):
+            return True
         values = [getattr(self, "_package_name", ""), getattr(self, "_package_path", "")]
         page = getattr(self, "_select_page", None)
         if page is not None:
@@ -7667,8 +7991,13 @@ class MainWindow(QMainWindow):
                 values.append(info.get(key))
             pkg = getattr(page, "_details_package", None)
             if pkg is not None:
+                if is_rockbox_firmware_package(pkg):
+                    return True
                 values.extend((getattr(pkg, "name", ""), getattr(pkg, "repo", "")))
-        return any("rockbox" in str(value or "").casefold() for value in values)
+        return any(
+            ("rockbox" in str(value or "").casefold() or "rock8ox" in str(value or "").casefold())
+            for value in values
+        )
 
     def _start_rockbox_cleanup_if_needed(self) -> bool:
         """Run the old-.rockbox removal step, returning True when it started.
@@ -7678,12 +8007,20 @@ class MainWindow(QMainWindow):
         Ticked means the user's themes and presets are kept and this is
         skipped entirely.
         """
+        from ..catalog import is_rockbox_android_port
         from ..rockbox_cleanup import rockbox_install_needs_cleanup
 
         if getattr(self, "_rockbox_cleanup_started", False):
             return False
         active_pkg = self._active_firmware_package()
         if bool(getattr(active_pkg, "rockbox_no_themes", False)):
+            return False
+        if (
+            bool(getattr(active_pkg, "is_240p_themes", False) or getattr(active_pkg, "is_240p_rockbox", False))
+            and not is_rockbox_android_port(package=active_pkg, name=getattr(self, "_package_name", ""))
+        ):
+            # Non-Android 240p Rockbox OS (e.g. Linux Nugget) has no Android
+            # ADB .rockbox cleanup step.
             return False
         if not rockbox_install_needs_cleanup(
             is_rockbox=self._is_rockbox_install(),
@@ -8076,15 +8413,17 @@ class MainWindow(QMainWindow):
         self._prep_active = False
         self._download_active = False
         self._sync_install_nav_entry()
-        self._flash_page.show_flashing()
-        self._flash_page.set_device_done(donations_shown=not donation_disabled)
-        self._apply_post_install_urls()
-        self._apply_release_icon(complete=donation_disabled)
-        self._nav_to_page(_PAGE_FLASH)
         # The themes stage only reaches this screen after its pack is placed,
         # unless it gave up; a give-up keeps the power-on steps and try-again note.
         themes_failed = self.themes.placement_failed
         themes_installed = not themes_failed
+        self._flash_page.show_flashing()
+        self._apply_post_install_urls()
+        themes_url, themes_kind = self._completion_themes_spec(themes_failed=themes_failed)
+        self._flash_page.set_completion_themes(themes_url, kind=themes_kind)
+        self._flash_page.set_device_done(donations_shown=not donation_disabled)
+        self._apply_release_icon(complete=donation_disabled)
+        self._nav_to_page(_PAGE_FLASH)
         model = self._package_model or ""
         software = self._package_name or software_word()
         if not donation_disabled and not themes_failed:
@@ -8093,15 +8432,15 @@ class MainWindow(QMainWindow):
                 themes_installed=themes_installed,
             )
         else:
-            self._flash_page.show_completion_appeal(
-                not donation_disabled, self._on_completion_dont_ask, self._on_completion_not_now,
-                themes_installed=themes_installed,
-            )
             self._flash_page.show_completion_note(
                 not donation_disabled, software=software, model=model,
                 themes_installed=themes_installed and not was_apk_stage,
                 post_install_once=self._post_install_once,
                 post_install_suppressed=self._post_install_guides_suppressed,
+            )
+            self._flash_page.show_completion_appeal(
+                not donation_disabled, self._on_completion_dont_ask, self._on_completion_not_now,
+                themes_installed=themes_installed,
             )
         self._sync_install_app_button()
         self._adjust_window_geometry()
@@ -10268,6 +10607,8 @@ class MainWindow(QMainWindow):
         process_guard.end_install_session(reason="install stopped", sweep=False)
         process_guard.sweep_async(reason="install stopped", on_done=self.sweep_report.emit)
         if hasattr(self, "_flash_page") and hasattr(self._flash_page, "stop_theme_workers"):
+            if hasattr(self._flash_page, "clear_rockbox_theme_device_prompt"):
+                self._flash_page.clear_rockbox_theme_device_prompt()
             self._flash_page.stop_theme_workers()
         page = getattr(self, "_select_page", None)
         if page is not None:

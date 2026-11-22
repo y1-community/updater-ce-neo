@@ -69,14 +69,16 @@ THEME_PACK_ZIP_NAME_Y2 = "rockbox_360p_themepack_y2.zip"
 #: ``/sdcard/.rockbox`` with no slash after it.
 _Y2_ROCKBOX_PATH = (
     r"/?(?:storage/(?:sdcard[01]|emulated/(?:0|legacy))"
-    r"|mnt/(?:media_rw/sdcard[01]|sdcard)|sdcard[01]|sdcard)/\.rockbox"
+    r"|mnt/(?:media_rw/sdcard[01]|sdcard2?|external_sd)|sdcard[01]|sdcard)/\.rockbox"
 )
-_Y2_THEME_PATH_RE_BYTES = re.compile((_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)").encode("utf-8"))
-_Y2_THEME_PATH_RE_STR = re.compile(_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)")
+_Y2_THEME_PATH_RE_BYTES = re.compile((_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)").encode("utf-8"), re.IGNORECASE)
+_Y2_THEME_PATH_RE_STR = re.compile(_Y2_ROCKBOX_PATH + r"(?=[/\\]|$)", re.IGNORECASE)
 
-#: File types that carry Rockbox settings (theme configs, WPS/SBS sources and
-#: the small text files shipped beside them).
-THEME_CONTENT_SUFFIXES = (".cfg", ".wps", ".sbs", ".fms", ".ini", ".txt")
+#: File types that carry Rockbox settings (theme configs, WPS/SBS/FMS/remote
+#: skin sources and the small text files shipped beside them).
+THEME_CONTENT_SUFFIXES = (
+    ".cfg", ".wps", ".sbs", ".fms", ".rwps", ".rsbs", ".rfms", ".ini", ".txt",
+)
 
 
 def patch_theme_content_for_y2(content: str | bytes) -> str | bytes:
@@ -1013,20 +1015,26 @@ def ensure_normalized_theme_pack_zip(
         except Exception as e:
             logger.debug("Could not read cached target zip %s: %s", target, e)
 
-    tmp_file = target.with_suffix(".tmp_build")
-    with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
-        for rel in sorted(entries.keys()):
-            data = entries[rel]
-            if apply_path_fix and (
-                rel.endswith(THEME_CONTENT_SUFFIXES)
-                or b"sdcard" in data
-                or b".rockbox" in data
-            ):
-                data = patch_theme_content_for_y2(data)
-            ozf.writestr(rel, data)
-
-    if tmp_file.exists():
-        os.replace(tmp_file, target)
+    tmp_file = target.with_name(f"{target.stem}_{os.getpid()}_{threading.get_ident()}.tmp_build")
+    try:
+        with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
+            for rel in sorted(entries.keys()):
+                data = entries[rel]
+                if apply_path_fix and (
+                    rel.lower().endswith(THEME_CONTENT_SUFFIXES)
+                    or b"sdcard" in data.lower()
+                    or b".rockbox" in data.lower()
+                ):
+                    data = patch_theme_content_for_y2(data)
+                ozf.writestr(rel, data)
+        if tmp_file.exists():
+            os.replace(tmp_file, target)
+    except Exception:
+        try:
+            tmp_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
     if not theme_zip_has_themes(target):
         logger.warning(
@@ -1038,7 +1046,11 @@ def ensure_normalized_theme_pack_zip(
 def ensure_theme_zip_patched_for_y2(
     source_zip: Path | str, target_zip: Optional[Path | str] = None
 ) -> Path:
-    """Return a copy of source_zip with all /sdcard/.rockbox/ paths rewritten to /.rockbox/."""
+    """Return a copy of source_zip with all /sdcard/.rockbox/ paths rewritten to /.rockbox/.
+
+    Writes atomically via a PID/thread-scoped temp file and cleans up on error
+    so interrupted runs never leave corrupt partial archives behind.
+    """
     src = Path(source_zip)
     if not target_zip:
         dst = src.with_name(f"{src.stem}_y2{src.suffix}")
@@ -1049,27 +1061,43 @@ def ensure_theme_zip_patched_for_y2(
     if dst.is_file() and dst.stat().st_mtime >= src.stat().st_mtime and dst.stat().st_size > 1024:
         try:
             with zipfile.ZipFile(dst, "r") as zf:
-                cfg_samples = [n for n in zf.namelist() if n.endswith(".cfg")][:12]
-                if cfg_samples and not any(b"/sdcard" in zf.read(n) for n in cfg_samples):
-                    return dst
+                if zf.testzip() is None:
+                    check_names = [
+                        n for n in zf.namelist()
+                        if n.lower().endswith((".cfg", ".wps", ".sbs", ".fms"))
+                    ]
+                    if check_names and not any(
+                        _Y2_THEME_PATH_RE_BYTES.search(zf.read(n)) for n in check_names
+                    ):
+                        return dst
         except Exception:
             pass
 
-    tmp_file = dst.with_suffix(".tmp_patch")
-    with zipfile.ZipFile(src, "r") as izf, zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
-        for info in izf.infolist():
-            if info.is_dir() or info.filename.endswith("/"):
-                continue
-            data = izf.read(info)
-            if (
-                info.filename.endswith(THEME_CONTENT_SUFFIXES)
-                or b"sdcard" in data
-                or b".rockbox" in data
-            ):
-                data = patch_theme_content_for_y2(data)
-            ozf.writestr(info.filename, data)
-
-    os.replace(tmp_file, dst)
+    tmp_file = dst.with_name(f"{dst.stem}_{os.getpid()}_{threading.get_ident()}.tmp_patch")
+    try:
+        with zipfile.ZipFile(src, "r") as izf, zipfile.ZipFile(
+            tmp_file, "w", compression=zipfile.ZIP_DEFLATED
+        ) as ozf:
+            for info in izf.infolist():
+                if info.is_dir() or info.filename.endswith("/"):
+                    continue
+                data = izf.read(info)
+                low_name = info.filename.lower()
+                if (
+                    low_name.endswith(THEME_CONTENT_SUFFIXES)
+                    or b"sdcard" in data.lower()
+                    or b".rockbox" in data.lower()
+                ):
+                    data = patch_theme_content_for_y2(data)
+                ozf.writestr(info.filename, data)
+        os.replace(tmp_file, dst)
+    except Exception:
+        try:
+            if tmp_file.exists():
+                tmp_file.unlink()
+        except OSError:
+            pass
+        raise
     return dst
 
 
@@ -1352,7 +1380,7 @@ def prepare_dragged_theme_payload(
     if theme_count == 0 and entries:
         theme_count = 1
 
-    tmp_file = target.with_suffix(".tmp_build")
+    tmp_file = target.with_name(f"{target.stem}_{os.getpid()}_{threading.get_ident()}.tmp_build")
     try:
         with zipfile.ZipFile(tmp_file, "w", compression=zipfile.ZIP_DEFLATED) as ozf:
             for rel in sorted(entries.keys()):
@@ -1664,16 +1692,30 @@ class AdbPushWorker(QThread):
             # Rockbox may take up to 2 minutes on some devices (like Y2) to boot and create .rockbox.
             deadline = time.monotonic() + 120.0
             device_dirs = []
+            missing_adb_polls = 0
             while not device_dirs and (time.monotonic() < deadline):
                 if self.isInterruptionRequested():
                     self.finished.emit(False, "Theme transfer cancelled")
                     return
                 device_dirs = _adb.adb_find_all_rockbox_dirs(self._adb, self._serial)
                 if not device_dirs:
-                    if time.monotonic() + 2.0 < deadline:
-                        self.msleep(2000)
+                    # Detect early if the USB cable was unplugged while waiting
+                    # instead of stalling silently for 2 minutes.
+                    live = _adb.adb_devices(self._adb, timeout=3.0)
+                    if str(self._serial) not in live:
+                        missing_adb_polls += 1
+                        if missing_adb_polls >= 4:
+                            self.finished.emit(
+                                False,
+                                "USB connection to the player was lost over ADB (device not found).",
+                            )
+                            return
                     else:
-                        break
+                        missing_adb_polls = 0
+                    for _ in range(4):
+                        if self.isInterruptionRequested() or time.monotonic() >= deadline:
+                            break
+                        self.msleep(500)
 
             if not device_dirs:
                 self.finished.emit(

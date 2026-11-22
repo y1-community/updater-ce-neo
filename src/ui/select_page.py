@@ -2493,7 +2493,10 @@ class SelectPackagePage(QWidget):
         if not (self.is_rockbox_y1_browsing() or self.is_rockbox_y2_browsing()):
             return ""
         package = self.current_package()
-        if package is not None and getattr(package, "is_240p_rockbox", False):
+        if package is not None and (
+            getattr(package, "is_240p_themes", False)
+            or getattr(package, "is_240p_rockbox", False)
+        ):
             return ""
         suffix = tr("rockbox_themes_only_suffix")
         cur = str(current_label).lower()
@@ -2503,7 +2506,11 @@ class SelectPackagePage(QWidget):
             return ""
         resolution = str((rel or {}).get("selected_resolution") or "").lower()
         asset = str((rel or {}).get("asset_name") or "").lower()
-        if resolution == "240p" or "240p" in asset:
+        if (
+            resolution == "240p"
+            or bool((rel or {}).get("is_240p_rockbox"))
+            or bool(re.search(r"(?<!\d)240p?(?!\d)", asset))
+        ):
             return ""
         return f" ({suffix})"
 

@@ -76,6 +76,18 @@ from .widgets import (
 )
 from .dark import T, apply_explicit_foreground, link_html, page_top_margin
 
+#: Themes destination for 240p-compatible Rockbox builds (including Nugget and
+#: legacy 240p Y1 builds). Always opened via ``open_browser`` so innioasis.app
+#: attaches the user's accent colour, language, theme and donations preference.
+ROCKBOX_240P_THEMES_URL = "https://themes.rockbox.org/index.php?target=ipod6g"
+
+#: Themes guide destination when a 360p Rockbox themes stage fails/cancels or
+#: when a 360p Rockbox build completes via ``install_first``.
+ROCKBOX_360P_THEMES_GUIDE_URL = (
+    "https://innioasis.app/post_install.html"
+    "?url=https%3A%2F%2Fgithub.com%2Frockbox-y1%2Frockbox%2Fblob%2Frebase-upstream%2FTHEMES.md"
+)
+
 
 #: The pre-install heading — ``Get your <model> ready to install
 #: <software>`` or ``Get ready to install <software>``. It is the install
@@ -1095,6 +1107,9 @@ class _RoundNextButton(QPushButton):
         elif symbol == "folder":
             self.setToolTip(tr("rockbox_step_select_player_folder"))
             self.setAccessibleName(tr("rockbox_step_select_player_folder"))
+        elif symbol == "palette":
+            self.setToolTip(tr("completion_get_themes_tooltip"))
+            self.setAccessibleName(tr("completion_get_themes_btn"))
 
     def set_symbol(self, symbol: str) -> None:
         if self._symbol == symbol:
@@ -1121,6 +1136,12 @@ class _RoundNextButton(QPushButton):
         native = getattr(self, "_native", None)
         if native is not None:
             native.set_tooltip(text)
+        if self._segmented_native is not None:
+            self._segmented_native._sync_content()
+        elif self._companion is not None:
+            comp_seg = getattr(self._companion, "_segmented_native", None)
+            if comp_seg is not None:
+                comp_seg._sync_content()
 
     def sizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
         return QSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
@@ -2369,6 +2390,13 @@ class FlashPage(QWidget):
         self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
 
+        self._done_themes_btn = _RoundNextButton(symbol="palette", accent=False)
+        self._done_themes_btn.setObjectName("installDoneThemesButton")
+        self._done_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+        self._done_themes_btn.setAccessibleName(tr("completion_get_themes_btn"))
+        self._done_themes_btn.setVisible(False)
+        self._done_themes_btn.clicked.connect(self._open_completion_themes)
+
         self._done_mark = _RoundNextButton(symbol="complete", accent=True)
         self._done_mark.setObjectName("installDoneButton")
         self._done_mark.setCursor(Qt.ArrowCursor)
@@ -2376,6 +2404,19 @@ class FlashPage(QWidget):
         self._done_mark.setVisible(False)
         self._done_mark.clicked.connect(self._on_install_done)
         self._install_done_cb = None
+
+        self._completion_themes_url = ""
+        self._completion_themes_kind = ""
+        self._completion_themes_clicked = False
+        self._completion_guide_clicked = False
+        self._completion_install_anyway_cb = None
+        self._theme_cancel_cb = None
+        self._theme_back_mode = "cancel"
+        self._theme_device_prompt_active = False
+        self._theme_device_prompt_continue_cb = None
+        self._theme_device_prompt_cancel_cb = None
+        self._theme_device_prompt_adb_cb = None
+        self._theme_device_prompt_adb_worker = None
 
         # Round wizard navigation chips for the Rockbox post-install steps.
         self._theme_step1_next_btn = _RoundNextButton(symbol="arrow-right", accent=True)
@@ -2394,10 +2435,11 @@ class FlashPage(QWidget):
         self._theme_trouble_recover_btn.setVisible(False)
         self._theme_trouble_recover_btn.clicked.connect(self._on_theme_recover_clicked)
 
-        self._theme_back_btn = _RoundNextButton(symbol="back", accent=False)
-        self._theme_back_btn.setText(tr("rockbox_wizard_back"))
+        self._theme_back_btn = _RoundNextButton(symbol="cancel", accent=False)
+        self._theme_back_btn.setText(tr("rockbox_cancel_themes_tooltip"))
+        self._theme_back_btn.setToolTip(tr("rockbox_cancel_themes_tooltip"))
         self._theme_back_btn.setVisible(False)
-        self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
+        self._theme_back_btn.clicked.connect(self._on_theme_back_or_cancel_clicked)
 
         # Shown under the done mark when the software has post-install steps
         # and donations are off: the globe chip and this sentence open them.
@@ -2433,6 +2475,7 @@ class FlashPage(QWidget):
             [
                 self._cancel_btn,
                 self._flash_retry_btn,
+                self._done_themes_btn,
                 self._done_mark,
                 self._theme_back_btn,
                 self._theme_step1_next_btn,
@@ -2498,6 +2541,14 @@ class FlashPage(QWidget):
         trouble_box.setContentsMargins(0, 0, 0, 0)
         trouble_box.setSpacing(0)
         theme_vbox.addWidget(self._theme_trouble_widget)
+
+        self._theme_paperclip_tip = QLabel("")
+        self._theme_paperclip_tip.setWordWrap(True)
+        self._theme_paperclip_tip.setProperty("cssClass", "dimmed")
+        self._theme_paperclip_tip.setStyleSheet(f"font-size: {_BODY_PX}px;")
+        _apply_card_text(self._theme_paperclip_tip)
+        self._theme_paperclip_tip.setVisible(False)
+        theme_vbox.addWidget(self._theme_paperclip_tip)
 
         self._rockbox_site_widget = QWidget()
         self._rockbox_site_widget.setVisible(False)
@@ -2613,7 +2664,7 @@ class FlashPage(QWidget):
         self._completion_guide_hint.setOpenExternalLinks(False)
         self._completion_guide_hint.setCursor(Qt.PointingHandCursor)
         self._completion_guide_hint.linkActivated.connect(
-            lambda _href: self._open_view_guide()
+            self._on_completion_hint_link
         )
         self._completion_guide_hint.setProperty("cssClass", "dimmed")
         self._completion_guide_hint.setAutoFillBackground(False)
@@ -2625,14 +2676,50 @@ class FlashPage(QWidget):
         self._completion_guide_hint.setVisible(False)
         appeal_layout.addWidget(self._completion_guide_hint)
 
-        # The guide belongs to the instruction, not the donation ask: it sits
-        # directly under the extra-steps sentence and above the appeal copy.
+        # The guide and themes actions belong to the instruction, not the
+        # donation ask: View Guide sits on the leading edge (left on LTR, right
+        # on RTL) so it stays the most prominent action, with Get Themes beside it.
+        self._completion_guide_row = QWidget()
+        self._completion_guide_row.setAutoFillBackground(False)
+        self._completion_guide_row.setStyleSheet("")
+        guide_row = QHBoxLayout(self._completion_guide_row)
+        guide_row.setContentsMargins(0, 0, 0, 0)
+        guide_row.setSpacing(8)
         self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
         self._view_guide_btn.setCursor(Qt.PointingHandCursor)
         self._view_guide_btn.setStyleSheet("")
         self._view_guide_btn.clicked.connect(self._open_view_guide)
         self._view_guide_btn.setVisible(False)
-        appeal_layout.addWidget(self._view_guide_btn, 0, Qt.AlignLeft)
+        guide_row.addWidget(self._view_guide_btn)
+
+        self._get_themes_btn = QPushButton(tr("completion_get_themes_btn"))
+        self._get_themes_btn.setObjectName("completionGetThemesBtn")
+        self._get_themes_btn.setCursor(Qt.PointingHandCursor)
+        self._get_themes_btn.setStyleSheet("")
+        self._get_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+        self._get_themes_btn.clicked.connect(self._open_completion_themes)
+        self._get_themes_btn.setVisible(False)
+        guide_row.addWidget(self._get_themes_btn)
+        guide_row.addStretch(1)
+        self._completion_guide_row.setVisible(False)
+        appeal_layout.addWidget(self._completion_guide_row)
+
+        self._completion_install_anyway_link = QLabel(
+            _themed_link("install-360p-anyway", tr("completion_install_360p_anyway"), underline=True)
+        )
+        self._completion_install_anyway_link.setTextFormat(Qt.TextFormat.RichText)
+        self._completion_install_anyway_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._completion_install_anyway_link.setOpenExternalLinks(False)
+        self._completion_install_anyway_link.setCursor(Qt.PointingHandCursor)
+        self._completion_install_anyway_link.setProperty("cssClass", "dimmed")
+        self._completion_install_anyway_link.linkActivated.connect(
+            lambda _href: self._on_completion_install_anyway()
+        )
+        self._completion_install_anyway_link.setVisible(False)
+        appeal_layout.addWidget(self._completion_install_anyway_link)
 
         # The one instruction the install still needs, at the size of an
         # instruction rather than a footnote to the headline.
@@ -2777,7 +2864,8 @@ class FlashPage(QWidget):
             self._start_help_hint,
             self._start_help_body,
             self._completion_guide_hint,
-            self._view_guide_btn,
+            self._completion_guide_row,
+            self._completion_install_anyway_link,
         )
         for widget in reading_order:
             appeal_layout.removeWidget(widget)
@@ -3202,6 +3290,12 @@ class FlashPage(QWidget):
         # the player is already running it (or the user just said so in the
         # Keep Data question). The window decides that per run.
         self._post_install_guide_suppressed = False
+        self._completion_themes_url = ""
+        self._completion_themes_kind = ""
+        self._completion_themes_clicked = False
+        self._completion_guide_clicked = False
+        self._completion_install_anyway_cb = None
+        self._rockbox_site_themes = False
 
     def show_preparing(self):
         self._reset_connect_prompt_delay()
@@ -3579,6 +3673,7 @@ class FlashPage(QWidget):
         for attr in (
             "_cancel_btn",
             "_flash_retry_btn",
+            "_done_themes_btn",
             "_done_mark",
             "_theme_step1_next_btn",
             "_theme_fallback_next_btn",
@@ -3627,9 +3722,10 @@ class FlashPage(QWidget):
                 self._flash_retry_btn.setAccessibleName(tr("btn_next"))
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
+        has_themes_btn = done and not getattr(self, "_donations_shown", False) and self._has_completion_themes()
         if hasattr(self, "_cancel_btn"):
             if done:
-                self._cancel_btn.setVisible(True)
+                self._cancel_btn.setVisible(not has_themes_btn)
                 self._cancel_btn.setEnabled(False)
                 self._cancel_btn.set_symbol("back")
                 self._cancel_btn.setToolTip("")
@@ -3640,6 +3736,13 @@ class FlashPage(QWidget):
                 self._cancel_btn.set_symbol("cancel" if failed else "back")
                 self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
                 self._cancel_btn.setAccessibleName(tr("flash_btn_cancel"))
+        if hasattr(self, "_done_themes_btn"):
+            self._done_themes_btn.setVisible(has_themes_btn)
+            self._done_themes_btn.setEnabled(True)
+            if has_themes_btn:
+                self._done_themes_btn.set_symbol("palette")
+                self._done_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+                self._done_themes_btn.setAccessibleName(tr("completion_get_themes_btn"))
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(done and not getattr(self, "_donations_shown", False))
             if done:
@@ -3804,6 +3907,9 @@ class FlashPage(QWidget):
             self._adb_watch_timer.stop()
         self._close_theme_folder_dialog()
         self._stop_removable_drive_watch()
+        self._stop_device_prompt_adb_watch()
+        if hasattr(self, "_theme_paperclip_tip"):
+            self._theme_paperclip_tip.setVisible(False)
         sim_timer = getattr(self, "_sim_theme_timer", None)
         if sim_timer is not None:
             sim_timer.stop()
@@ -3867,7 +3973,7 @@ class FlashPage(QWidget):
             self._removable_watch_timer = None
 
     def _poll_removable_rockbox_dirs(self) -> None:
-        if not getattr(self.themes, "active", False) or not getattr(self.themes, "mass_storage", False):
+        if not getattr(self.themes, "active", False):
             self._stop_removable_drive_watch()
             return
         if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
@@ -4112,6 +4218,120 @@ class FlashPage(QWidget):
         else:
             logger.info("%s", msg)
 
+    def set_theme_cancel_callback(self, cb) -> None:
+        """Register an override invoked when the user cancels a standalone themes flow."""
+        self._theme_cancel_cb = cb
+
+    def _configure_theme_cancel_chip(self, *, mode: str = "cancel") -> None:
+        """Keep the leading wizard chip active as Cancel (or Back on troubleshooting)."""
+        self._theme_back_mode = mode
+        btn = getattr(self, "_theme_back_btn", None)
+        if btn is None:
+            return
+        if mode == "back":
+            btn.set_symbol("back")
+            btn.setText(tr("rockbox_wizard_back"))
+            btn.setToolTip(tr("rockbox_wizard_back"))
+            btn.setAccessibleName(tr("rockbox_wizard_back"))
+        else:
+            btn.set_symbol("cancel")
+            btn.setText(tr("rockbox_cancel_themes_tooltip"))
+            btn.setToolTip(tr("rockbox_cancel_themes_tooltip"))
+            btn.setAccessibleName(tr("rockbox_cancel_themes_tooltip"))
+        btn.setEnabled(True)
+        btn.setVisible(True)
+
+    def _show_theme_transfer_cancel_chip(self) -> None:
+        """Keep Cancel enabled on the card head during active theme transfer/cleanup."""
+        btn = getattr(self, "_cancel_btn", None)
+        if btn is not None:
+            btn.set_symbol("cancel")
+            btn.setToolTip(tr("rockbox_cancel_themes_tooltip"))
+            btn.setAccessibleName(tr("rockbox_cancel_themes_tooltip"))
+            btn.setEnabled(True)
+            btn.setVisible(True)
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_chips_pairing()
+            self._flash_head._sync_to_band()
+
+    def _show_theme_paperclip_tip(self, visible: bool, model: str = "") -> None:
+        """Show the simple paperclip restart hint during disconnect/USB fallback."""
+        tip = getattr(self, "_theme_paperclip_tip", None)
+        if tip is None:
+            return
+        if not visible:
+            tip.setVisible(False)
+            return
+        from ..config import device_label_for_model
+
+        raw = (model or getattr(self.themes, "model", "") or getattr(self, "_model", "") or "").strip()
+        label = device_label_for_model(raw) if raw else tr("device_fallback_word")
+        tip.setText(tr("rockbox_paperclip_restart_tip").format(model=label))
+        _apply_card_text(tip)
+        tip.setVisible(True)
+
+    def _on_theme_back_or_cancel_clicked(self) -> None:
+        if getattr(self, "_theme_back_mode", "cancel") == "back":
+            self._show_theme_fallback_usb_mode()
+            return
+        self._on_theme_cancel_clicked()
+
+    def _on_theme_cancel_clicked(self) -> None:
+        """Cancel the current Rockbox themes/cleanup stage cleanly without trapping the user."""
+        if getattr(self, "_theme_device_prompt_active", False):
+            cancel_cb = getattr(self, "_theme_device_prompt_cancel_cb", None)
+            self.clear_rockbox_theme_device_prompt()
+            if callable(cancel_cb):
+                cancel_cb()
+            return
+
+        is_standalone = bool(getattr(self.themes, "is_standalone", False))
+        was_power_on = bool(getattr(self.themes, "power_on_pending", False))
+        after_fw = bool(getattr(self.themes, "power_on_after_firmware", False))
+        self._log_theme("[Rockbox Themes] Cancelled by user.")
+        self._show_theme_paperclip_tip(False)
+        self.dismiss_flash_question()
+        if hasattr(self, "_theme_row"):
+            self._theme_row.setVisible(False)
+        if hasattr(self, "_status_flow"):
+            self._status_flow.set_forced_stacked(False)
+        self._hide_theme_wizard_chips()
+        self.stop_theme_workers()
+        self._rockbox_power_on_continue_cb = None
+
+        if is_standalone:
+            self.themes.clear_power_on()
+            self.themes.finish()
+            cb = getattr(self, "_theme_cancel_cb", None) or getattr(self, "_cancel_callback", None)
+            if callable(cb):
+                cb()
+            return
+
+        # Post-firmware themes or cleanup stage: finish gracefully onto the
+        # completion screen (with the Get Themes guide button) rather than
+        # trapping the user or abandoning a completed firmware write.
+        self.themes.clear_power_on()
+        self.themes.mark_placement_failed()
+        cb = getattr(self, "_theme_stage_done_cb", None)
+        self._theme_stage_done_cb = None
+        if callable(cb):
+            cb()
+            return
+        if was_power_on and after_fw:
+            win = self.window()
+            if win is not None and hasattr(win, "_finish_themes_stage"):
+                try:
+                    from .. import player_update_check as _puc
+
+                    don_off = _puc.is_donation_install_prompt_disabled(getattr(win, "settings", None))
+                    win._finish_themes_stage(don_off)
+                    return
+                except Exception:
+                    pass
+        cb = getattr(self, "_theme_cancel_cb", None) or getattr(self, "_cancel_callback", None)
+        if callable(cb):
+            cb()
+
     def _on_theme_step1_next_clicked(self) -> None:
         callback = getattr(self, "_rockbox_power_on_continue_cb", None)
         if callable(callback):
@@ -4241,9 +4461,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
-        if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setEnabled(False)
-            self._theme_back_btn.setVisible(True)
+        self._show_theme_paperclip_tip(False)
+        self._configure_theme_cancel_chip(mode="cancel")
         if hasattr(self, "_theme_step1_next_btn"):
             self._theme_step1_next_btn.setEnabled(True)
             self._theme_step1_next_btn.setVisible(True)
@@ -4257,6 +4476,7 @@ class FlashPage(QWidget):
             self._start_removable_drive_watch()
         else:
             self._ensure_adb_presence_watch()
+            self._start_removable_drive_watch()
         self._request_user_attention()
 
     def start_rockbox_themes_stage(
@@ -4484,6 +4704,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        self._show_theme_transfer_cancel_chip()
         self.set_step(tr("rockbox_cleanup_step"))
         self._eta_label.setText(tr("rockbox_cleanup_deleting"))
         self.themes.reset_progress()
@@ -4495,6 +4716,8 @@ class FlashPage(QWidget):
         worker.start()
 
     def _on_cleanup_finished(self, ok: bool, msg: str) -> None:
+        if not self.themes.active and not self.themes.transfer_running:
+            return
         if ok:
             self._log_theme(f"[Rockbox Cleanup] {msg}.")
             self._finish_rockbox_themes_stage()
@@ -4528,6 +4751,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        self._show_theme_transfer_cancel_chip()
         self.set_step(tr("rockbox_cleanup_step"))
         self._eta_label.setText(tr("rockbox_cleanup_deleting"))
         self.themes.reset_progress()
@@ -4544,6 +4768,8 @@ class FlashPage(QWidget):
         worker.start()
 
     def _on_local_cleanup_finished(self, ok: bool, msg: str, count: int) -> None:
+        if not self.themes.active and not self.themes.transfer_running:
+            return
         if ok:
             self._log_theme(f"[Rockbox Cleanup] {msg}.")
             self._finish_rockbox_themes_stage()
@@ -4579,9 +4805,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
-        if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setEnabled(False)
-            self._theme_back_btn.setVisible(True)
+        self._show_theme_paperclip_tip(False)
+        self._configure_theme_cancel_chip(mode="cancel")
         if hasattr(self, "_theme_step1_next_btn"):
             self._theme_step1_next_btn.setEnabled(True)
             self._theme_step1_next_btn.setVisible(True)
@@ -4594,7 +4819,9 @@ class FlashPage(QWidget):
         self._ensure_adb_presence_watch()
         self._request_user_attention()
 
-    def _start_theme_step2_connect_usb(self) -> None:
+    def _start_theme_step2_connect_usb(
+        self, *, reconnect: bool = False, timeout_seconds: int | None = None
+    ) -> None:
         from ..adb import find_adb_binary
 
         if not find_adb_binary():
@@ -4606,7 +4833,7 @@ class FlashPage(QWidget):
                 "[Rockbox Themes] No ADB client on this host; continuing with USB "
                 "storage mode."
             )
-            self._show_theme_fallback_usb_mode()
+            self._show_theme_fallback_usb_mode(auto_open_picker=True)
             return
 
         # This step runs its own countdown watch; two watchers would both claim
@@ -4629,28 +4856,27 @@ class FlashPage(QWidget):
 
         model_str = self.themes.model.upper()
         from ..adb import ADB_WATCH_TIMEOUT_SECONDS
-        self._adb_watch_seconds = ADB_WATCH_TIMEOUT_SECONDS
+        self._adb_watch_seconds = int(
+            timeout_seconds if timeout_seconds is not None else ADB_WATCH_TIMEOUT_SECONDS
+        )
         self.themes.clear_multiple()
         self.themes.clear_usb()
-        usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
+        if reconnect:
+            usb_prompt = tr("rockbox_reconnect_after_disconnect").format(model=model_str)
+        else:
+            usb_prompt = tr("rockbox_step2_connect_usb").format(model=model_str)
         adb_status = tr("rockbox_stage_waiting_adb_fmt").format(remaining=self._adb_watch_seconds)
-        # The question keeps the band while the watch runs, with the countdown
-        # as its explanation. Only the elapsed window hands the user a folder
-        # to pick: the Back chip has nowhere to go until then. An automatic
-        # stage asks nothing — SP Flash Tool already rebooted the player, so
-        # the card only reports the wait.
-        if self.themes.automatic:
+        if self.themes.automatic and not reconnect:
             self.dismiss_flash_question()
         else:
             self.show_flash_question(usb_prompt)
-        self._eta_label.setText(adb_status if (self._cleanup_stage or not self.themes.automatic) else "")
+        self._show_theme_paperclip_tip(reconnect, model_str)
+        self._eta_label.setText(adb_status if (self._cleanup_stage or reconnect or not self.themes.automatic) else "")
         if hasattr(self, "_theme_step1_next_btn"):
             self._theme_step1_next_btn.setVisible(False)
         if hasattr(self, "_theme_fallback_next_btn"):
             self._theme_fallback_next_btn.setVisible(False)
-        if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setEnabled(False)
-            self._theme_back_btn.setVisible(True)
+        self._configure_theme_cancel_chip(mode="cancel")
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_chips_pairing()
             self._flash_head._sync_to_band()
@@ -4661,7 +4887,9 @@ class FlashPage(QWidget):
 
         self._adb_watch_worker = AdbWatchWorker(adb_bin, timeout=float(self._adb_watch_seconds), parent=self)
         self._adb_watch_worker.found.connect(self._on_adb_device_found)
-        self._adb_watch_worker.timed_out.connect(self._show_theme_fallback_usb_mode)
+        self._adb_watch_worker.timed_out.connect(
+            lambda: self._show_theme_fallback_usb_mode(auto_open_picker=True)
+        )
         self._adb_watch_worker.multiple.connect(self._on_adb_multiple_devices)
 
         self._adb_watch_timer = QTimer(self)
@@ -4669,6 +4897,9 @@ class FlashPage(QWidget):
         self._adb_watch_timer.timeout.connect(self._on_adb_watch_tick)
         self._adb_watch_timer.start()
         self._adb_watch_worker.start()
+        # Watch removable drives in parallel so a player switched to USB
+        # storage mode finishes silently without needing the folder picker.
+        self._start_removable_drive_watch()
 
     def _on_adb_watch_tick(self) -> None:
         if getattr(self, "_adb_watch_seconds", 0) > 0:
@@ -4737,6 +4968,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        self._show_theme_paperclip_tip(False)
+        self._show_theme_transfer_cancel_chip()
         if self.themes.is_apk_stage:
             self._log_theme(f"[APK Install] Player detected via ADB (serial: {serial}). Installing application...")
             self._eta_label.setText(tr("rockbox_stage_installing"))
@@ -4853,6 +5086,7 @@ class FlashPage(QWidget):
             model=model,
             rb_themes_path_fix=rb_themes_path_fix,
         )
+        self._show_theme_transfer_cancel_chip()
         self._adb_push_worker.progress.connect(self._on_theme_push_progress)
         self._adb_push_worker.log.connect(self._log_theme)
         self._adb_push_worker.status.connect(self.set_theme_download_status)
@@ -4918,17 +5152,34 @@ class FlashPage(QWidget):
     def _on_theme_push_finished(self, ok: bool, msg: str) -> None:
         # A download line must never outlive the transfer it described.
         self.set_theme_download_status("")
+        if not self.themes.active and not self.themes.transfer_running:
+            return
         if ok:
             self._log_theme("[Rockbox Themes] Themes and fonts were transferred and verified successfully via ADB.")
             self._finish_rockbox_themes_stage()
         else:
             self.themes.adb_attempted = True
-            self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}. Falling back to USB storage guidance.")
+            self._log_theme(f"[Rockbox Themes] ADB theme push encountered an issue: {msg}.")
             if self._try_mass_storage_auto_transfer(fallback_to_picker=False):
                 return
-            self._show_theme_fallback_usb_mode()
+            from ..adb import find_adb_binary
 
-    def _show_theme_fallback_usb_mode(self) -> None:
+            if (
+                not self.themes.adb_reconnect_tried
+                and not self.themes.mass_storage
+                and not self.themes.is_apk_stage
+                and find_adb_binary()
+            ):
+                self.themes.adb_reconnect_tried = True
+                self.themes.reset_player()
+                self._log_theme(
+                    "[Rockbox Themes] Asking user to restart & reconnect USB (35s auto-recovery window for ADB or USB storage)."
+                )
+                self._start_theme_step2_connect_usb(reconnect=True, timeout_seconds=35)
+                return
+            self._show_theme_fallback_usb_mode(auto_open_picker=True)
+
+    def _show_theme_fallback_usb_mode(self, *, auto_open_picker: bool = False) -> None:
         self.themes.settle_prompt()
         self.themes.reset_player()
         if hasattr(self, "_adb_watch_timer"):
@@ -4963,9 +5214,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
-        if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setEnabled(False)
-            self._theme_back_btn.setVisible(True)
+        self._show_theme_paperclip_tip(True, model_str)
+        self._configure_theme_cancel_chip(mode="cancel")
         if hasattr(self, "_theme_fallback_next_btn"):
             self._theme_fallback_next_btn.set_symbol("folder")
             self._theme_fallback_next_btn.setToolTip(tr("rockbox_step_select_player_folder"))
@@ -4977,13 +5227,36 @@ class FlashPage(QWidget):
         win = self.window()
         if win and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
-        # Keep looking for the player while the user is in USB storage mode and
-        # behind the folder picker: ADB (or removable mount) can finish by itself.
-        if getattr(self.themes, "mass_storage", False):
-            self._start_removable_drive_watch()
-        else:
+        # Keep looking for the player over BOTH removable storage and ADB
+        # while the user is in USB storage mode and behind the folder picker:
+        # whichever answers first takes over automatically and closes the picker.
+        self._start_removable_drive_watch()
+        if not getattr(self.themes, "mass_storage", False):
             self._ensure_adb_presence_watch()
         self._request_user_attention()
+        if auto_open_picker:
+            QTimer.singleShot(250, self._maybe_auto_open_theme_picker)
+
+    def _maybe_auto_open_theme_picker(self) -> None:
+        """Open the non-blocking folder picker automatically on interactive desktop fallback."""
+        import os
+
+        if not getattr(self.themes, "active", False) or getattr(self.themes, "player_taken", False):
+            return
+        if self.themes.folder_dialog is not None:
+            return
+        # Never block or spawn a native dialog under headless/offscreen runs or
+        # on Windows where QFileDialog.getExistingDirectory is modal/blocking.
+        if (
+            sys.platform == "win32"
+            or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+            or bool(os.environ.get("INNIOASIS_HEADLESS"))
+        ):
+            return
+        btn = getattr(self, "_theme_fallback_next_btn", None)
+        if btn is None or btn.isHidden():
+            return
+        self._on_theme_fallback_next_clicked()
 
     def _show_theme_manual_prompt(self) -> None:
         self._show_theme_fallback_usb_mode()
@@ -5068,6 +5341,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(False)
         self._hide_theme_wizard_chips()
+        self._show_theme_paperclip_tip(False)
+        self._show_theme_transfer_cancel_chip()
 
         dests = [Path(d) for d in target_dirs if d]
         dest_label = ", ".join(str(d) for d in dests)
@@ -5153,6 +5428,8 @@ class FlashPage(QWidget):
 
     def _on_dir_merge_finished(self, ok: bool, err: str, count: int, dest: str) -> None:
         """Only declare the theme stage complete once files were really copied."""
+        if not self.themes.active and not self.themes.transfer_running:
+            return
         if ok and count > 0:
             self._finish_rockbox_themes_stage(manual_count=count, dest=dest)
             return
@@ -5202,9 +5479,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_widget"):
             self._theme_trouble_widget.setVisible(True)
         self._hide_theme_wizard_chips()
-        if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setEnabled(True)
-            self._theme_back_btn.setVisible(True)
+        self._configure_theme_cancel_chip(mode="back")
         if hasattr(self, "_theme_trouble_recover_btn"):
             self._theme_trouble_recover_btn.setEnabled(True)
             self._theme_trouble_recover_btn.setVisible(True)
@@ -5303,12 +5578,9 @@ class FlashPage(QWidget):
             self._theme_step1_widget.setVisible(True)
         self._theme_step1_next_btn.setText(tr("dialog_pre_install_continue"))
         self._hide_theme_wizard_chips()
+        self._show_theme_paperclip_tip(False)
         self._theme_step1_next_btn.setVisible(True)
-        if hasattr(self, "_theme_back_btn"):
-            # Segmented back/next with the back side disabled: the firmware is
-            # already installed, so this step has nothing to go back to.
-            self._theme_back_btn.setEnabled(False)
-            self._theme_back_btn.setVisible(True)
+        self._configure_theme_cancel_chip(mode="cancel")
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(True)
         if hasattr(self, "_theme_fallback_widget"):
@@ -5321,7 +5593,10 @@ class FlashPage(QWidget):
         self._notify_geometry_change()
         # A player that appears now still wins: the user may already have
         # mirrored the wait by connecting it.
-        self._ensure_adb_presence_watch()
+        if getattr(self.themes, "mass_storage", False):
+            self._start_removable_drive_watch()
+        else:
+            self._ensure_adb_presence_watch()
         self._request_user_attention()
 
     def _on_rockbox_power_on_continue(self) -> None:
@@ -5808,6 +6083,114 @@ class FlashPage(QWidget):
         # The window's ``_install_first_stage`` is what makes it a prerequisite
         # question rather than the ordinary "which firmware?" check.
 
+    def show_rockbox_theme_device_prompt(
+        self,
+        choices,
+        selected: str = "",
+        *,
+        on_continue=None,
+        on_cancel=None,
+        on_adb_detected=None,
+        supported_models=None,
+    ) -> None:
+        """Ask which Rockbox software/player is running inside the main wizard card.
+
+        Reuses the same dropdown layout as the Keep Data / install_first
+        compatibility check (no modal popup dialog) and passively watches ADB
+        so connecting a powered-on Y1/Y2 skips the question automatically.
+        """
+        self._stop_device_prompt_adb_watch()
+        self._failed = False
+        self._complete = False
+        self.themes.device_prompt_pending = True
+        self._theme_device_prompt_active = True
+        self._theme_device_prompt_continue_cb = on_continue
+        self._theme_device_prompt_cancel_cb = on_cancel
+        self._theme_device_prompt_adb_cb = on_adb_detected
+        self._theme_device_prompt_models = list(supported_models or ())
+
+        names = [str(c) for c in (choices or ()) if str(c).strip()]
+        self.show_keep_data_confirmation(
+            tr("rockbox_select_software_question"),
+            tr("rockbox_select_software_hint"),
+            names,
+            selected=selected,
+            show_keep_data_explainer=False,
+        )
+        # Always render as a dropdown with Cancel (✕) and Next (→), even if
+        # only one entry is available.
+        self._keep_data_cancel_leaves = True
+        self._show_keep_data_choice(bool(names))
+        self._set_yes_no_glyphs(False)
+        self._sync_wait_band_page()
+        if callable(on_adb_detected):
+            self._start_device_prompt_adb_watch()
+
+    def clear_rockbox_theme_device_prompt(self) -> None:
+        """Leave the in-GUI Rockbox software/player selection prompt cleanly."""
+        self._stop_device_prompt_adb_watch()
+        was_active = bool(getattr(self, "_theme_device_prompt_active", False))
+        self._theme_device_prompt_active = False
+        self._theme_device_prompt_continue_cb = None
+        self._theme_device_prompt_cancel_cb = None
+        self._theme_device_prompt_adb_cb = None
+        self._theme_device_prompt_models = []
+        self.themes.device_prompt_pending = False
+        if was_active:
+            self.clear_keep_data_confirmation()
+
+    def _start_device_prompt_adb_watch(self) -> None:
+        """Passively watch ADB while the software dropdown is open."""
+        self._stop_device_prompt_adb_watch()
+        from ..adb import find_adb_binary
+        from ..theme_pack import AdbPresencePoller
+
+        adb_bin = find_adb_binary()
+        if not adb_bin:
+            return
+        worker = AdbPresencePoller(adb_bin, parent=self)
+        worker.found.connect(self._on_device_prompt_adb_found)
+        self._theme_device_prompt_adb_worker = worker
+        worker.start()
+
+    def _stop_device_prompt_adb_watch(self) -> None:
+        worker = getattr(self, "_theme_device_prompt_adb_worker", None)
+        self._theme_device_prompt_adb_worker = None
+        if worker is None:
+            return
+        try:
+            worker.found.disconnect()
+        except Exception:
+            pass
+        try:
+            worker.requestInterruption()
+            if not worker.wait(1200):
+                self.themes.retire_watch(worker)
+                worker.finished.connect(lambda w=worker: self._retire_presence_worker(w))
+        except Exception:
+            pass
+
+    def _on_device_prompt_adb_found(self, serial: str) -> None:
+        """Auto-skip the dropdown when an attached Y1/Y2 identifies over ADB."""
+        if not getattr(self, "_theme_device_prompt_active", False):
+            return
+        from ..adb import adb_detect_player_model, find_adb_binary
+
+        adb_bin = find_adb_binary()
+        if not adb_bin:
+            return
+        models = getattr(self, "_theme_device_prompt_models", None) or None
+        try:
+            detected = adb_detect_player_model(adb_bin, device=serial, supported_models=models)
+        except Exception:
+            detected = None
+        if not detected:
+            return
+        cb = getattr(self, "_theme_device_prompt_adb_cb", None)
+        self.clear_rockbox_theme_device_prompt()
+        if callable(cb):
+            cb(detected, serial)
+
     def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
         """Ask whether to install and erase settings (or settings + media)."""
         self._keep_data_erase_confirm_active = True
@@ -6284,6 +6667,13 @@ class FlashPage(QWidget):
         self._power_off_continue_cb = cb
 
     def _on_power_off_continue(self) -> None:
+        if getattr(self, "_theme_device_prompt_active", False):
+            choice = self.keep_data_confirm_choice()
+            cb = getattr(self, "_theme_device_prompt_continue_cb", None)
+            self.clear_rockbox_theme_device_prompt()
+            if callable(cb):
+                cb(choice)
+            return
         if callable(self._power_off_continue_cb):
             self._power_off_continue_cb()
 
@@ -6329,9 +6719,98 @@ class FlashPage(QWidget):
             button.setToolTip(label)
         button.setVisible(bool(visible))
 
+    def set_completion_themes(
+        self,
+        url: str = "",
+        *,
+        kind: str = "",
+        on_install_anyway=None,
+    ) -> None:
+        """Configure the completion screen's Get Themes button and guidance mode.
+
+        ``kind`` is one of ``""``, ``"240p"``, ``"360p_fallback"``, or
+        ``"240p_manual_hint"``. An empty ``url`` disables the Get Themes button
+        entirely (e.g. non-Rockbox firmwares or successful 360p Rockbox runs).
+        """
+        self._completion_themes_url = str(url or "").strip()
+        self._completion_themes_kind = str(kind or "").strip() if self._completion_themes_url else ""
+        self._completion_install_anyway_cb = on_install_anyway if callable(on_install_anyway) else None
+        self._completion_themes_clicked = False
+        self._completion_guide_clicked = False
+        self._rockbox_site_themes = bool(self._completion_themes_url)
+        self._apply_post_install_state()
+
     def set_rockbox_site_themes(self, enabled: bool) -> None:
         """Record that this run installs a Rockbox build whose themes live on themes.rockbox.org."""
-        self._rockbox_site_themes = bool(enabled)
+        enabled = bool(enabled)
+        self._rockbox_site_themes = enabled
+        if enabled:
+            if not getattr(self, "_completion_themes_url", ""):
+                self.set_completion_themes(ROCKBOX_240P_THEMES_URL, kind="240p")
+        elif getattr(self, "_completion_themes_kind", "") == "240p":
+            self.set_completion_themes("")
+
+    def _has_completion_themes(self) -> bool:
+        """True when the completion screen should offer a Get Themes action."""
+        return bool(getattr(self, "_completion_themes_url", ""))
+
+    def _refresh_get_themes_btn_icon(self) -> None:
+        """Render the native paint palette glyph on the donations Get Themes button."""
+        btn = getattr(self, "_get_themes_btn", None)
+        if btn is None:
+            return
+        try:
+            from PySide6.QtGui import QIcon
+            from .dark import theme_text_color
+
+            pm = get_symbol_pixmap("palette", 15, theme_text_color().name())
+            if not pm.isNull():
+                btn.setIcon(QIcon(pm))
+                btn.setIconSize(QSize(15, 15))
+        except Exception:
+            pass
+
+    def _on_completion_hint_link(self, href: str) -> None:
+        if href == "get-themes":
+            self._open_completion_themes()
+        elif href == "install-360p-anyway":
+            self._on_completion_install_anyway()
+        elif href == "post-install":
+            self._open_post_install_guide()
+        else:
+            self._open_view_guide()
+
+    def _on_completion_install_anyway(self) -> None:
+        cb = getattr(self, "_completion_install_anyway_cb", None)
+        if callable(cb):
+            cb()
+
+    def _open_completion_themes(self) -> None:
+        """Open the firmware's themes destination via innioasis.app with site prefs.
+
+        Stay-on-screen rule:
+        - When donations are shown, keep the user on the completion screen.
+        - On a non-donations two-button completion screen (Get Themes + View
+          Guide), stay on screen until BOTH buttons have been clicked, then
+          dismiss cleanly.
+        - On a non-donations Get Themes + Done screen, stay on screen so the
+          user can finish with Done (or navigate away via the sidebar).
+        """
+        from ..browser import open_browser
+
+        url = getattr(self, "_completion_themes_url", "")
+        if not url:
+            return
+        open_browser(url)
+        self._completion_themes_clicked = True
+        if (
+            not getattr(self, "_donations_shown", False)
+            and self._has_post_install()
+            and self._has_completion_themes()
+            and getattr(self, "_completion_guide_clicked", False)
+        ):
+            if callable(getattr(self, "_install_done_cb", None)):
+                self._install_done_cb()
 
     def _initsteps_image(self):
         if paths.IS_MAC:
@@ -6460,33 +6939,100 @@ class FlashPage(QWidget):
         )
 
     def _completion_guide_html(self) -> str:
-        """The extra-steps sentence shown above the View Guide button."""
+        """The guidance sentence shown above View Guide / Get Themes on the donations screen."""
         from html import escape
 
-        return escape(tr("post_install_explain_completion"))
+        has_guide = self._has_post_install()
+        has_themes = self._has_completion_themes()
+        model = (getattr(self, "_model", "") or "").strip() or tr("device_fallback_word")
+        kind = getattr(self, "_completion_themes_kind", "")
+        themes_failed = bool(self.themes.placement_failed)
+        get_themes_link = _themed_link(
+            "get-themes", tr("completion_get_themes_link"), underline=True
+        )
+
+        if has_guide and has_themes:
+            if themes_failed or kind == "360p_fallback":
+                return (
+                    f"{tr('completion_themes_failed_get_themes_donations').format(get_themes=get_themes_link)} "
+                    f"{escape(tr('post_install_explain_completion'))}"
+                )
+            return tr("completion_installed_guide_and_themes_donations").format(
+                model=escape(model), get_themes=get_themes_link
+            )
+        if has_guide:
+            return escape(tr("post_install_explain_completion"))
+        if has_themes:
+            if kind == "240p_manual_hint":
+                return tr("completion_240p_manual_body").format(get_themes=get_themes_link)
+            if themes_failed or kind == "360p_fallback":
+                return tr("completion_themes_failed_get_themes_donations").format(
+                    get_themes=get_themes_link
+                )
+            return tr("completion_installed_get_themes_donations").format(
+                model=escape(model), get_themes=get_themes_link
+            )
+        return ""
 
     def _apply_post_install_state(self) -> None:
         donations_shown = bool(getattr(self, "_donations_shown", False))
         post_install_2 = getattr(self, "_post_install_url_2", "")
-        is_complete = getattr(self, "_complete", False)
+        is_complete = bool(getattr(self, "_complete", False))
+        has_guide = self._has_post_install()
+        has_themes = self._has_completion_themes()
+        show_done_themes_chip = is_complete and has_themes and not donations_shown
+        if hasattr(self, "_done_themes_btn"):
+            self._done_themes_btn.setVisible(show_done_themes_chip)
+            self._done_themes_btn.setEnabled(True)
+            if show_done_themes_chip:
+                self._done_themes_btn.set_symbol("palette")
+                self._done_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+                self._done_themes_btn.setAccessibleName(tr("completion_get_themes_btn"))
+        if hasattr(self, "_cancel_btn") and is_complete:
+            # Replace the disabled left chip on a non-donations completion
+            # screen with the active Get Themes palette chip when applicable.
+            self._cancel_btn.setVisible(not show_done_themes_chip and not donations_shown)
         if hasattr(self, "_done_mark"):
-            globe = self._has_post_install() and not donations_shown
+            globe = has_guide and not donations_shown
             self._done_mark.set_symbol("www" if globe else "complete")
-            self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
+            tip = tr("post_install_globe_tooltip") if globe else tr("install_done_dismiss")
+            self._done_mark.setToolTip(tip)
+            self._done_mark.setAccessibleName(tip)
+        if hasattr(self, "_flash_head") and hasattr(self._flash_head, "_sync_chips_pairing"):
+            self._flash_head._sync_chips_pairing()
+            if is_complete:
+                self._flash_head._sync_to_band()
         if hasattr(self, "_post_install_hint"):
             # The compact one-line card is no longer a completion render: the
             # letter carries the guide for both donation states.
             self._post_install_hint.setVisible(False)
         if hasattr(self, "_view_guide_btn"):
             self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
-            self._view_guide_btn.setVisible(self._has_post_install() and is_complete)
+            self._view_guide_btn.setVisible(has_guide and is_complete)
+        if hasattr(self, "_get_themes_btn"):
+            self._get_themes_btn.setText(tr("completion_get_themes_btn"))
+            self._get_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+            self._refresh_get_themes_btn_icon()
+            self._get_themes_btn.setVisible(has_themes and is_complete)
+        if hasattr(self, "_completion_guide_row"):
+            self._completion_guide_row.setVisible((has_guide or has_themes) and is_complete)
+        if hasattr(self, "_completion_install_anyway_link"):
+            show_anyway = (
+                is_complete
+                and getattr(self, "_completion_themes_kind", "") == "240p_manual_hint"
+                and callable(getattr(self, "_completion_install_anyway_cb", None))
+            )
+            self._completion_install_anyway_link.setText(
+                _themed_link("install-360p-anyway", tr("completion_install_360p_anyway"), underline=True)
+            )
+            self._completion_install_anyway_link.setVisible(show_anyway)
         from .. import fx
 
         route = fx.donation_route()
         if hasattr(self, "_coffee_btn"):
             if route == "boosty":
                 self._coffee_btn.setText(tr("donate_boosty"))
-            elif post_install_2 and self._has_post_install():
+            elif post_install_2 and has_guide:
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
@@ -6652,16 +7198,17 @@ class FlashPage(QWidget):
         complete = bool(getattr(self, "_complete", False)) and not bool(
             getattr(self, "_failed", False)
         )
+        manual_240p = getattr(self, "_completion_themes_kind", "") == "240p_manual_hint"
         hint = getattr(self, "_start_help_hint", None)
         if hint is not None:
             hint.setVisible(False)
         power_on = getattr(self, "_appeal_power_on", None)
         if power_on is not None:
             power_on.setVisible(
-                complete and not bool(getattr(self, "_cleanup_mode", False))
+                complete and not bool(getattr(self, "_cleanup_mode", False)) and not manual_240p
             )
         body = getattr(self, "_start_help_body", None)
-        if body is not None and not complete:
+        if body is not None and (not complete or manual_240p):
             body.setVisible(False)
 
     # -- post-install guide -------------------------------------------------
@@ -6684,13 +7231,23 @@ class FlashPage(QWidget):
         # file) still belongs on the site's parser page for that project.
         return page or docs_source.site_page_for_link(url) or url
 
-    def _open_post_install_guide(self) -> None:
+    def _open_post_install_guide(self, *, from_done_chip: bool = False) -> None:
         """Globe: the firmware's setup steps, in the browser."""
         from ..browser import open_browser, _with_donation_preference
 
         url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
             open_browser(_with_donation_preference(self._post_install_open_url(url)))
+            self._completion_guide_clicked = True
+            if (
+                not from_done_chip
+                and not getattr(self, "_donations_shown", False)
+                and self._has_post_install()
+                and self._has_completion_themes()
+                and getattr(self, "_completion_themes_clicked", False)
+            ):
+                if callable(getattr(self, "_install_done_cb", None)):
+                    self._install_done_cb()
 
     def _open_view_guide(self) -> None:
         """View Guide: opens post_install link."""
@@ -6743,9 +7300,17 @@ class FlashPage(QWidget):
 
         steps = install_power_on_steps(model)
         has_guide = self._has_post_install()
+        has_themes = self._has_completion_themes()
+        kind = getattr(self, "_completion_themes_kind", "")
         if hasattr(self, "_intro"):
             self._intro.retranslate(software=software, model=model)
-            self._intro.subtitle.setVisible(not has_guide)
+            if kind == "240p_manual_hint":
+                self._intro.headline.setText(
+                    tr("completion_240p_manual_heading").format(software=software, model=model)
+                )
+                self._intro.subtitle.setVisible(False)
+            else:
+                self._intro.subtitle.setVisible(not has_guide)
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
         start_help_link = _themed_link(
@@ -6770,13 +7335,14 @@ class FlashPage(QWidget):
                 self._appeal_power_on.setText(f"{clean_steps} {start_help_link}")
             else:
                 self._appeal_power_on.setText(start_help_link)
-            self._appeal_power_on.setVisible(True)
+            self._appeal_power_on.setVisible(kind != "240p_manual_hint")
             _apply_card_text(self._appeal_power_on)
         if hasattr(self, "_start_help_hint"):
             self._start_help_hint.setVisible(False)
         if hasattr(self, "_completion_guide_hint"):
-            self._completion_guide_hint.setText(self._completion_guide_html())
-            self._completion_guide_hint.setVisible(has_guide)
+            hint_html = self._completion_guide_html()
+            self._completion_guide_hint.setText(hint_html)
+            self._completion_guide_hint.setVisible(bool(hint_html) and (has_guide or has_themes))
             _apply_card_text(self._completion_guide_hint)
         if self._has_post_install() and not getattr(self, "_appeal_themes", False):
             # The completion letter for an install with a guide reads as the
@@ -6829,6 +7395,60 @@ class FlashPage(QWidget):
         # The card's lines are the whole message, not something to unfold.
         self._completion_collapsible.toggle_button.setVisible(False)
         self._completion_collapsible.toggle(True)
+        self._completion_title_label.setVisible(True)
+        self._completion_collapsible.setVisible(True)
+
+        kind = getattr(self, "_completion_themes_kind", "")
+        has_themes = self._has_completion_themes()
+        get_themes_link = _themed_link(
+            "get-themes", tr("completion_get_themes_link"), underline=True
+        )
+        palette_uri = get_symbol_data_uri("palette", 12, match_accent=False)
+        palette_html = (
+            f'<img src="{palette_uri}" width="12" height="12" style="vertical-align: -1px;">'
+        )
+        globe_uri = get_symbol_data_uri("globe", 12, match_accent=False)
+        globe_html = (
+            f'<img src="{globe_uri}" width="12" height="12" style="vertical-align: -1px;">'
+        )
+
+        if kind == "240p_manual_hint" and has_themes:
+            heading_plain = tr("completion_240p_manual_heading").format(
+                software=software, model=model
+            )
+            self._completion_title_label.setText(f"<b>{escape(heading_plain)}</b>")
+            _apply_card_text(self._completion_title_label)
+            self._complete_note.setText(heading_plain)
+            self._complete_note.setVisible(False)
+
+            body_lbl = QLabel(
+                tr("completion_240p_manual_body").format(get_themes=get_themes_link)
+            )
+            body_lbl.setTextFormat(Qt.TextFormat.RichText)
+            body_lbl.setWordWrap(True)
+            body_lbl.setProperty("cssClass", "dimmed")
+            body_lbl.setOpenExternalLinks(False)
+            body_lbl.linkActivated.connect(self._on_completion_hint_link)
+            _apply_card_text(body_lbl)
+            self._completion_hint_layout.addWidget(body_lbl)
+
+            if callable(getattr(self, "_completion_install_anyway_cb", None)):
+                anyway_lbl = QLabel(
+                    _themed_link(
+                        "install-360p-anyway",
+                        tr("completion_install_360p_anyway"),
+                        underline=True,
+                    )
+                )
+                anyway_lbl.setTextFormat(Qt.TextFormat.RichText)
+                anyway_lbl.setWordWrap(True)
+                anyway_lbl.setProperty("cssClass", "dimmed")
+                anyway_lbl.setOpenExternalLinks(False)
+                anyway_lbl.setCursor(Qt.PointingHandCursor)
+                anyway_lbl.linkActivated.connect(self._on_completion_hint_link)
+                _apply_card_text(anyway_lbl)
+                self._completion_hint_layout.addWidget(anyway_lbl)
+            return
 
         if self._complete_note_themes and not self.themes.placement_failed:
             if getattr(self.themes, "is_standalone", False):
@@ -6859,8 +7479,8 @@ class FlashPage(QWidget):
         # A firmware whose guide still has to run is not installed in the sense
         # the sentence claims, so the card leaves the sentence out and says
         # what is left to do instead.
-        has_guide = self._has_post_install() and not self.themes.placement_failed
-        if has_guide:
+        has_guide = self._has_post_install()
+        if has_guide and not self.themes.placement_failed:
             heading = f"<b>{escape(tr('completion_one_more_thing'))}</b>"
         else:
             # Nothing is left to do: the card opens with what finished.
@@ -6870,7 +7490,38 @@ class FlashPage(QWidget):
         self._complete_note.setText(installed)
         self._complete_note.setVisible(bool(self.themes.placement_failed))
 
-        if has_guide:
+        if has_themes:
+            if has_guide:
+                themes_html = tr("completion_installed_guide_and_themes_non_donations").format(
+                    software=escape(software),
+                    model=escape(model),
+                    globe=globe_html,
+                    get_themes=get_themes_link,
+                    palette=palette_html,
+                )
+            elif self.themes.placement_failed or kind == "360p_fallback":
+                themes_html = tr("completion_themes_failed_get_themes_non_donations").format(
+                    software=escape(software),
+                    model=escape(model),
+                    get_themes=get_themes_link,
+                    palette=palette_html,
+                )
+            else:
+                themes_html = tr("completion_installed_get_themes_non_donations").format(
+                    software=escape(software),
+                    model=escape(model),
+                    get_themes=get_themes_link,
+                    palette=palette_html,
+                )
+            lbl = QLabel(themes_html)
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setWordWrap(True)
+            lbl.setProperty("cssClass", "dimmed")
+            lbl.setOpenExternalLinks(False)
+            lbl.linkActivated.connect(self._on_completion_hint_link)
+            _apply_card_text(lbl)
+            self._completion_hint_layout.addWidget(lbl)
+        elif has_guide and not self.themes.placement_failed:
             lbl = QLabel(self._post_install_hint_html())
             lbl.setTextFormat(Qt.TextFormat.RichText)
             lbl.setWordWrap(True)
@@ -6949,9 +7600,15 @@ class FlashPage(QWidget):
             self._package_name = self._complete_note_software
         if self._complete_note_model:
             self._model = self._complete_note_model
-        self._donations_shown = False
-        self._completion_advice_label = None
         themes_failed = bool(self.themes.placement_failed)
+        if not (
+            donations_enabled
+            and themes_failed
+            and hasattr(self, "_appeal")
+            and self._appeal.isVisible()
+        ):
+            self._donations_shown = False
+        self._completion_advice_label = None
         self._render_completion_note(post_install_once=post_install_once)
         if donations_enabled and hasattr(self, "_appeal") and not themes_failed:
             self._appeal_themes = bool(themes_installed)
@@ -6987,7 +7644,12 @@ class FlashPage(QWidget):
             self._appeal.setVisible(True)
         else:
             self._completion_note_container.setVisible(True)
-            if not donations_enabled and hasattr(self, "_appeal"):
+            if donations_enabled and themes_failed and hasattr(self, "_appeal") and self._appeal.isVisible():
+                # Keep _complete_note visible above the donations appeal so the
+                # try-again status stays visible without repeating the full card.
+                self._completion_title_label.setVisible(False)
+                self._completion_collapsible.setVisible(False)
+            elif not donations_enabled and hasattr(self, "_appeal"):
                 # Without the ask the letter has nothing the simple card does
                 # not say, so it leaves the screen entirely: no donation copy,
                 # no signature, no empty button row.
@@ -7036,7 +7698,13 @@ class FlashPage(QWidget):
         self._render_appeal_copy()
         self._set_donation_row_visible(bool(visible))
         if visible:
-            self._completion_note_container.setVisible(False)
+            if self.themes.placement_failed:
+                # Preserve _complete_note above the appeal on a themes failure.
+                self._completion_note_container.setVisible(True)
+                self._completion_title_label.setVisible(False)
+                self._completion_collapsible.setVisible(False)
+            else:
+                self._completion_note_container.setVisible(False)
             if hasattr(self, "_post_install_hint"):
                 self._post_install_hint.setVisible(False)
             if hasattr(self, "_progress_card"):
@@ -7116,6 +7784,7 @@ class FlashPage(QWidget):
         for attr in (
             "_cancel_btn",
             "_flash_retry_btn",
+            "_done_themes_btn",
             "_done_mark",
             "_theme_back_btn",
             "_theme_step1_next_btn",
@@ -7384,12 +8053,20 @@ class FlashPage(QWidget):
         # progress card (100% and its check) is redundant and hidden.
         if hasattr(self, "_progress_card"):
             self._progress_card.setVisible(not donations_shown)
+        has_themes_chip = not donations_shown and self._has_completion_themes()
         if hasattr(self, "_cancel_btn"):
-            self._cancel_btn.setVisible(True)
+            self._cancel_btn.setVisible(not has_themes_chip and not donations_shown)
             self._cancel_btn.setEnabled(False)
             self._cancel_btn.set_symbol("back")
             self._cancel_btn.setToolTip("")
             self._cancel_btn.setAccessibleName("")
+        if hasattr(self, "_done_themes_btn"):
+            self._done_themes_btn.setVisible(has_themes_chip)
+            self._done_themes_btn.setEnabled(True)
+            if has_themes_chip:
+                self._done_themes_btn.set_symbol("palette")
+                self._done_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+                self._done_themes_btn.setAccessibleName(tr("completion_get_themes_btn"))
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(not donations_shown)
             self._done_mark.setEnabled(True)
@@ -7817,8 +8494,22 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_trouble_recover_btn"):
             self._theme_trouble_recover_btn.setText(tr("rockbox_recover_troubleshoot"))
         if hasattr(self, "_theme_back_btn"):
-            self._theme_back_btn.setText(tr("rockbox_wizard_back"))
-            self._theme_back_btn.setToolTip(tr("rockbox_wizard_back"))
+            mode = getattr(self, "_theme_back_mode", "cancel")
+            key = "rockbox_wizard_back" if mode == "back" else "rockbox_cancel_themes_tooltip"
+            self._theme_back_btn.setText(tr(key))
+            self._theme_back_btn.setToolTip(tr(key))
+        if hasattr(self, "_theme_paperclip_tip") and not self._theme_paperclip_tip.isHidden():
+            self._show_theme_paperclip_tip(True)
+        if hasattr(self, "_done_themes_btn"):
+            self._done_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+            self._done_themes_btn.setAccessibleName(tr("completion_get_themes_btn"))
+        if hasattr(self, "_get_themes_btn"):
+            self._get_themes_btn.setText(tr("completion_get_themes_btn"))
+            self._get_themes_btn.setToolTip(tr("completion_get_themes_tooltip"))
+        if hasattr(self, "_completion_install_anyway_link"):
+            self._completion_install_anyway_link.setText(
+                _themed_link("install-360p-anyway", tr("completion_install_360p_anyway"), underline=True)
+            )
         if hasattr(self, "_download_drivers_btn"):
             self._download_drivers_btn.setText(tr("settings_download_drivers_btn"))
         self._flash_banner.retranslate()
@@ -7880,6 +8571,7 @@ class FlashPage(QWidget):
             "_warning", "_download_pkg_label", "_download_status_label", "_download_heading",
             "_appeal_label", "_appeal_body", "_appeal_signature", "_completion_guide_hint",
             "_paperclip_hint", "_keep_data_cb", "_keep_data_microsd_note",
+            "_theme_paperclip_tip", "_completion_install_anyway_link",
         )
         for name in names:
             label = getattr(self, name, None)
@@ -7907,8 +8599,19 @@ class FlashPage(QWidget):
             self._post_install_hint.setText(self._post_install_hint_html())
         if hasattr(self, "_completion_guide_hint"):
             self._completion_guide_hint.setText(self._completion_guide_html())
+        if hasattr(self, "_completion_install_anyway_link"):
+            self._completion_install_anyway_link.setText(
+                _themed_link("install-360p-anyway", tr("completion_install_360p_anyway"), underline=True)
+            )
+        self._refresh_get_themes_btn_icon()
         if getattr(self, "_appeal", None) is not None and self._appeal.isVisible():
             self._render_appeal_copy()
+        if (
+            getattr(self, "_completion_note_container", None) is not None
+            and self._completion_note_container.isVisible()
+            and not (getattr(self, "_appeal", None) is not None and self._appeal.isVisible())
+        ):
+            self._render_completion_note(post_install_once=getattr(self, "_post_install_once", False))
         self._seal_status_labels()
         for bar_name in ("_prep_progress", "_wait_progress_bar", "_progress_bar", "_download_progress"):
             bar = getattr(self, bar_name, None)
@@ -7926,13 +8629,12 @@ class FlashPage(QWidget):
             getattr(self, "_download_cancel_btn", None),
             getattr(self, "_wait_continue_btn", None),
             getattr(self, "_flash_retry_btn", None),
+            getattr(self, "_done_themes_btn", None),
             getattr(self, "_done_mark", None),
             getattr(self, "_theme_step1_next_btn", None),
             getattr(self, "_theme_fallback_next_btn", None),
             getattr(self, "_theme_trouble_recover_btn", None),
             getattr(self, "_theme_back_btn", None),
-            getattr(self, "_stop_continue", None),
-            getattr(self, "_stop_back", None),
             getattr(self, "_stop_continue", None),
             getattr(self, "_stop_back", None),
         ):
@@ -7955,10 +8657,15 @@ class FlashPage(QWidget):
         self._install_done_cb = callback
 
     def _on_install_done(self) -> None:
-        if getattr(self, "_post_install_url", "") and not getattr(self, "_donations_shown", False):
-            from ..browser import open_browser
-
-            open_browser(self._post_install_url)
+        donations_shown = bool(getattr(self, "_donations_shown", False))
+        if self._has_post_install() and not donations_shown:
+            self._open_post_install_guide(from_done_chip=True)
+            if self._has_completion_themes() and not getattr(
+                self, "_completion_themes_clicked", False
+            ):
+                # Two-button non-donations completion screen (Get Themes + View
+                # Guide): stay on screen until BOTH buttons have been clicked.
+                return
         if callable(getattr(self, "_install_done_cb", None)):
             self._install_done_cb()
 
@@ -7991,6 +8698,9 @@ class FlashPage(QWidget):
         )
 
     def _on_cancel(self):
+        if getattr(self.themes, "active", False) or getattr(self.themes, "transfer_running", False):
+            self._on_theme_cancel_clicked()
+            return
         if getattr(self, "_failed", False) or self._nothing_written_yet():
             callback = getattr(self, "_cancel_callback", None) or getattr(self, "_cancel_wait_callback", None)
             if callable(callback):
@@ -8007,6 +8717,12 @@ class FlashPage(QWidget):
         keep-data sanity check is the exception: its X reads "No", which means
         the player is running different software, not that the install stops.
         """
+        if getattr(self, "_theme_device_prompt_active", False):
+            cancel_cb = getattr(self, "_theme_device_prompt_cancel_cb", None)
+            self.clear_rockbox_theme_device_prompt()
+            if callable(cancel_cb):
+                cancel_cb()
+            return
         if (
             getattr(self, "_keep_data_confirm_active", False)
             and not getattr(self, "_keep_data_cancel_leaves", False)

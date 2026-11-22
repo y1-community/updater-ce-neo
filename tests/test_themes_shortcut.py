@@ -35,6 +35,10 @@ def test_ctrl_t_shortcut_registered_and_starts_prompt():
         win._themes_shortcut.activated.emit()
         app.processEvents()
         assert win._stack.currentIndex() == _PAGE_FLASH
+        assert win._install_run_active()
+        if win.themes.device_prompt_pending:
+            win._flash_page._wait_continue_btn.click()
+            app.processEvents()
         assert win.themes.power_on_pending
         assert win.themes.active
         assert win._install_run_active()

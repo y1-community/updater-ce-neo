@@ -179,9 +179,10 @@ def test_segmented_buttons_on_theme_guidance_screens():
         assert page._theme_fallback_next_btn.isEnabled()
         assert page._theme_fallback_next_btn._symbol == "folder"
 
-        # Back button must be visible but greyed out (disabled)
+        # Cancel button must be visible and enabled so the user can always exit
         assert not page._theme_back_btn.isHidden()
-        assert not page._theme_back_btn.isEnabled()
+        assert page._theme_back_btn.isEnabled()
+        assert page._theme_back_btn._symbol == "cancel"
 
         # They must be paired into a segmented capsule
         visible_chips = [c for c in page._flash_head._chips if not c.isHidden()]
@@ -197,7 +198,8 @@ def test_segmented_buttons_on_theme_guidance_screens():
         assert not page._theme_step1_next_btn.isHidden()
         assert page._theme_step1_next_btn.isEnabled()
         assert not page._theme_back_btn.isHidden()
-        assert not page._theme_back_btn.isEnabled()
+        assert page._theme_back_btn.isEnabled()
+        assert page._theme_back_btn._symbol == "cancel"
 
         visible_chips = [c for c in page._flash_head._chips if not c.isHidden()]
         assert len(visible_chips) == 2
@@ -210,6 +212,7 @@ def test_segmented_buttons_on_theme_guidance_screens():
         assert page._theme_trouble_recover_btn.isEnabled()
         assert not page._theme_back_btn.isHidden()
         assert page._theme_back_btn.isEnabled()  # Back is enabled on troubleshooting screen
+        assert page._theme_back_btn._symbol == "back"
 
         visible_chips = [c for c in page._flash_head._chips if not c.isHidden()]
         assert len(visible_chips) == 2
@@ -255,6 +258,10 @@ def test_main_window_wires_install_themes_card():
             win._settings_page.install_rockbox_themes_requested.emit()
             app.processEvents()
             assert win._stack.currentIndex() == _PAGE_FLASH
+            assert win._install_run_active()
+            if win.themes.device_prompt_pending:
+                win._flash_page._wait_continue_btn.click()
+                app.processEvents()
             assert win.themes.active
             assert win.themes.power_on_pending
     finally:

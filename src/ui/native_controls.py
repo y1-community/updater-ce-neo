@@ -57,6 +57,8 @@ _SF_SYMBOLS = {
     "delete": "trash",
     "bin": "trash",
     "retry": "arrow.clockwise",
+    "palette": "paintpalette",
+    "paintpalette": "paintpalette",
 }
 
 _SEGMENTED_SF_SYMBOLS = {
@@ -75,7 +77,8 @@ _SEGMENTED_SF_SYMBOLS = {
     "trash": "trash",
     "delete": "trash",
     "bin": "trash",
-    "retry": "arrow.clockwise",
+    "palette": "paintpalette",
+    "paintpalette": "paintpalette",
 }
 
 _target_class = None

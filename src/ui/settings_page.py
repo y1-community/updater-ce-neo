@@ -144,6 +144,8 @@ class SettingsPage(QWidget):
     onboarding_finished = Signal()
     install_rockbox_themes_requested = Signal()
     refresh_themes_requested = Signal()
+    get_240p_themes_requested = Signal()
+    save_360p_themes_zip_requested = Signal()
     # The in-beta themes auto-install toggle flipped; the window starts or
     # stops the passive sync to match.
     themes_auto_install_changed = Signal(bool)
@@ -1010,6 +1012,37 @@ class SettingsPage(QWidget):
         self._install_themes_status_lbl.setVisible(False)
         themes_btn_row.addWidget(self._install_themes_status_lbl, 1)
         themes_layout.addLayout(themes_btn_row)
+
+        themes_links_row = QHBoxLayout()
+        themes_links_row.setContentsMargins(0, 2, 0, 0)
+        themes_links_row.setSpacing(14)
+        self._get_240p_themes_link = QLabel(self._themes_card_link_html("240p"))
+        self._get_240p_themes_link.setTextFormat(Qt.TextFormat.RichText)
+        self._get_240p_themes_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._get_240p_themes_link.setOpenExternalLinks(False)
+        self._get_240p_themes_link.setCursor(Qt.PointingHandCursor)
+        self._get_240p_themes_link.linkActivated.connect(
+            lambda _href: self.get_240p_themes_requested.emit()
+        )
+        themes_links_row.addWidget(self._get_240p_themes_link)
+
+        self._save_360p_themes_link = QLabel(self._themes_card_link_html("save360"))
+        self._save_360p_themes_link.setTextFormat(Qt.TextFormat.RichText)
+        self._save_360p_themes_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._save_360p_themes_link.setOpenExternalLinks(False)
+        self._save_360p_themes_link.setCursor(Qt.PointingHandCursor)
+        self._save_360p_themes_link.linkActivated.connect(
+            lambda _href: self.save_360p_themes_zip_requested.emit()
+        )
+        themes_links_row.addWidget(self._save_360p_themes_link)
+        themes_links_row.addStretch(1)
+        themes_layout.addLayout(themes_links_row)
 
         self._install_themes_card.set_layout(themes_layout)
         self._install_themes_card.setVisible(
@@ -2968,6 +3001,17 @@ class SettingsPage(QWidget):
             'href="#"', 'href="dismiss"', 1
         )
 
+    def _themes_card_link_html(self, kind: str) -> str:
+        from .dark import link_html
+
+        if kind == "save360":
+            return link_html(tr("settings_save_360p_themes_zip_link"), bold=False).replace(
+                'href="#"', 'href="save-360p-zip"', 1
+            )
+        return link_html(tr("settings_get_240p_themes_link"), bold=False).replace(
+            'href="#"', 'href="get-240p-themes"', 1
+        )
+
     def _open_settings_coffee(self) -> None:
         from ..browser import open_browser
         from ..config import DONATION_LINKS
@@ -3493,6 +3537,10 @@ class SettingsPage(QWidget):
             self._settings_reddit_btn.setText(tr("community_reddit"))
         if hasattr(self, "_dismiss_donations_link"):
             self._dismiss_donations_link.setText(self._donations_dismiss_html())
+        if hasattr(self, "_get_240p_themes_link"):
+            self._get_240p_themes_link.setText(self._themes_card_link_html("240p"))
+        if hasattr(self, "_save_360p_themes_link"):
+            self._save_360p_themes_link.setText(self._themes_card_link_html("save360"))
         self._sync_donation_opt_out()
         if hasattr(self, "_cache_card"):
             self._cache_card.retranslate()
@@ -3565,6 +3613,10 @@ class SettingsPage(QWidget):
         if hasattr(self, "_refresh_themes_btn"):
             self._refresh_themes_btn.setText(tr("settings_refresh_themes_btn"))
             self._refresh_themes_btn.setIcon(get_symbol_icon("refresh", 14, color=T().fg))
+        if hasattr(self, "_get_240p_themes_link"):
+            self._get_240p_themes_link.setText(self._themes_card_link_html("240p"))
+        if hasattr(self, "_save_360p_themes_link"):
+            self._save_360p_themes_link.setText(self._themes_card_link_html("save360"))
         self._retranslate_shortcut_switches()
         self._sp_auth_label.setText(tr("settings_sp_auth"))
         self._sp_auth_browse.setText(tr("settings_sp_auth_browse"))
@@ -3585,6 +3637,10 @@ class SettingsPage(QWidget):
             self._clear_cache_btn.setIcon(get_symbol_icon("trash", 14, color=T().fg))
         if hasattr(self, "_dismiss_donations_link"):
             self._dismiss_donations_link.setText(self._donations_dismiss_html())
+        if hasattr(self, "_get_240p_themes_link"):
+            self._get_240p_themes_link.setText(self._themes_card_link_html("240p"))
+        if hasattr(self, "_save_360p_themes_link"):
+            self._save_360p_themes_link.setText(self._themes_card_link_html("save360"))
         for name in ("discord", "reddit"):
             button = getattr(self, f"_settings_{name}_btn", None)
             if button is not None:
