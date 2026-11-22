@@ -87,10 +87,33 @@ def firmware_cache_size() -> tuple[int, int]:
     return count, total_bytes
 
 
-def clear_firmware_cache(exclude=None) -> tuple[int, int]:
+def is_protected_theme_pack_file(path: Path, *, now: float | None = None) -> bool:
+    """True for cached 360p Rockbox theme packs and fresh in-flight downloads.
+
+    Theme packs live alongside firmware downloads but follow their own weekly
+    refresh lifecycle, so firmware cache cleanup must not delete them right
+    before a Rockbox themes stage or during a Settings ZIP export.
+    """
+    low = path.name.casefold()
+    if low in THEME_PACK_CACHE_NAMES:
+        return True
+    if low.startswith(THEME_TEMP_PREFIX) and low.endswith(".part"):
+        try:
+            current = time.time() if now is None else now
+            return (current - path.stat().st_mtime) <= TEMP_LEFTOVER_MAX_AGE
+        except OSError:
+            return True
+    return False
+
+
+def clear_firmware_cache(exclude=None, *, include_theme_packs: bool = False) -> tuple[int, int]:
     """Delete all downloaded firmware archives (*.zip, *.rar, *.part) and extracted ROM
     staging directories in downloads_dir(). Leaves device tracking records, update reminder
     preferences, and install history completely intact.
+
+    Cached 360p theme packs (``THEME_PACK_CACHE_NAMES``) and active in-flight
+    theme-pack ``.part`` files are preserved unless ``include_theme_packs=True``
+    (or :func:`clear_app_storage` wipes the downloads folder completely).
 
     Returns (items_removed_count, total_bytes_freed).
     """
@@ -113,6 +136,8 @@ def clear_firmware_cache(exclude=None) -> tuple[int, int]:
             if item.resolve() in excluded:
                 continue
             if item.is_file():
+                if not include_theme_packs and is_protected_theme_pack_file(item):
+                    continue
                 ext = item.suffix.lower()
                 if ext in (".zip", ".rar", ".part", ".tar", ".gz", ".7z") or item.name.endswith(".part"):
                     size = item.stat().st_size

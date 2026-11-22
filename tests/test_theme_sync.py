@@ -157,13 +157,14 @@ def test_360p_success_with_the_toggle_off_finishes_like_any_other_install():
 
     app = _app()
     old_auto = sync.themes_auto_install_enabled()
-    sync.set_themes_auto_install_enabled(False)
-    w = MainWindow()
-    w.show()
-    started, prompted = [], []
-    w._flash_page.start_rockbox_themes_stage = lambda *a, **k: started.append(1)
-    w._show_rockbox_power_on_prompt = lambda *a, **k: prompted.append(1)
+    w = None
     try:
+        sync.set_themes_auto_install_enabled(False)
+        w = MainWindow()
+        w.show()
+        started, prompted = [], []
+        w._flash_page.start_rockbox_themes_stage = lambda *a, **k: started.append(1)
+        w._show_rockbox_power_on_prompt = lambda *a, **k: prompted.append(1)
         tracking.set_donation_install_prompt_disabled(False, w.settings)
         tracking.set_donation_ui_disabled(False, w.settings)
         w._keep_data = True
@@ -181,7 +182,8 @@ def test_360p_success_with_the_toggle_off_finishes_like_any_other_install():
         assert w._flash_page._complete_note.text()
     finally:
         sync.set_themes_auto_install_enabled(old_auto)
-        w.close()
+        if w is not None:
+            w.close()
         app.processEvents()
 
 

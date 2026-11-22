@@ -70,9 +70,10 @@ def test_settings_card_copy_pill_and_toggle_roundtrip():
 
     app = _app()
     old = sync.themes_auto_install_enabled()
-    sync.set_themes_auto_install_enabled(False)
-    page = SettingsPage()
+    page = None
     try:
+        sync.set_themes_auto_install_enabled(False)
+        page = SettingsPage()
         page.refresh_settings()
         page.show()
         app.processEvents()
@@ -107,7 +108,8 @@ def test_settings_card_copy_pill_and_toggle_roundtrip():
         assert sync.themes_auto_install_enabled() is False
     finally:
         sync.set_themes_auto_install_enabled(old)
-        page.close()
+        if page is not None:
+            page.close()
         app.processEvents()
 
 
@@ -117,9 +119,10 @@ def test_toggle_owns_the_sync_service_lifecycle():
 
     app = _app()
     old = sync.themes_auto_install_enabled()
-    sync.set_themes_auto_install_enabled(False)
-    w = MainWindow()
+    w = None
     try:
+        sync.set_themes_auto_install_enabled(False)
+        w = MainWindow()
         # Off at boot: no background service exists at all.
         w._ensure_theme_sync()
         assert getattr(w, "_theme_sync_service", None) is None
@@ -144,7 +147,8 @@ def test_toggle_owns_the_sync_service_lifecycle():
         assert not service._timer.isActive()
     finally:
         sync.set_themes_auto_install_enabled(old)
-        w.close()
+        if w is not None:
+            w.close()
         app.processEvents()
 
 
@@ -379,9 +383,10 @@ def test_settings_button_still_starts_themes_with_the_toggle_off():
 
     app = _app()
     old = sync.themes_auto_install_enabled()
-    sync.set_themes_auto_install_enabled(False)
-    w = MainWindow()
+    w = None
     try:
+        sync.set_themes_auto_install_enabled(False)
+        w = MainWindow()
         with (
             patch("src.adb.adb_detect_player_model", return_value=None),
             patch("src.device_tracking.get_all_device_installs", return_value={}),
@@ -395,9 +400,11 @@ def test_settings_button_still_starts_themes_with_the_toggle_off():
                 app.processEvents()
             assert w.themes.power_on_pending is True
     finally:
-        w.themes.clear_power_on()
+        if w is not None:
+            w.themes.clear_power_on()
         sync.set_themes_auto_install_enabled(old)
-        w.close()
+        if w is not None:
+            w.close()
         app.processEvents()
 
 

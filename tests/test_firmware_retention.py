@@ -273,3 +273,33 @@ def test_clear_app_storage_clears_caches_and_logs_but_keeps_settings(tmp_path, m
     assert settings_file.is_file(), "settings are never touched"
     assert tool_log.is_file() and tool_log.read_text(encoding="utf-8") == ""
     assert root_log.read_text(encoding="utf-8") == ""
+
+
+def test_firmware_cache_cleanup_preserves_cached_360p_theme_packs(downloads_root):
+    """Pre-flash and post-flash firmware cleanup must keep cached 360p theme packs."""
+    from src.flash_service import prune_extracted_cache
+
+    active_archive, active_extract = _cached_set(downloads_root, "Active")
+    old_archive, _old_extract = _cached_set(downloads_root, "OldFirmware", old_seconds=3600)
+    base_pack = downloads_root / "rockbox_360p_themepack.zip"
+    y2_pack = downloads_root / "rockbox_360p_themepack_y2.zip"
+    active_part = downloads_root / "themepack_download_123.zip.part"
+    base_pack.write_bytes(b"PK-base")
+    y2_pack.write_bytes(b"PK-y2")
+    active_part.write_bytes(b"partial")
+
+    prune_extracted_cache(keep_package_path=str(active_archive))
+
+    assert active_archive.is_file() and active_extract.is_dir()
+    assert not old_archive.exists(), "old firmware zip is pruned"
+    assert base_pack.is_file(), "base 360p theme pack survives pre-flash pruning"
+    assert y2_pack.is_file(), "Y2-patched 360p theme pack survives pre-flash pruning"
+    assert active_part.is_file(), "in-flight theme pack download survives pre-flash pruning"
+
+    downloads.clear_firmware_cache()
+    assert not active_archive.exists() and not active_extract.exists()
+    assert base_pack.is_file() and y2_pack.is_file() and active_part.is_file()
+
+    # Emergency disk-space purge still removes them when explicitly requested.
+    downloads.clear_firmware_cache(include_theme_packs=True)
+    assert not base_pack.exists() and not y2_pack.exists() and not active_part.exists()

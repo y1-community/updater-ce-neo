@@ -8743,7 +8743,7 @@ class MainWindow(QMainWindow):
                 import shutil
                 dd = downloads_dir()
                 if dd.is_dir() and shutil.disk_usage(dd).free < 50 * 1024 * 1024:
-                    clear_firmware_cache()
+                    clear_firmware_cache(include_theme_packs=True)
             except Exception:
                 pass
             self._append_log(f"Flash failed due to insufficient host storage space ({error_code}).")
@@ -8769,7 +8769,7 @@ class MainWindow(QMainWindow):
                         keep.add(str(compute_extract_dir(current)))
                     except Exception:
                         pass
-                _cnt, _freed = clear_firmware_cache(exclude=keep)
+                _cnt, _freed = clear_firmware_cache(exclude=keep, include_theme_packs=True)
                 free_bytes = shutil.disk_usage(dd).free if dd.is_dir() else 100 * 1024 * 1024
                 if free_bytes < 50 * 1024 * 1024:
                     self._append_log(f"Flash failed due to critically low host storage ({free_bytes} bytes free; original error: {error_code}).")

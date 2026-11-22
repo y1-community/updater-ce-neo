@@ -2091,7 +2091,7 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
     """
     removed = []
     try:
-        from .downloads import downloads_dir
+        from .downloads import downloads_dir, is_protected_theme_pack_file
         dd = downloads_dir()
         if not dd.is_dir():
             return removed
@@ -2111,6 +2111,8 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
 
         for item in list(dd.iterdir()):
             if item.is_file():
+                if is_protected_theme_pack_file(item):
+                    continue
                 low = item.name.lower()
                 is_archive = item.suffix.lower() in (".zip", ".rar")
                 is_part = item.suffix.lower() == ".part" or low.endswith(".part")
