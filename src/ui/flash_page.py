@@ -781,7 +781,11 @@ class _CardHead(QWidget):
         self._sync_chips_pairing()
         self._aligning = True
         try:
-            band_visible = self.band is not None and not self.band.isHidden()
+            band_visible = (
+                self.band is not None
+                and not self.identity.isHidden()
+                and not self.band.isHidden()
+            )
             target_top = 2 if band_visible else 0
             band_h = max(0, self.band.height() if band_visible else 0)
             target_bottom = max(10, (_CARD_ICON_PX // 2) - (band_h // 2) + 1) if band_visible else 0
@@ -799,28 +803,41 @@ class _CardHead(QWidget):
                 if self.height() <= 0:
                     return
                 centre_y = (self.height() - 1) // 2
+            head_h = self.height()
             if self.icon is not None and not self.icon.isHidden():
-                icon_y = max(0, centre_y - (self.icon.height() - 1) // 2)
+                max_icon_y = max(0, head_h - self.icon.height())
+                icon_y = min(max_icon_y, max(0, centre_y - (self.icon.height() - 1) // 2))
                 if self.icon.y() != icon_y:
                     self.icon.move(self.icon.x(), icon_y)
             visible_chips = [c for c in self._chips if c.isVisible() and not c.isHidden()]
             if len(visible_chips) == 2:
                 c0, c1 = visible_chips[0], visible_chips[1]
-                c0_y = max(0, centre_y - (c0.height() - 1) // 2)
-                c1_y = max(0, centre_y - (c1.height() - 1) // 2)
+                c0_y = min(max(0, head_h - c0.height()), max(0, centre_y - (c0.height() - 1) // 2))
+                c1_y = min(max(0, head_h - c1.height()), max(0, centre_y - (c1.height() - 1) // 2))
                 if c0.y() != c0_y:
                     c0.move(c0.x(), c0_y)
                 c1_x = c0.x() + c0.width()
                 if c1.x() != c1_x or c1.y() != c1_y:
                     c1.move(c1_x, c1_y)
+                seg = getattr(c0, "_segmented_native", None)
+                if seg is not None and seg.live:
+                    seg.sync_frame()
             else:
                 for i in range(2, self.box.count()):
                     item = self.box.itemAt(i)
                     chip = item.widget() if item is not None else None
                     if chip is not None and not chip.isHidden():
-                        chip_y = max(0, centre_y - (chip.height() - 1) // 2)
+                        max_chip_y = max(0, head_h - chip.height())
+                        chip_y = min(max_chip_y, max(0, centre_y - (chip.height() - 1) // 2))
                         if chip.y() != chip_y:
                             chip.move(chip.x(), chip_y)
+                        native = getattr(chip, "_native", None)
+                        if native is not None and native.live:
+                            native.sync_frame()
+                        for child_btn in getattr(chip, "_buttons", ()):
+                            seg = getattr(child_btn, "_segmented_native", None)
+                            if seg is not None and seg.live:
+                                seg.sync_frame()
         finally:
             self._aligning = False
 
@@ -2830,7 +2847,12 @@ class FlashPage(QWidget):
 
     def _switch_view(self, target_view):
         if getattr(self, "_stop_open", False):
+            # Keep the latest stage transition so dismissing the stop prompt
+            # with Back lands on the current stage rather than stranding the
+            # user on a finished download/prep screen.
+            self._deferred_view = target_view
             return
+        self._deferred_view = None
         if self._stack.currentWidget() is not target_view:
             # The window is fitted to the card when the stage changes, and
             # only then: a live install must not resize the window from its
@@ -3133,6 +3155,9 @@ class FlashPage(QWidget):
             self._download_pkg_label.setText(val)
         self._download_progress.setValue(0)
         self._download_status_label.setText(tr("sel_download_start"))
+        if hasattr(self, "_download_cancel_btn") and not getattr(self, "_stop_open", False):
+            self._download_cancel_btn.setVisible(True)
+            self._download_cancel_btn.setEnabled(True)
         self._switch_view(self._downloading_view)
         self._apply_stop_hold()
         self.view_generation = getattr(self, "view_generation", 0) + 1
@@ -3183,6 +3208,9 @@ class FlashPage(QWidget):
         self._complete = False
         self._wait_copy = "preparing"
         self._sync_keep_data_visibility()
+        if hasattr(self, "_prep_cancel_btn") and not getattr(self, "_stop_open", False):
+            self._prep_cancel_btn.setVisible(True)
+            self._prep_cancel_btn.setEnabled(True)
         self._switch_view(self._preparing_view)
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
@@ -3586,6 +3614,7 @@ class FlashPage(QWidget):
         if not done and hasattr(self, "_post_install_hint"):
             self._post_install_hint.setVisible(False)
         self._warning.setVisible(self._flash_warning_wanted())
+        self._hide_theme_wizard_chips()
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(not done)
             self._flash_retry_btn.setEnabled(failed)
@@ -3619,7 +3648,6 @@ class FlashPage(QWidget):
             self._flash_head._sync_chips_pairing()
         if not failed and hasattr(self, "_driver_action_row"):
             self._driver_action_row.setVisible(False)
-        self._hide_theme_wizard_chips()
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
         self._apply_stop_hold()
@@ -3981,6 +4009,7 @@ class FlashPage(QWidget):
                 self._rockbox_site_btn.setVisible(True)
         if hasattr(self, "_status_flow") and hasattr(self._status_flow, "set_forced_stacked"):
             self._status_flow.set_forced_stacked(False)
+        self._hide_theme_wizard_chips()
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(False)
         if hasattr(self, "_flash_retry_btn"):
@@ -3994,7 +4023,6 @@ class FlashPage(QWidget):
             self._cancel_btn.set_symbol("back")
             self._cancel_btn.setToolTip(tr("flash_btn_cancel"))
             self._cancel_btn.setAccessibleName(tr("flash_btn_cancel"))
-        self._hide_theme_wizard_chips()
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
         if hasattr(self, "_driver_action_row"):
@@ -8195,6 +8223,32 @@ class FlashPage(QWidget):
                 widgets.append(widget)
         return widgets
 
+    def _sync_stop_overlay(self) -> None:
+        """Align the stop question and its native/Qt action chips after layout."""
+        if not getattr(self, "_stop_open", False):
+            return
+        host = getattr(self, "_stop_host", None)
+        if host is None:
+            return
+        self._fit_stop_question()
+        host.activate()
+        head = host.parentWidget()
+        if head is not None and hasattr(head, "_sync_to_band"):
+            head._sync_to_band()
+        back = getattr(self, "_stop_back", None)
+        cont = getattr(self, "_stop_continue", None)
+        if back is not None:
+            if getattr(back, "_companion", None) is not None and getattr(back, "_is_leading", False):
+                if getattr(back, "_segmented_native", None) is None:
+                    back._attach_segmented_native()
+                seg = getattr(back, "_segmented_native", None)
+                if seg is not None and seg.live:
+                    seg.sync_frame()
+            elif getattr(back, "_native", None) is not None and back._native.live:
+                back._native.sync_frame()
+        if cont is not None and getattr(cont, "_native", None) is not None and cont._native.live:
+            cont._native.sync_frame()
+
     def _place_stop_actions(self, row=None) -> None:
         """Put the question and its two answers on the card's head row.
 
@@ -8212,6 +8266,7 @@ class FlashPage(QWidget):
         if question is not None:
             if row.indexOf(question) < 0:
                 row.insertWidget(2, question, 0, Qt.AlignVCenter)
+            _style_card_heading(question)
             question.show()
         if actions is not None:
             if row.indexOf(actions) < 0:
@@ -8220,9 +8275,16 @@ class FlashPage(QWidget):
             actions.show()
         self._stop_host = row
         if hasattr(self, "_stop_continue"):
-            self._stop_continue.show()
+            self._stop_back.refresh_theme()
+            self._stop_continue.refresh_theme()
             self._stop_back.show()
+            self._stop_continue.show()
         self._fit_stop_question()
+        row.activate()
+        head = row.parentWidget()
+        if head is not None and hasattr(head, "_sync_to_band"):
+            head._sync_to_band()
+        QTimer.singleShot(0, self._sync_stop_overlay)
 
     def _fit_stop_question(self) -> None:
         """Give the stop question the room it needs on the head row.
@@ -8259,6 +8321,11 @@ class FlashPage(QWidget):
         if question.minimumHeight() != height:
             question.setMinimumHeight(height)
             question.updateGeometry()
+        if parent is not None:
+            min_head_h = max(_CARD_ICON_PX, height)
+            if parent.minimumHeight() != min_head_h:
+                parent.setMinimumHeight(min_head_h)
+                parent.updateGeometry()
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -8327,6 +8394,12 @@ class FlashPage(QWidget):
             return False
         self._ensure_stop_buttons()
         card, row, label, bar, cancel, extra, column = self._stop_target()
+        head = row.parentWidget() if row is not None else None
+        extra_chips = [
+            chip
+            for chip in getattr(head, "_chips", ())
+            if chip is not None and chip is not cancel and chip is not extra
+        ]
         identity = (
             row.itemAt(1).widget()
             if row is not None and row.count() > 1
@@ -8350,6 +8423,7 @@ class FlashPage(QWidget):
             "bar_hidden": bar.isHidden() if bar is not None else False,
             "cancel_hidden": cancel.isHidden() if cancel is not None else False,
             "extra_hidden": extra.isHidden() if extra is not None else False,
+            "extra_chips": [(c, c.isHidden()) for c in extra_chips],
             "column_widgets": [(w, w.isHidden()) for w in column_widgets],
             "identity_hidden": identity.isHidden() if identity is not None else False,
         }
@@ -8364,14 +8438,23 @@ class FlashPage(QWidget):
             cancel.hide()
         if extra is not None:
             extra.hide()
+        for chip in extra_chips:
+            chip.hide()
         question = getattr(self, "_stop_question", None)
         if question is not None:
             question.setText(self._stop_message)
             question.setAccessibleName(self._stop_message)
+            _style_card_heading(question)
         self._retranslate_stop_buttons()
         self._place_stop_actions(row)
+        if card is not None:
+            if card.graphicsEffect() is not None:
+                card.setGraphicsEffect(None)
+            card.show()
+            if card.layout() is not None:
+                card.layout().activate()
         self._relayout_for_text()
-        fade_in(card)
+        self._sync_stop_overlay()
         if not wait:
             return False
         loop = QEventLoop(self)
@@ -8389,6 +8472,7 @@ class FlashPage(QWidget):
         if question is not None:
             question.setText(self._stop_message)
             question.setAccessibleName(self._stop_message)
+            _style_card_heading(question)
         identity = getattr(self, "_stop_identity", None)
         if identity is not None:
             identity.hide()
@@ -8401,6 +8485,10 @@ class FlashPage(QWidget):
         extra = getattr(self, "_stop_extra", None)
         if extra is not None:
             extra.hide()
+        saved = getattr(self, "_stop_saved", None) or {}
+        for chip, _hidden in saved.get("extra_chips", ()):
+            if chip is not None:
+                chip.hide()
         self._place_stop_actions(getattr(self, "_stop_host", None))
 
     def _finish_stop(self, accepted: bool) -> None:
@@ -8441,8 +8529,20 @@ class FlashPage(QWidget):
         column = getattr(self, "_stop_column", None)
         card = getattr(self, "_stop_card", None)
         host = getattr(self, "_stop_host", None)
+        head = host.parentWidget() if host is not None else None
         actions = getattr(self, "_stop_actions", None)
         question = getattr(self, "_stop_question", None)
+        for btn in (getattr(self, "_stop_back", None), getattr(self, "_stop_continue", None)):
+            if btn is None:
+                continue
+            seg = getattr(btn, "_segmented_native", None)
+            if seg is not None:
+                try:
+                    seg.detach()
+                except Exception:
+                    pass
+                btn._segmented_native = None
+            btn.detach_native()
         for widget in (question, actions):
             if widget is None:
                 continue
@@ -8450,6 +8550,9 @@ class FlashPage(QWidget):
                 host.removeWidget(widget)
             widget.hide()
             widget.setParent(None)
+        if head is not None:
+            head.setMinimumHeight(0)
+            head.updateGeometry()
         self._stop_host = None
         if saved:
             if label is not None:
@@ -8461,12 +8564,19 @@ class FlashPage(QWidget):
                 cancel.setVisible(not saved.get("cancel_hidden", False))
             if extra is not None:
                 extra.setVisible(not saved.get("extra_hidden", False))
+            for chip, hidden in saved.get("extra_chips", ()):
+                if chip is not None:
+                    chip.setVisible(not hidden)
             if identity is not None:
                 identity.setVisible(not saved.get("identity_hidden", False))
             for widget, hidden in saved.get("column_widgets", ()):
                 widget.setVisible(not hidden)
         self._stop_identity = None
         self._stop_column = None
+        deferred = getattr(self, "_deferred_view", None)
+        self._deferred_view = None
+        if not accepted and deferred is not None:
+            self._switch_view(deferred)
         loop = getattr(self, "_stop_loop", None)
         if loop is not None and loop.isRunning():
             loop.quit()
@@ -8478,5 +8588,7 @@ class FlashPage(QWidget):
         # after that column has been restored; otherwise its own hide-state is
         # put back over the fresh answer and the tip stays gone.
         self._update_paperclip_hint()
-        if card is not None:
-            fade_in(card)
+        if head is not None and hasattr(head, "_sync_to_band"):
+            head._sync_to_band()
+        if card is not None and card.graphicsEffect() is not None:
+            card.setGraphicsEffect(None)

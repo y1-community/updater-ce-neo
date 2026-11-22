@@ -2568,6 +2568,7 @@ class MainWindow(QMainWindow):
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
+        self._run_abandoned = False
         self._cache_recovery_needed = False
         self._install_complete = False
         self._install_failed = False
@@ -2595,6 +2596,7 @@ class MainWindow(QMainWindow):
 
     def _on_prep_started(self, name, model):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
+        self._run_abandoned = False
         self._download_active = False
         self._prep_active = True
         self._install_failed = False
@@ -2617,6 +2619,10 @@ class MainWindow(QMainWindow):
             self._flash_page.update_download_progress(percent, status_text)
 
     def _on_download_finished(self, ok, result):
+        if getattr(self, "_run_abandoned", False):
+            self._download_active = False
+            self._prep_active = False
+            return
         if getattr(self, "_gui_handoff_prepare", False):
             if ok:
                 # The archive is on disk; extraction starts next. The prep
@@ -10620,6 +10626,8 @@ class MainWindow(QMainWindow):
         self._rockbox_360p_themes_answered = False
         self._rockbox_themes_prompt_pending = False
         if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.dismiss_prompt_stop()
+            self._flash_page._deferred_view = None
             self._flash_page.set_rockbox_themes_prompt(False)
             self._flash_page.reset_keep_data_preference()
             self._flash_page.set_power_off_only(False)
@@ -10627,6 +10635,7 @@ class MainWindow(QMainWindow):
         self._compact_install_screen = False
         self._download_active = False
         self._prep_active = False
+        self._gui_handoff_prepare = False
         self._cache_recovery_needed = False
         self._fallback_attempted = False
         self._sp_1013_seen = False

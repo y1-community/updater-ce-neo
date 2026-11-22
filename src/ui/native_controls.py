@@ -659,10 +659,12 @@ class NativeSegmentedPair:
             self._host.isVisible()
             and self._companion.isVisible()
             and self._host.isVisibleTo(win)
+            and self._companion.isVisibleTo(win)
         )
         control.setHidden_(not visible)
         view.addSubview_(control)
         self._install_filter()
+        QTimer.singleShot(0, self.sync_frame)
 
     def _sync_content(self) -> None:
         if not self.live:
@@ -839,6 +841,9 @@ class NativeSegmentedPair:
         self._filter = _PairFilter(self)
         self._host.installEventFilter(self._filter)
         self._companion.installEventFilter(self._filter)
+        self._parent_watched = self._host.parentWidget()
+        if self._parent_watched is not None:
+            self._parent_watched.installEventFilter(self._filter)
         self._scroll_area = self._find_scroll_area()
         if self._scroll_area is not None:
             try:
@@ -862,6 +867,9 @@ class NativeSegmentedPair:
                 self._host.removeEventFilter(self._filter)
                 if self._companion is not None:
                     self._companion.removeEventFilter(self._filter)
+                if getattr(self, "_parent_watched", None) is not None:
+                    self._parent_watched.removeEventFilter(self._filter)
+                    self._parent_watched = None
             except Exception:
                 pass
             if getattr(self, "_scroll_area", None) is not None:

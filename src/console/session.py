@@ -36,7 +36,7 @@ from .releases import (
 )
 
 LIST_TOP = 4
-APP_VERSION = "2.5.6.3"
+APP_VERSION = "2.5.6.4"
 
 
 @dataclass

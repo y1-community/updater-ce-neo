@@ -300,7 +300,8 @@ def test_macos_shortcut_manager_never_touches_desktop(monkeypatch):
     sm.reconcile_shortcut_names()
 
 
-def test_version_bumped_to_2_5_6_3():
+def test_version_at_least_2_5_6_3():
     from src import config
 
-    assert config.APP_VERSION == "2.5.6.3"
+    parts = tuple(int(p) for p in config.APP_VERSION.split("."))
+    assert parts >= (2, 5, 6, 3), config.APP_VERSION

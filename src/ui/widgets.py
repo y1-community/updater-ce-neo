@@ -219,6 +219,12 @@ def fade_in(widget) -> None:
     """
     if widget is None or prefers_reduced_motion():
         return
+    prev = getattr(widget, "_fade_anim", None)
+    if prev is not None:
+        try:
+            prev.stop()
+        except Exception:
+            pass
     effect = QGraphicsOpacityEffect(widget)
     effect.setOpacity(0.0)
     widget.setGraphicsEffect(effect)

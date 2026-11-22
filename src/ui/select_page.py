@@ -5038,11 +5038,11 @@ class SelectPackagePage(QWidget):
         """Switch to the online catalogue with the given brand, model and type selected."""
         from .. import device_models
 
-        if _defer_refresh:
+        if _defer_refresh and hasattr(self, "_views") and hasattr(self, "_online_tab"):
             if not is_generic_mtk():
                 self._manual_local = False
                 self._views.setCurrentWidget(self._online_tab)
-        else:
+        elif hasattr(self, "_show_online_view"):
             self._show_online_view()
         if expand_filters and getattr(self, "_filters_collapsed", False):
             self._filters_collapsed = False
@@ -5083,10 +5083,13 @@ class SelectPackagePage(QWidget):
                     b_idx = i
                     break
             if b_idx >= 0 and b_idx != brand_combo.currentIndex():
-                brand_combo.blockSignals(True)
+                if hasattr(brand_combo, "blockSignals"):
+                    brand_combo.blockSignals(True)
                 brand_combo.setCurrentIndex(b_idx)
-                brand_combo.blockSignals(False)
-                self._populate_model_combo(refresh_selection=False)
+                if hasattr(brand_combo, "blockSignals"):
+                    brand_combo.blockSignals(False)
+                if hasattr(self, "_populate_model_combo"):
+                    self._populate_model_combo(refresh_selection=False)
 
         matched_model = False
         if raw_model:
@@ -5100,18 +5103,23 @@ class SelectPackagePage(QWidget):
             if m_idx >= 0:
                 matched_model = True
                 if m_idx != self._model_combo.currentIndex():
-                    self._model_combo.blockSignals(True)
+                    if hasattr(self._model_combo, "blockSignals"):
+                        self._model_combo.blockSignals(True)
                     self._model_combo.setCurrentIndex(m_idx)
-                    self._model_combo.blockSignals(False)
+                    if hasattr(self._model_combo, "blockSignals"):
+                        self._model_combo.blockSignals(False)
 
-        self._update_type_filter_visibility()
-        if raw_hw and self._model_has_multiple_types() and hasattr(self, "_type_combo"):
+        if hasattr(self, "_update_type_filter_visibility"):
+            self._update_type_filter_visibility()
+        if raw_hw and hasattr(self, "_model_has_multiple_types") and self._model_has_multiple_types() and hasattr(self, "_type_combo"):
             t_idx = self._fw_type_index(raw_hw)
             if t_idx >= 0:
                 if t_idx != self._type_combo.currentIndex():
-                    self._type_combo.blockSignals(True)
+                    if hasattr(self._type_combo, "blockSignals"):
+                        self._type_combo.blockSignals(True)
                     self._type_combo.setCurrentIndex(t_idx)
-                    self._type_combo.blockSignals(False)
+                    if hasattr(self._type_combo, "blockSignals"):
+                        self._type_combo.blockSignals(False)
                 self._selected_type = self._type_combo.itemData(t_idx)
 
         new_key = (
@@ -5121,7 +5129,7 @@ class SelectPackagePage(QWidget):
         )
         changed = new_key != prev_key
 
-        if changed or _defer_refresh:
+        if (changed or _defer_refresh) and hasattr(self, "_populate_software_combo") and hasattr(self, "_software_combo") and hasattr(self._software_combo, "blockSignals"):
             previous_software = (
                 self.current_software() if hasattr(self, "_software_combo") else ""
             )
@@ -5136,7 +5144,8 @@ class SelectPackagePage(QWidget):
             self._update_device_status_copy()
 
         if not _defer_refresh and (changed or self._release_list.count() == 0):
-            self._on_software_changed()
+            if hasattr(self, "_on_software_changed"):
+                self._on_software_changed()
 
         return matched_model
 
@@ -5154,12 +5163,14 @@ class SelectPackagePage(QWidget):
         self.select_device(model=model, hw_type=hw_type, brand=brand, _defer_refresh=True)
         sw_idx = self._find_software_index(software_name)
         if sw_idx >= 0 and sw_idx != self._software_combo.currentIndex():
-            self._software_combo.blockSignals(True)
+            if hasattr(self._software_combo, "blockSignals"):
+                self._software_combo.blockSignals(True)
             self._software_combo.setCurrentIndex(sw_idx)
-            self._software_combo.blockSignals(False)
+            if hasattr(self._software_combo, "blockSignals"):
+                self._software_combo.blockSignals(False)
 
         selection_changed = self._selection_key() != prev_key
-        if selection_changed:
+        if selection_changed and hasattr(self, "_on_software_changed"):
             self._on_software_changed()
 
         if tag_name and tag_name != "latest":
