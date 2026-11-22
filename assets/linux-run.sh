@@ -34,6 +34,25 @@ else
     exit 1
 fi
 
+# Preserve the host environment before prepending bundle paths so child host
+# applications (web browsers, xdg-open, file managers) never load this bundle's
+# private libraries or Qt plugins. Capture only once in case this launcher
+# re-execs itself.
+if [ -z "${INNIOASIS_HOST_ENV_SAVED:-}" ]; then
+    export INNIOASIS_HOST_ENV_SAVED=1
+    export INNIOASIS_ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
+    export INNIOASIS_ORIG_PATH="${PATH-}"
+    export INNIOASIS_ORIG_XDG_DATA_DIRS="${XDG_DATA_DIRS-}"
+    export INNIOASIS_ORIG_QT_PLUGIN_PATH="${QT_PLUGIN_PATH-}"
+    export INNIOASIS_ORIG_QT_QPA_PLATFORM_PLUGIN_PATH="${QT_QPA_PLATFORM_PLUGIN_PATH-}"
+    export INNIOASIS_ORIG_QT_QPA_PLATFORM="${QT_QPA_PLATFORM-}"
+    export INNIOASIS_ORIG_QT_QPA_PLATFORMTHEME="${QT_QPA_PLATFORMTHEME-}"
+    export INNIOASIS_ORIG_QT_OPENGL="${QT_OPENGL-}"
+    export INNIOASIS_ORIG_LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE-}"
+    export INNIOASIS_ORIG_QT_IM_MODULE="${QT_IM_MODULE-}"
+    export INNIOASIS_APP_BUNDLE_ROOT="$HERE"
+fi
+
 export PATH="$APP_HOME:${PATH:-/usr/local/bin:/usr/bin:/bin}"
 export LD_LIBRARY_PATH="$LIB_DIRS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 case "${XDG_DATA_DIRS:-}" in

@@ -363,6 +363,44 @@ def accent_from_desktop_config(text: str) -> str | None:
     return None
 
 
+# Ubuntu's Yaru themes encode the user's chosen accent in gtk-theme on
+# GNOME < 47 (Ubuntu 22.04 / 24.04), before the accent-color gsetting existed.
+_YARU_ACCENT_NAMES = {
+    "default": "#e95420",
+    "orange": "#e95420",
+    "bark": "#787859",
+    "sage": "#657b69",
+    "olive": "#4b8501",
+    "viridian": "#03875b",
+    "prussiangreen": "#308280",
+    "blue": "#0073e5",
+    "purple": "#7764d8",
+    "magenta": "#b34cb3",
+    "red": "#da3450",
+    "wartybrown": "#b39169",
+}
+
+
+def _linux_gsettings_env() -> dict[str, str] | None:
+    """Host-clean env for ``gsettings`` so AppImage LD_LIBRARY_PATH never breaks GLib/GIO."""
+    try:
+        from ..browser import clean_linux_subprocess_env
+
+        return clean_linux_subprocess_env()
+    except Exception:
+        return None
+
+
+def _accent_from_yaru_theme(theme_name: str) -> str | None:
+    raw = str(theme_name or "").strip().strip("'\"").lower()
+    if not raw.startswith("yaru"):
+        return None
+    parts = [p for p in raw.split("-") if p and p not in ("yaru", "dark", "light")]
+    if not parts:
+        return _YARU_ACCENT_NAMES["default"]
+    return _YARU_ACCENT_NAMES.get(parts[0])
+
+
 def _linux_declared_accent() -> str | None:
     """The accent a Linux desktop wrote into its own config, or None.
 
@@ -370,13 +408,14 @@ def _linux_declared_accent() -> str | None:
     GNOME key, used when the files do not name a colour.
     """
     home = os.path.expanduser("~")
+    config_root = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
     for relative in (
-        os.path.join(".config", "kdeglobals"),
-        os.path.join(".config", "gtk-4.0", "settings.ini"),
-        os.path.join(".config", "gtk-3.0", "settings.ini"),
+        "kdeglobals",
+        os.path.join("gtk-4.0", "settings.ini"),
+        os.path.join("gtk-3.0", "settings.ini"),
     ):
         try:
-            with open(os.path.join(home, relative), encoding="utf-8", errors="replace") as handle:
+            with open(os.path.join(config_root, relative), encoding="utf-8", errors="replace") as handle:
                 found = accent_from_desktop_config(handle.read())
         except OSError:
             continue
@@ -385,11 +424,13 @@ def _linux_declared_accent() -> str | None:
     try:
         import subprocess
 
+        clean_env = _linux_gsettings_env()
         result = subprocess.run(
             ["gsettings", "get", "org.gnome.desktop.interface", "accent-color"],
             capture_output=True,
             text=True,
             timeout=1,
+            env=clean_env,
         )
         if result.returncode == 0:
             name = result.stdout.strip().strip("'\"")
@@ -398,6 +439,19 @@ def _linux_declared_accent() -> str | None:
                 return named
             if re.fullmatch(r"#?[0-9a-fA-F]{6}", name):
                 return name if name.startswith("#") else f"#{name.lower()}"
+
+        # Ubuntu 22.04 / 24.04 (GNOME < 47) encodes accent colour in Yaru gtk-theme.
+        gtk_res = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+            env=clean_env,
+        )
+        if gtk_res.returncode == 0:
+            yaru = _accent_from_yaru_theme(gtk_res.stdout)
+            if yaru:
+                return yaru
     except Exception:
         pass
     return None
@@ -626,6 +680,7 @@ def is_system_dark_mode() -> bool:
                 capture_output=True,
                 text=True,
                 timeout=1,
+                env=_linux_gsettings_env(),
             ).stdout.strip().strip("'\"")
             if "dark" in out.lower():
                 return True

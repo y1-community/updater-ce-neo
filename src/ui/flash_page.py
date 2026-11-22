@@ -2664,6 +2664,8 @@ class FlashPage(QWidget):
             | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         self._start_help_advice.setOpenExternalLinks(False)
+        self._start_help_advice.linkActivated.connect(self._on_start_help_link)
+        _apply_card_text(self._start_help_advice)
         help_box.addWidget(self._start_help_advice)
         appeal_layout.addWidget(self._start_help_body)
         self._start_help_body.setVisible(False)
@@ -6529,6 +6531,14 @@ class FlashPage(QWidget):
             )
         if hasattr(self, "_start_help_advice"):
             self._start_help_advice.setText(self._start_help_text())
+            _apply_card_text(self._start_help_advice)
+        completion_advice = getattr(self, "_completion_advice_label", None)
+        if completion_advice is not None:
+            try:
+                completion_advice.setText(self._start_help_text())
+                _apply_card_text(completion_advice)
+            except RuntimeError:
+                self._completion_advice_label = None
 
     def toggle_start_help(self, expanded=None) -> None:
         """Open or close the "doesn't start up" advice under its hint.

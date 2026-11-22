@@ -1769,8 +1769,14 @@ def _curses_page(screen, state: BrowseState, items: list) -> None:
         elif state.page == "update":
             target = str(state.update_result.get("release_url") or state.update_result.get("download") or "")
         if target:
-            webbrowser.open(target)
-            state.status = f"Opened {target}"
+            opened = False
+            try:
+                from ..browser import open_browser
+
+                opened = bool(open_browser(target))
+            except Exception:
+                opened = bool(webbrowser.open(target))
+            state.status = f"Opened {target}" if opened else f"Open in browser: {target}"
         return
     if key in (ord("q"), 27, ord("\n"), curses.KEY_ENTER):
         state.page = "software"

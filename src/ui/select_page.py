@@ -2456,6 +2456,14 @@ class SelectPackagePage(QWidget):
         for i in range(combo.count()):
             if combo.itemText(i) == localized:
                 return i
+        target_cf = target.casefold()
+        if target_cf:
+            for i in range(combo.count()):
+                if (
+                    str(combo.itemData(i) or "").strip().casefold() == target_cf
+                    or combo.itemText(i).strip().casefold() == target_cf
+                ):
+                    return i
         return -1
 
     def _update_device_status_copy(self):
@@ -2619,6 +2627,7 @@ class SelectPackagePage(QWidget):
         self._current_selected_rel = None
         self._details_package = None
         self._listed_releases = []
+        self._loaded_selection_key = None
         self._release_list.clear()
         self._install_btn.setEnabled(False)
         if package is None:
@@ -3049,6 +3058,7 @@ class SelectPackagePage(QWidget):
             pass
 
         self._listed_releases = list(releases)
+        self._loaded_selection_key = self._selection_key()
         ceiling = (install_rec or {}).get("notify_ceiling") or ""
         marks = catalog.classify_release_list(
             releases, installed_tag, installed_published, ceiling,
@@ -3134,7 +3144,11 @@ class SelectPackagePage(QWidget):
                 for row in range(self._release_list.count()):
                     it = self._release_list.item(row)
                     r = it.data(Qt.UserRole) if it else None
-                    if r and (target_auto in ("latest", "") or r.get("tag_name") == target_auto):
+                    if (
+                        r
+                        and r.get("download_url")
+                        and (target_auto in ("latest", "") or r.get("tag_name") == target_auto)
+                    ):
                         self._release_list.setCurrentRow(row)
                         self._trigger_release_install(r)
                         break
@@ -5004,40 +5018,170 @@ class SelectPackagePage(QWidget):
         newest = max(releases, key=catalog.release_sort_key)
         return newest.get("tag_name") or ""
 
-    def navigate_to_package(
-        self, model: str, software_name: str, tag_name=None, refresh_if_missing=False
-    ):
-        """Switch to the catalogue, select specified model/software, highlight tag_name."""
+    def _selection_key(self) -> tuple[str, str, str, str]:
+        return (
+            (self.current_brand() or "").strip().casefold(),
+            (self.current_model() or "").strip().upper(),
+            (self.current_hardware_type() or "").strip().upper(),
+            (self.current_software() or "").strip().casefold(),
+        )
 
-        self._show_online_view()
-        m_idx = self._model_combo.findText(model)
-        if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
-            self._model_combo.setCurrentIndex(m_idx)
+    def select_device(
+        self,
+        model: str,
+        hw_type: str = "",
+        brand: str = "",
+        *,
+        expand_filters: bool = False,
+        _defer_refresh: bool = False,
+    ) -> bool:
+        """Switch to the online catalogue with the given brand, model and type selected."""
+        from .. import device_models
+
+        if _defer_refresh:
+            if not is_generic_mtk():
+                self._manual_local = False
+                self._views.setCurrentWidget(self._online_tab)
+        else:
+            self._show_online_view()
+        if expand_filters and getattr(self, "_filters_collapsed", False):
+            self._filters_collapsed = False
+            self._apply_filter_collapsed_state()
+
+        raw_model = str(model or "").strip()
+        raw_hw = str(hw_type or "").strip().upper()
+        if raw_model:
+            det_m, det_t = detect_model_and_type_from_name(raw_model)
+            if det_m and device_models.get(raw_model) is None:
+                raw_model = det_m
+            if det_t and not raw_hw:
+                raw_hw = det_t.upper()
+
+        target_brand = str(brand or "").strip()
+        if not target_brand and raw_model:
+            target_brand = device_models.brand_for(raw_model) or ""
+        if not target_brand and raw_model:
+            for pkg in catalog.packages_for_model(raw_model):
+                if getattr(pkg, "brand", ""):
+                    target_brand = str(pkg.brand).strip()
+                    break
+
+        prev_key = (
+            (self.current_brand() or "").strip().casefold(),
+            (self.current_model() or "").strip().upper(),
+            (self.current_hardware_type() or "").strip().upper(),
+        )
+
+        brand_combo = getattr(self, "_brand_combo", None)
+        if target_brand and brand_combo is not None and brand_combo.count() > 0:
+            b_idx = -1
+            want_b = target_brand.casefold()
+            for i in range(brand_combo.count()):
+                data = str(brand_combo.itemData(i) or "").strip().casefold()
+                text = brand_combo.itemText(i).strip().casefold()
+                if data == want_b or text == want_b:
+                    b_idx = i
+                    break
+            if b_idx >= 0 and b_idx != brand_combo.currentIndex():
+                brand_combo.blockSignals(True)
+                brand_combo.setCurrentIndex(b_idx)
+                brand_combo.blockSignals(False)
+                self._populate_model_combo(refresh_selection=False)
+
+        matched_model = False
+        if raw_model:
+            m_idx = self._model_combo.findText(raw_model)
+            if m_idx < 0:
+                want_m = raw_model.casefold()
+                for i in range(self._model_combo.count()):
+                    if self._model_combo.itemText(i).strip().casefold() == want_m:
+                        m_idx = i
+                        break
+            if m_idx >= 0:
+                matched_model = True
+                if m_idx != self._model_combo.currentIndex():
+                    self._model_combo.blockSignals(True)
+                    self._model_combo.setCurrentIndex(m_idx)
+                    self._model_combo.blockSignals(False)
+
+        self._update_type_filter_visibility()
+        if raw_hw and self._model_has_multiple_types() and hasattr(self, "_type_combo"):
+            t_idx = self._fw_type_index(raw_hw)
+            if t_idx >= 0:
+                if t_idx != self._type_combo.currentIndex():
+                    self._type_combo.blockSignals(True)
+                    self._type_combo.setCurrentIndex(t_idx)
+                    self._type_combo.blockSignals(False)
+                self._selected_type = self._type_combo.itemData(t_idx)
+
+        new_key = (
+            (self.current_brand() or "").strip().casefold(),
+            (self.current_model() or "").strip().upper(),
+            (self.current_hardware_type() or "").strip().upper(),
+        )
+        changed = new_key != prev_key
+
+        if changed or _defer_refresh:
+            previous_software = (
+                self.current_software() if hasattr(self, "_software_combo") else ""
+            )
+            hw = (self._selected_type or "") if self._model_has_multiple_types() else ""
+            names = catalog.software_names_for_model(
+                self.current_model(), brand=self.current_brand(), hw_type=hw
+            )
+            self._populate_software_combo(
+                names,
+                select=self._software_name_kept_across_models(previous_software, names),
+            )
+            self._update_device_status_copy()
+
+        if not _defer_refresh and (changed or self._release_list.count() == 0):
+            self._on_software_changed()
+
+        return matched_model
+
+    def navigate_to_package(
+        self,
+        model: str,
+        software_name: str,
+        tag_name=None,
+        refresh_if_missing=False,
+        hw_type: str = "",
+        brand: str = "",
+    ):
+        """Switch to the catalogue, select specified model/type/software, highlight tag_name."""
+        prev_key = self._selection_key()
+        self.select_device(model=model, hw_type=hw_type, brand=brand, _defer_refresh=True)
         sw_idx = self._find_software_index(software_name)
         if sw_idx >= 0 and sw_idx != self._software_combo.currentIndex():
+            self._software_combo.blockSignals(True)
             self._software_combo.setCurrentIndex(sw_idx)
-        if tag_name:
+            self._software_combo.blockSignals(False)
+
+        selection_changed = self._selection_key() != prev_key
+        if selection_changed:
+            self._on_software_changed()
+
+        if tag_name and tag_name != "latest":
             self._target_tag_to_select = tag_name
-            # If releases already loaded, select right now
-            for row in range(self._release_list.count()):
-                it = self._release_list.item(row)
-                r = it.data(Qt.UserRole)
-                if r and r.get("tag_name") == tag_name:
-                    self._release_list.setCurrentRow(row)
-                    self._release_list.scrollToItem(it)
-                    self._target_tag_to_select = None
-                    break
-            else:
-                # The tag is not in the current listing (a release outside the
-                # active filters, or a stale list). A running worker will apply
-                # the pending tag when it lands; otherwise ask for a fresh list.
-                worker = getattr(self, "_releases_worker", None)
-                if (
-                    refresh_if_missing
-                    and self.current_package() is not None
-                    and (worker is None or not worker.isRunning())
-                ):
-                    self._refresh_releases()
+            # If releases already loaded for this exact selection, select right now
+            if not selection_changed:
+                for row in range(self._release_list.count()):
+                    it = self._release_list.item(row)
+                    r = it.data(Qt.UserRole)
+                    if r and r.get("tag_name") == tag_name:
+                        self._release_list.setCurrentRow(row)
+                        self._release_list.scrollToItem(it)
+                        self._target_tag_to_select = None
+                        break
+                else:
+                    worker = getattr(self, "_releases_worker", None)
+                    if (
+                        refresh_if_missing
+                        and self.current_package() is not None
+                        and (worker is None or not worker.isRunning())
+                    ):
+                        self._refresh_releases()
 
     def start_install_for_release(
         self,
@@ -5047,30 +5191,48 @@ class SelectPackagePage(QWidget):
         release: Optional[dict] = None,
         package: Optional[catalog.FirmwarePackage] = None,
         keep_settings: bool = False,
+        hw_type: str = "",
+        brand: str = "",
     ):
         """Navigate to package/release and initiate installation with current method."""
         self._keep_settings_default = bool(keep_settings)
-        self.navigate_to_package(model, software_name, tag_name=tag_name)
+        self.navigate_to_package(
+            model, software_name, tag_name=tag_name, hw_type=hw_type, brand=brand
+        )
         if release:
             self._trigger_release_install(release, package=package)
-        else:
-            current_pkg = self.current_package()
-            pkg_match = current_pkg and getattr(current_pkg, "model", "") == model and (
-                getattr(current_pkg, "name", "") == software_name
-                or getattr(current_pkg, "slug", "") == software_name
+            return
+
+        current_pkg = self.current_package()
+        want_model = (self.current_model() or model or "").strip().upper()
+        want_sw = str(software_name or "").strip().casefold()
+        pkg_match = bool(
+            current_pkg
+            and str(getattr(current_pkg, "model", "") or "").strip().upper() == want_model
+            and (
+                str(getattr(current_pkg, "name", "") or "").strip().casefold() == want_sw
+                or str(getattr(current_pkg, "slug", "") or "").strip().casefold() == want_sw
             )
-            worker_running = self._releases_worker is not None and self._releases_worker.isRunning()
-            if pkg_match and not worker_running and self._release_list.count() > 0:
-                for row in range(self._release_list.count()):
-                    it = self._release_list.item(row)
-                    r = it.data(Qt.UserRole) if it else None
-                    if r and (not tag_name or tag_name == "latest" or r.get("tag_name") == tag_name):
-                        self._release_list.setCurrentRow(row)
-                        self._trigger_release_install(r, package=package)
-                        return
-            if not self._release_list.count() and not worker_running:
-                self._refresh_releases()
-            self._auto_install_tag = tag_name or "latest"
+        )
+        worker_running = self._releases_worker is not None and self._releases_worker.isRunning()
+        loaded_key = getattr(self, "_loaded_selection_key", None)
+        list_matches_selection = loaded_key in (None, self._selection_key())
+        if pkg_match and not worker_running and list_matches_selection:
+            for row in range(self._release_list.count()):
+                it = self._release_list.item(row)
+                r = it.data(Qt.UserRole) if it else None
+                if (
+                    r
+                    and r.get("download_url")
+                    and (not tag_name or tag_name == "latest" or r.get("tag_name") == tag_name)
+                ):
+                    self._release_list.setCurrentRow(row)
+                    self._trigger_release_install(r, package=package or current_pkg)
+                    return
+
+        self._auto_install_tag = tag_name or "latest"
+        if not worker_running and current_pkg is not None:
+            self._refresh_releases()
 
     def take_keep_settings_default(self) -> bool:
         """Return and clear the update-install Keep my settings default."""

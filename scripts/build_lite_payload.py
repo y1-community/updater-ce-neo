@@ -49,6 +49,7 @@ PAYLOAD = [
     "src/console/tui.py",
     "src/console/wsl.py",
     "src/tui_session.py",
+    "src/browser.py",
     "src/mtk_api.py",
     "src/paths.py",
 ]

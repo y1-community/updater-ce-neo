@@ -560,9 +560,21 @@ def reveal_in_file_manager(target_path: Path | str) -> bool:
                 subprocess.run(["explorer", os.path.normpath(str(p))], check=False)
             return True
         else:
-            # Linux: try xdg-open on parent directory or file
+            # Linux: launch host desktop opener with a clean environment so
+            # AppImage/PyInstaller LD_LIBRARY_PATH never crashes xdg-open/kioclient.
+            from .browser import clean_linux_subprocess_env, open_linux_path
+
             parent_dir = str(p if p.is_dir() else p.parent)
-            subprocess.run(["xdg-open", parent_dir], check=False)
+            if open_linux_path(parent_dir):
+                return True
+            subprocess.Popen(
+                ["xdg-open", parent_dir],
+                env=clean_linux_subprocess_env(),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
             return True
     except Exception as e:
         logger.warning("Could not reveal %s in file manager: %s", target_path, e)

@@ -3733,7 +3733,8 @@ class MainWindow(QMainWindow):
             model = "Y1"
         else:
             return False, model
-        package = self._active_firmware_package()
+        _pkg_getter = getattr(self, "_active_firmware_package", None)
+        package = _pkg_getter() if callable(_pkg_getter) else None
         if bool(getattr(package, "rockbox_no_themes", False)):
             return False, model
         is_rockbox = "rockbox" in name or "rockbox" in path or "rockbox" in slug
@@ -3757,7 +3758,8 @@ class MainWindow(QMainWindow):
 
     def _rockbox_360p_themes_notice_needed(self) -> bool:
         """True for a Y1 Rockbox build that cannot use the 240p theme catalogue."""
-        package = self._active_firmware_package()
+        _pkg_getter = getattr(self, "_active_firmware_package", None)
+        package = _pkg_getter() if callable(_pkg_getter) else None
         if bool(getattr(package, "rockbox_no_themes", False)):
             return False
         _needs_themes, model = self._rockbox_themes_required()
@@ -3811,7 +3813,8 @@ class MainWindow(QMainWindow):
         if selected_rel:
             asset_name = str(selected_rel.get("asset_name", asset_name) or asset_name)
             release_label = str(selected_rel.get("release_label", release_label) or release_label)
-        package = self._active_firmware_package()
+        _pkg_getter = getattr(self, "_active_firmware_package", None)
+        package = _pkg_getter() if callable(_pkg_getter) else None
         if getattr(package, "is_240p_rockbox", False):
             return True
         if bool((selected_rel or {}).get("is_240p_rockbox")):
@@ -7855,34 +7858,122 @@ class MainWindow(QMainWindow):
             post_2 = str(getattr(fw_pkg, "post_install_2", "") or "")
         self._flash_page.set_post_install_urls(post, post_2)
 
+    def _completion_device_selection(self) -> tuple[str, str, str]:
+        """Resolve ``(brand, model, hw_type)`` for the install that just finished."""
+        from .. import catalog, device_models
+        from ..config import detect_model_and_type_from_name, hardware_types_for_model
+
+        page = getattr(self, "_select_page", None)
+        rel_info = {}
+        if page is not None:
+            rel_info = (
+                getattr(page, "current_installed_release_info", lambda: None)()
+                or getattr(page, "_pending_install_release_info", None)
+                or {}
+            )
+        _pkg_getter = getattr(self, "_active_firmware_package", None)
+        pkg = _pkg_getter() if callable(_pkg_getter) else None
+        fw_pkg = getattr(page, "_fw_package", None) if page is not None else None
+
+        raw_model = (
+            (getattr(self, "_package_model", "") or "").strip()
+            or str(rel_info.get("model") or "").strip()
+            or str(getattr(pkg, "model", "") or "").strip()
+            or str(getattr(fw_pkg, "model", "") or "").strip()
+            or (
+                page.current_model()
+                if page is not None and hasattr(page, "current_model")
+                else ""
+            )
+        )
+        hw_type = (
+            str(rel_info.get("hardware_type") or rel_info.get("type_variant") or "").strip().upper()
+            or str(getattr(fw_pkg, "type", "") or "").strip().upper()
+        )
+        if raw_model:
+            det_m, det_t = detect_model_and_type_from_name(raw_model)
+            if det_m and device_models.get(raw_model) is None:
+                raw_model = det_m
+            if det_t and not hw_type:
+                hw_type = det_t.upper()
+
+        if not hw_type:
+            for hint_text in (
+                getattr(self, "_package_path", "") or "",
+                getattr(self, "_package_name", "") or "",
+            ):
+                _dm, det_t = detect_model_and_type_from_name(str(hint_text))
+                if det_t:
+                    hw_type = det_t.upper()
+                    break
+
+        if hardware_types_for_model(raw_model):
+            if not hw_type and page is not None and hasattr(page, "current_hardware_type"):
+                hw_type = str(page.current_hardware_type() or "").strip().upper()
+            if not hw_type:
+                hw_type = "A"
+        else:
+            hw_type = ""
+
+        pkg_brand = ""
+        if pkg is not None and (
+            not raw_model
+            or str(getattr(pkg, "model", "") or "").strip().upper() == raw_model.upper()
+        ):
+            pkg_brand = str(getattr(pkg, "brand", "") or "").strip()
+        brand = pkg_brand or (device_models.brand_for(raw_model) if raw_model else "")
+        if not brand and raw_model:
+            for candidate in catalog.packages_for_model(raw_model):
+                if getattr(candidate, "brand", ""):
+                    brand = str(candidate.brand).strip()
+                    break
+        if not brand and page is not None and hasattr(page, "current_brand"):
+            brand = str(page.current_brand() or "").strip()
+
+        return brand, raw_model, hw_type
+
     def _on_completion_install_original(self) -> None:
-        """Start-up advice: install this model's Original Software again.
+        """Start-up advice: install the latest Original Software for this model/type.
 
         The player has just taken a firmware it may not boot, so the stock
-        release for the same model is what the advice offers. The install
-        begins at the catalogue's install flow like any other, with Keep my
-        settings on: the data on the player is not what failed.
+        release for the same model and hardware type is what the advice offers.
+        The install begins at the catalogue's install flow like any other, with
+        Keep my settings on: the data on the player is not what failed.
         """
         page = getattr(self, "_select_page", None)
         if page is None or not hasattr(page, "start_install_for_release"):
             return
-        model = (self._package_model or "").strip() or page.current_model()
+        brand, model, hw_type = self._completion_device_selection()
         self._nav_to_page(_PAGE_SELECT)
         page.start_install_for_release(
-            model=model, software_name="Original Software", keep_settings=True
+            model=model,
+            software_name="Original Software",
+            tag_name="latest",
+            keep_settings=True,
+            hw_type=hw_type,
+            brand=brand,
         )
+        type_suffix = f" (Type {hw_type})" if hw_type else ""
         self._append_log(
             "Completion advice: starting an Original Software install for "
-            f"{model or 'the selected model'}."
+            f"{model or 'the selected model'}{type_suffix}."
         )
 
     def _on_completion_browse_software(self) -> None:
-        """Start-up advice: open Select Software to browse other firmware."""
+        """Start-up advice: open Select Software with the player's model & type selected."""
         page = getattr(self, "_select_page", None)
+        brand, model, hw_type = self._completion_device_selection()
         self._nav_to_page(_PAGE_SELECT)
         if page is None:
             return
-        if hasattr(page, "_show_online_view"):
+        if hasattr(page, "select_device"):
+            page.select_device(
+                model=model,
+                hw_type=hw_type,
+                brand=brand,
+                expand_filters=True,
+            )
+        elif hasattr(page, "_show_online_view"):
             page._show_online_view()
         combo = getattr(page, "_software_combo", None)
         if combo is not None:
