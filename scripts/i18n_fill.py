@@ -352,10 +352,10 @@ def fill_language(
                 cleaned = cleaned[0].upper() + cleaned[1:]
             existing["app_name"] = cleaned
 
-    if code in ("en-GB", "en-US"):
+    if code in ("en", "en-GB", "en-US"):
+        hand = curated_strings(code)
         for key in source:
-            if not (existing.get(key) or "").strip():
-                existing[key] = source[key]
+            existing[key] = hand.get(key) or source[key]
         if existing != on_disk:
             write_catalog(code, existing, source)
         return existing
@@ -402,12 +402,21 @@ def refresh_keys(keys, source: dict, order, args) -> int:
     long run already wrote — they are complete, so a normal run skips them.
     This is the targeted pass that updates those few strings.
     """
-    targets = sorted(read_languages())
-    wanted = [code for code in targets if code != "en"]
-    done = 0
-    for code in wanted:
+    if args.all:
+        wanted = sorted(set(read_languages()) | {"en", "en-GB", "en-US"})
+    else:
+        wanted = list(args.lang)
+    if args.limit:
+        wanted = wanted[: args.limit]
+
+    def refresh_one(code: str) -> bool:
         existing = read_catalog(code)
         hand = curated_strings(code)
+        if code in ("en", "en-GB", "en-US"):
+            for key in keys:
+                existing[key] = hand.get(key) or source[key]
+            write_catalog(code, existing, source)
+            return True
         for key in keys:
             if key in hand:
                 existing[key] = hand[key]
@@ -418,9 +427,28 @@ def refresh_keys(keys, source: dict, order, args) -> int:
                 if value and value.strip():
                     existing[key] = value
         write_catalog(code, existing, source)
-        done += 1
-        if done % 20 == 0:
-            print(f"  …{done}/{len(wanted)} languages refreshed")
+        return True
+
+    done = 0
+    workers = max(1, int(args.workers))
+    if workers == 1:
+        for code in wanted:
+            try:
+                if refresh_one(code):
+                    done += 1
+            except Exception as exc:
+                print(f"  {code}: failed ({exc}); continuing")
+            if done % 20 == 0 and done:
+                print(f"  …{done}/{len(wanted)} languages refreshed")
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for ok in pool.map(refresh_one, wanted):
+                if ok:
+                    done += 1
+                    if done % 20 == 0:
+                        print(f"  …{done}/{len(wanted)} languages refreshed")
     print(f"{done} language(s) refreshed for {len(keys)} string(s)")
     return 0
 
@@ -496,8 +524,6 @@ def main(argv=None) -> int:
     targets = sorted(known) if args.all else [code for code in args.lang]
     if not targets and not known:
         targets = sorted(args.lang)
-    if "en" in targets and not args.force:
-        targets.remove("en")  # English is the source, not a translation
     if args.limit:
         targets = targets[: args.limit]
     if not targets:

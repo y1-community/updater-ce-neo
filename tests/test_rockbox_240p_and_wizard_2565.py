@@ -924,7 +924,7 @@ def test_y2_patch_zip_never_double_appends_y2_suffix(tmp_path):
     assert not (tmp_path / "rockbox_360p_themepack_y2_y2.zip").exists()
 
 
-def test_app_version_is_2_5_6_5():
+def test_app_version_is_2_5_7():
     from src.config import APP_VERSION
 
-    assert APP_VERSION == "2.5.6.5"
+    assert APP_VERSION == "2.5.7"

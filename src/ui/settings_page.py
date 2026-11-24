@@ -1522,10 +1522,18 @@ class SettingsPage(QWidget):
         if hasattr(self, "_sync_install_mode_switches"):
             self._sync_install_mode_switches()
 
-        # Superuser / administrator restart: off.
+        # Superuser / administrator restart: off. Persist unconditionally so a
+        # leftover run_as_admin=True from an earlier session is cleared even
+        # when refresh_settings() calls us at startup before loading the switch.
+        from .. import elevation
+
+        settings = getattr(self, "settings", None) or QSettings("innioasis", "updater")
+        elevation.set_run_as_admin(settings, False)
         switch = self._run_as_admin_switch()
-        if switch is not None and switch.isChecked():
-            switch.setChecked(False)  # persists through its own handler
+        if switch is not None:
+            if switch.isChecked():
+                switch.setChecked(False)
+            self._sync_run_as_admin_controls()
 
         # "Always offer to keep my settings and media": off again, so a switch
         # hidden with this card can never skip the compatibility question.

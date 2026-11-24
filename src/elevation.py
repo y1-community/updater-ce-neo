@@ -112,11 +112,12 @@ def description_text() -> str:
     """The one line under the switch."""
     from .i18n import tr
 
-    key = (
-        "settings_run_as_admin_desc"
-        if sys.platform == "win32"
-        else "settings_run_as_superuser_desc"
-    )
+    if sys.platform == "win32":
+        key = "settings_run_as_admin_desc"
+    elif sys.platform == "darwin":
+        key = "settings_run_as_superuser_desc_macos"
+    else:
+        key = "settings_run_as_superuser_desc"
     return tr(key)
 
 

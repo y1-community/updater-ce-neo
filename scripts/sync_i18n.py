@@ -86,8 +86,13 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
     # 1. Update curated keys from _STRINGS if defined for this code
     for k in all_keys:
         table = i18n._STRINGS.get(k, {})
-        if code in table and str(table[code]).strip():
-            curated = str(table[code]).strip()
+        if code in ("en", "en-GB", "en-US"):
+            curated = str(table.get(code) or table.get("en") or "")
+            if curated.strip() and data.get(k) != curated:
+                data[k] = curated
+                updated = True
+        elif code in table and str(table[code]).strip():
+            curated = str(table[code])
             if data.get(k) != curated:
                 data[k] = curated
                 updated = True

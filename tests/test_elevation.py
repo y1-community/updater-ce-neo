@@ -151,13 +151,13 @@ def test_relaunch_argv_is_this_machine_s_own_command(monkeypatch):
     argv = elevation._relaunch_argv()
     assert argv[0] == sys.executable
     assert argv[1].endswith("launcher.py")
-    assert argv[2:] == ["--simulate-macos"]
+    assert argv[2:] == ["--simulate-macos", elevation.TAKE_OVER_ARG]
 
 
 def test_relaunch_argv_of_a_frozen_build_is_the_executable(monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "argv", ["UpdaterCE.exe", "--flag"], raising=False)
-    assert elevation._relaunch_argv() == [sys.executable, "--flag"]
+    assert elevation._relaunch_argv() == [sys.executable, "--flag", elevation.TAKE_OVER_ARG]
 
 
 def test_settings_page_offers_the_switch_off_by_default(stored_flag):
@@ -229,6 +229,113 @@ def test_no_elevation_helper_disables_the_switch(stored_flag):
         page.deleteLater()
     finally:
         monkeypatch.undo()
+
+
+def test_description_text_does_not_mention_linux_pkexec_on_windows_or_macos(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    win_desc = elevation.description_text()
+    assert "windows" in win_desc.lower()
+    assert "pkexec" not in win_desc.lower()
+    assert "linux" not in win_desc.lower()
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    mac_desc = elevation.description_text()
+    assert "macos" in mac_desc.lower()
+    assert "pkexec" not in mac_desc.lower()
+    assert "linux" not in mac_desc.lower()
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    linux_desc = elevation.description_text()
+    assert "pkexec" in linux_desc.lower()
+
+
+def test_windows_install_admin_prompt_never_shows_linux_copy(monkeypatch):
+    """_ensure_elevated_for_install only runs off Linux; its prompt must not mention Linux."""
+    import json
+    import platform
+
+    from PySide6.QtWidgets import QMessageBox
+
+    from src import i18n
+    from src.ui import main_window
+
+    old_lang = i18n.translator().lang
+    try:
+        for code in ("en", "en-GB", "en-US"):
+            i18n.translator().set_language(code)
+            for key in (
+                "install_needs_admin_title",
+                "install_needs_admin_body",
+                "install_needs_admin_body_mediatek",
+            ):
+                text = i18n.tr(key)
+                assert "linux" not in text.lower(), (code, key, text)
+                assert "continue without a password" not in text.lower(), (code, key, text)
+    finally:
+        i18n.translator().set_language(old_lang)
+
+    # Every shipped language catalog must also be free of the overwritten Linux copy.
+    catalog_dir = ROOT / "assets" / "i18n"
+    for path in sorted(catalog_dir.glob("*.json")):
+        if path.stem == "languages":
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for key in (
+            "install_needs_admin_title",
+            "install_needs_admin_body",
+            "install_needs_admin_body_mediatek",
+        ):
+            assert "linux" not in str(data.get(key, "")).lower(), (path.stem, key)
+
+    captured = []
+
+    def fake_warning(parent, title, body, buttons, default_button):
+        captured.append((title, body))
+        return QMessageBox.No
+
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(elevation, "run_as_admin_enabled", lambda settings: True)
+    monkeypatch.setattr(elevation, "is_elevated", lambda: False)
+    monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(QMessageBox, "warning", fake_warning)
+
+    class _DummyWindow:
+        def __init__(self, settings):
+            self.settings = settings
+            self._elevation_prompt_settled = False
+            self.logs = []
+
+        def _append_log(self, msg):
+            self.logs.append(msg)
+
+    # 1. With Show Advanced Settings OFF, a stale persisted run_as_admin=True
+    #    must never trigger an elevation prompt in Updater CE.
+    hidden = _DummyWindow(
+        _FakeSettings({elevation.RUN_AS_ADMIN_KEY: True, "advanced_settings": False})
+    )
+    assert main_window.MainWindow._ensure_elevated_for_install(hidden) is True
+    assert captured == []
+
+    # 2. With Show Advanced Settings ON, the Windows prompt asks once using
+    #    administrator-rights copy (never Linux copy), and declining settles it
+    #    for the rest of the install run (device-prep Next, PMT 8502 retry, etc.).
+    dummy = _DummyWindow(
+        _FakeSettings({elevation.RUN_AS_ADMIN_KEY: True, "advanced_settings": True})
+    )
+    result = main_window.MainWindow._ensure_elevated_for_install(dummy)
+    assert result is True
+    assert len(captured) == 1
+    title, body = captured[0]
+    assert "administrator" in title.lower()
+    assert "restart" in body.lower()
+    assert "linux" not in body.lower()
+    assert "password" not in body.lower()
+
+    # Re-entering _begin_flash_flow (e.g. after PMT 8502 Format All confirm)
+    # must not pop up the dialog a second time.
+    assert main_window.MainWindow._ensure_elevated_for_install(dummy) is True
+    assert len(captured) == 1
 
 
 if __name__ == "__main__":

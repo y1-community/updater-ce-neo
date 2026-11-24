@@ -135,3 +135,89 @@ def test_an_8502_record_blocks_keep_data_for_that_software(tmp_path):
     settings.sync()
     restored = QSettings(str(path), QSettings.Format.IniFormat)
     assert pmt_format.pmt_format_required(pkg, settings=restored) is True
+
+
+def test_format_all_confirmation_copy_is_clean_across_english_dialects_and_catalogs(monkeypatch):
+    """English locales must read updated _STRINGS copy, never stale XML console-mode jargon."""
+    import json
+
+    from src import i18n
+
+    old_lang = i18n.translator().lang
+    try:
+        for code in ("en", "en-GB", "en-US"):
+            i18n.translator().set_language(code)
+            body = i18n.tr("format_all_confirm_body")
+            assert "xml" not in body.lower(), (code, body)
+            assert "console-mode" not in body.lower(), (code, body)
+            assert "{software}" in body and "{model}" in body and "{data_effect}" in body
+
+        # Even if a flat en-US catalog on disk held stale wording, _STRINGS wins
+        # for English while dialect overrides (e.g. center/catalog) still apply.
+        monkeypatch.setattr(
+            i18n,
+            "catalog",
+            lambda code: {"format_all_confirm_body": "stale via XML console-mode run"}
+            if code == "en-US"
+            else {},
+        )
+        i18n.translator().set_language("en-US")
+        assert "xml" not in i18n.tr("format_all_confirm_body").lower()
+        assert i18n.tr("button_centre") == "center button"
+    finally:
+        i18n.translator().set_language(old_lang)
+
+    catalog_dir = Path(__file__).resolve().parents[1] / "assets" / "i18n"
+    for path in sorted(catalog_dir.glob("*.json")):
+        if path.stem == "languages":
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        text = str(data.get("format_all_confirm_body", ""))
+        assert "xml" not in text.lower() and "console-mode" not in text.lower(), (
+            path.stem,
+            text,
+        )
+
+
+def test_confirmed_8502_format_all_survives_apply_pmt_format_state_for_same_software(
+    tmp_path, monkeypatch
+):
+    """After SP Flash Tool error 8502 + confirmation, retrying keeps format_all=True
+    even when the same software (e.g. an older Solar build) was already tracked."""
+    from src.ui.main_window import MainWindow
+
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    pkg = _pkg(name="Solar", model="Y2", repo="thesolarproject/solar")
+
+    # Simulate player already tracked as running Solar on Y2: pmt_format_required
+    # normally returns False for a same-software reinstall.
+    monkeypatch.setattr(pmt_format, "_installed_same_software", lambda *a, **k: True)
+    assert pmt_format.pmt_format_required(pkg, model="Y2", settings=settings) is False
+
+    class _FakeFlashPage:
+        def __init__(self):
+            self.format_all_calls = []
+
+        def set_format_all_required(self, required, model=""):
+            self.format_all_calls.append((bool(required), model))
+
+    class _DummyWindow:
+        def __init__(self):
+            self.settings = settings
+            self._package_model = "Y2"
+            self._package_name = "Solar October 23 2026 for Y2"
+            self._keep_data_pkg = pkg
+            self._keep_data = True
+            self._format_all_required = True
+            self._format_all_confirmed_for_run = True
+            self._flash_page = _FakeFlashPage()
+
+        def _current_firmware_package(self):
+            return pkg
+
+    dummy = _DummyWindow()
+    required = MainWindow._apply_pmt_format_state(dummy, pkg, "Y2")
+    assert required is True
+    assert dummy._format_all_required is True
+    assert dummy._keep_data is False
+    assert dummy._flash_page.format_all_calls == [(True, "Y2")]

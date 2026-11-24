@@ -125,3 +125,22 @@ def test_release_filters_are_an_advanced_choice(settings_page, monkeypatch):
     page.hide_advanced_methods()
     page._update_rockbox_visibility()
     assert page._rockbox_card.isHidden()
+
+
+def test_startup_refresh_clears_stale_run_as_admin_when_advanced_is_off(settings_page):
+    """A leftover run_as_admin=True must be cleared at startup when Advanced is off."""
+    from src import elevation
+
+    settings = QSettings("innioasis", "updater")
+    settings.setValue("advanced_settings", False)
+    elevation.set_run_as_admin(settings, True)
+    settings.sync()
+    assert elevation.run_as_admin_enabled(settings) is True
+
+    # Simulate a fresh SettingsPage whose checkbox starts unchecked before refresh_settings().
+    fresh = SettingsPage()
+    try:
+        assert elevation.run_as_admin_enabled(settings) is False
+        assert fresh._cb_run_as_admin.isChecked() is False
+    finally:
+        fresh.close()

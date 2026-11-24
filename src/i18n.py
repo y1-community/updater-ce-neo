@@ -2940,6 +2940,14 @@ _STRINGS: dict = {
         "fr": "Exécuter les installations avec les droits root via pkexec. À utiliser lorsqu'une erreur de permission bloque l'outil de flash.",
         "es": "Ejecutar las instalaciones con permisos de root mediante pkexec. Úsalo cuando un error de permisos bloquee la herramienta de flasheo.",
     },
+    "settings_run_as_superuser_desc_macos": {
+        "zh-CN": "开始安装时向 macOS 请求管理员权限。当权限错误阻止刷机工具时使用。",
+        "en": "Ask macOS for administrator rights when an install starts. Use it when a permission error blocks the flash tool.",
+        "de": "Beim Start einer Installation macOS nach Administratorrechten fragen. Nutze dies, wenn ein Berechtigungsfehler das Flashtool blockiert.",
+        "fr": "Demander les droits d'administrateur à macOS au début d'une installation. À utiliser lorsqu'une erreur de permission bloque l'outil de flash.",
+        "es": "Pedir permisos de administrador a macOS al iniciar una instalación. Úsalo cuando un error de permisos bloquee la herramienta de flasheo.",
+        "ja": "インストール開始時に macOS の管理者権限を要求します。権限エラーでフラッシュツールがブロックされる場合に使用してください。",
+    },
     "settings_run_as_admin_restart_needed": {
         "zh-CN": "更新程序 需要重启，安装才能获得这些权限。",
         "en": "Innioasis Updater must restart for installs to run with these rights.",
@@ -3343,16 +3351,28 @@ _STRINGS: dict = {
         "es": "El paquete de firmware está incompleto: se descargará y extraerá antes de abrir SP Flash Tool.",
     },
     "install_needs_admin_title": {
-        "en": "One quick permission check",
-        "zh-CN": "需要一次权限确认",
-        "fr": "Une autorisation rapide",
-        "es": "Una autorización rápida",
+        "en": "Administrator rights",
+        "zh-CN": "管理员权限",
+        "de": "Administratorrechte",
+        "fr": "Droits d'administrateur",
+        "es": "Permisos de administrador",
+        "ja": "管理者権限",
     },
     "install_needs_admin_body": {
-        "en": "Before the update starts, Linux may ask for your password so we can set up your computer to talk to your player. This helps the connection work reliably. You can choose Continue without a password instead; we’ll still try the update with your current access.",
-        "zh-CN": "开始前，Linux 可能会询问一次密码，以便为播放器准备安全可靠的连接。如果不想输入密码，也可以选择不输入密码继续；更新仍会使用当前权限尝试进行。",
-        "fr": "Avant de commencer, Linux peut demander votre mot de passe une fois pour préparer une connexion fiable et sécurisée à votre lecteur. Vous préférez ne pas le saisir ? Choisissez de continuer sans mot de passe ; la mise à jour tentera quand même de démarrer avec vos droits actuels.",
-        "es": "Antes de empezar, Linux puede pedirte la contraseña una vez para preparar una conexión segura y fiable con el reproductor. ¿Prefieres no introducirla? Elige continuar sin contraseña; la actualización intentará continuar con tus permisos actuales.",
+        "en": "\"Run as administrator\" is on in Settings. Innioasis Updater restarts with those rights so the flash tools run with them too — the install must be started again after the restart. Restart now?",
+        "zh-CN": "设置中已开启“以管理员身份运行”。更新程序 将以该权限重启，刷机工具也会随之获得权限——重启后需再次开始安装。现在重启？",
+        "de": "„Als Administrator ausführen“ ist in den Einstellungen aktiviert. Aktualisierer wird mit diesen Rechten neu gestartet, damit auch die Flashtools damit laufen – die Installation muss nach dem Neustart erneut gestartet werden. Jetzt neu starten?",
+        "fr": "« Exécuter en tant qu'administrateur » est activé dans les réglages. Programme de mise à jour redémarre avec ces droits, et les outils de flash aussi — l'installation devra être relancée après le redémarrage. Redémarrer maintenant ?",
+        "es": "\"Ejecutar como administrador\" está activado en Ajustes. Actualizador se reiniciará con esos permisos y las herramientas de flasheo también; la instalación debe iniciarse de nuevo tras el reinicio. ¿Reiniciar ahora?",
+        "ja": "設定で「管理者として実行」がオンになっています。アップデーターはフラッシュツールにも権限を引き継ぐため管理者権限で再起動します。再起動後にもう一度インストールを開始する必要があります。今すぐ再起動しますか？",
+    },
+    "install_needs_admin_body_mediatek": {
+        "en": "\"Run as administrator\" is on in Settings. MediaTek Installer restarts with those rights so the flash tools run with them too — the install must be started again after the restart. Restart now?",
+        "zh-CN": "设置中已开启“以管理员身份运行”。MediaTek 安装工具 将以该权限重启，刷机工具也会随之获得权限——重启后需再次开始安装。现在重启？",
+        "de": "„Als Administrator ausführen“ ist in den Einstellungen aktiviert. MediaTek Installer wird mit diesen Rechten neu gestartet, damit auch die Flashtools damit laufen – die Installation muss nach dem Neustart erneut gestartet werden. Jetzt neu starten?",
+        "fr": "« Exécuter en tant qu'administrateur » est activé dans les réglages. L'Installateur MediaTek redémarre avec ces droits, et les outils de flash aussi — l'installation devra être relancée après le redémarrage. Redémarrer maintenant ?",
+        "es": "\"Ejecutar como administrador\" está activado en Ajustes. El Instalador MediaTek se reiniciará con esos permisos y las herramientas de flasheo también; la instalación debe iniciarse de nuevo tras el reinicio. ¿Reiniciar ahora?",
+        "ja": "設定で「管理者として実行」がオンになっています。MediaTek インストーラーはフラッシュツールにも権限を引き継ぐため管理者権限で再起動します。再起動後にもう一度インストールを開始する必要があります。今すぐ再起動しますか？",
     },
     "install_continue_without_password": {
         "en": "Continue without a password",
@@ -8613,7 +8633,7 @@ def placeholder_safe_text(key: str, text: str) -> str:
     placeholders than the source (the argument is simply unused); it may not
     invent one, so those fall back to the English string rather than crash.
     """
-    source = catalog("en").get(key) or (_STRINGS.get(key) or {}).get("en") or ""
+    source = (_STRINGS.get(key) or {}).get("en") or catalog("en").get(key) or ""
     if not source or not text:
         return text
     invented = _format_fields(text) - _format_fields(source)
@@ -8684,6 +8704,15 @@ class _Translator:
 
     def t(self, key: str) -> str:
         table = _STRINGS.get(key) or {}
+        if is_english_language(self._lang):
+            # ``_STRINGS`` is the source of truth for English and its regional
+            # dialects (en-GB / en-US override only the handful of keys where
+            # spelling differs). Consulting it ahead of the flat JSON catalogs
+            # prevents stale en-GB.json / en-US.json copies from masking edits
+            # made to ``_STRINGS``.
+            direct = table.get(self._lang) or table.get("en")
+            if direct:
+                return brand_term(direct)
         translated = catalog(self._lang).get(key)
         if translated:
             return brand_term(placeholder_safe_text(key, translated))
@@ -8772,9 +8801,10 @@ def text_for_language(key: str, lang: str) -> str:
     table = _STRINGS.get(key)
     if not table:
         return ""
-    translated = catalog(lang).get(key)
-    if not translated:
-        translated = table.get(lang) or ""
+    if is_english_language(lang):
+        translated = table.get(lang) or table.get("en") or catalog(lang).get(key) or ""
+    else:
+        translated = catalog(lang).get(key) or table.get(lang) or ""
     if not translated:
         return ""
     return placeholder_safe_text(key, translated)

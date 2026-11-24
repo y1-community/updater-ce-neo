@@ -1026,6 +1026,10 @@ class MainWindow(QMainWindow):
         # changed. Keep Data is unavailable while this is set.
         self._format_all_required = False
         self._format_all_confirm_pending = False
+        self._format_all_confirmed_for_run = False
+        self._elevation_prompt_settled = False
+        self._linux_permission_pending = False
+        self._permission_needed_after_themes = False
         self._keep_data_pkg = None
         # Install Firmware First: a manifest ``install_first`` package must be
         # put on the player before this overlay. The journey owns the answer
@@ -6015,7 +6019,12 @@ class MainWindow(QMainWindow):
             software=self._package_name,
             settings=self.settings,
         )
-        if pkg is None and getattr(self, "_format_all_required", False):
+        if getattr(self, "_format_all_confirmed_for_run", False):
+            # The user already hit SP Flash error 8502 during this run and
+            # explicitly confirmed Format All + Download; keep the flag even if
+            # the same software was previously tracked on this player.
+            required = True
+        elif pkg is None and getattr(self, "_format_all_required", False):
             required = True
         self._format_all_required = bool(required)
         if hasattr(self, "_flash_page") and self._flash_page is not None:
@@ -6097,6 +6106,10 @@ class MainWindow(QMainWindow):
             self._flash_page.reset_keep_data_preference()
         self._format_all_required = False
         self._format_all_confirm_pending = False
+        self._format_all_confirmed_for_run = False
+        self._elevation_prompt_settled = False
+        self._linux_permission_pending = False
+        self._permission_needed_after_themes = False
         self._keep_data_pkg = None
         self._rockbox_cleanup_started = False
         self._flash_method = self._preferred_flash_method()
@@ -6362,6 +6375,7 @@ class MainWindow(QMainWindow):
     def _needs_linux_device_prep(self) -> bool:
         return bool(
             platform.system() == "Linux"
+            and not paths.IS_WINDOWS
             and not paths.IS_MAC
             and not is_mediatek_installer()
             and os.environ.get("QT_QPA_PLATFORM") != "offscreen"
@@ -6484,7 +6498,17 @@ class MainWindow(QMainWindow):
         # own launch when the switch is on, and MTKClient uses a persistent
         # udev rule instead of root. A whole-app restart would prompt for
         # every MTKClient install.
-        if platform.system() == "Linux":
+        if paths.IS_LINUX or platform.system() == "Linux":
+            return True
+        if not is_mediatek_installer() and not device_tracking.advanced_settings_enabled(self.settings):
+            # "Run as administrator" lives behind Show Advanced Settings; a
+            # leftover persisted flag must never trigger an elevation prompt
+            # while Advanced Settings is off and the switch is hidden.
+            return True
+        if getattr(self, "_elevation_prompt_settled", False):
+            # Already answered (or UAC declined/failed) for this install run:
+            # do not re-prompt on device-prep Next, PMT Format All retry, or
+            # backend failover.
             return True
         if not elevation.run_as_admin_enabled(self.settings) or elevation.is_elevated():
             return True
@@ -6493,15 +6517,17 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.warning(
             self,
             tr("install_needs_admin_title"),
-            tr("install_needs_admin_body"),
+            tr_brand("install_needs_admin_body"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
+            self._elevation_prompt_settled = True
             self._append_log(tr("install_without_admin"))
             return True
         ok, msg = elevation.restart_as_admin()
         if not ok:
+            self._elevation_prompt_settled = True
             self._append_log(msg or tr("install_without_admin"))
             return True
         from PySide6.QtWidgets import QApplication
@@ -8664,6 +8690,7 @@ class MainWindow(QMainWindow):
         self._format_all_required = True
         self._format_all_confirm_pending = True
         self._keep_data = False
+        self._keep_data_erase_required = False
         self._install_failed = False
         self._power_off_prompt = True
         self._pre_install_guided = False
@@ -9123,7 +9150,9 @@ class MainWindow(QMainWindow):
             # backend with only its console mode changed.
             self._format_all_confirm_pending = False
             self._format_all_required = True
+            self._format_all_confirmed_for_run = True
             self._keep_data = False
+            self._keep_data_erase_required = False
             if hasattr(self._flash_page, "lock_keep_data"):
                 # The retry keeps this answer; it must not offer Keep Data after
                 # the format-all run has already replaced the partitions.
@@ -10064,6 +10093,7 @@ class MainWindow(QMainWindow):
         self._keep_data_erase_confirm_pending = False
         self._keep_data_confirm_pending = False
         self._format_all_required = False
+        self._format_all_confirmed_for_run = False
         if journey is not None:
             self._append_log(
                 tr("install_first_base_done").format(
@@ -11124,6 +11154,10 @@ class MainWindow(QMainWindow):
         self._keep_data_confirm_pending = False
         self._keep_data_erase_confirm_pending = False
         self._format_all_confirm_pending = False
+        self._format_all_confirmed_for_run = False
+        self._elevation_prompt_settled = False
+        self._linux_permission_pending = False
+        self._permission_needed_after_themes = False
         self._install_first_journey = None
         self._install_first_stage = ""
         self._install_first_after = None
